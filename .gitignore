@@ -1,0 +1,38 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.pytest_cache/
+.ruff_cache/
+.coverage
+.venv/
+venv/
+env/
+
+# Run artifacts (regeneratable)
+output/
+runs/
+generated_images/
+results/
+*.png
+*.jpg
+*.jpeg
+*.csv
+
+# Allow figures intentionally checked in
+!assets/**/*.png
+
+# Editor
+.vscode/
+.idea/
+*.swp
+.DS_Store
+
+# Paper PDF — kept locally, distributed elsewhere
+Cita_2025_Hanu.pdf
+*.pdf
+
+# Local-only scripts (history bootstrapper)
+.history.py
