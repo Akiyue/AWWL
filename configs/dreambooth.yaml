@@ -1,0 +1,34 @@
+# AWWL via DreamBooth (full UNet fine-tune of Stable Diffusion 1.5).
+# Mirrors the recipes in the original AWWL/run.sh sweep.
+_base_: base.yaml
+
+method: dreambooth
+
+model:
+  pretrained_model_name_or_path: runwayml/stable-diffusion-v1-5
+  # Override to use a previously-trained UNet checkpoint (see configs/checkpoints/registry.yaml).
+  model_weights_path: null
+
+data:
+  instance_data_dir: ../AWWL/dataset
+  instance_prompt: "a photo of sks robot toy"
+  resolution: 512
+
+train:
+  batch_size: 1
+  gradient_accumulation_steps: 1
+  learning_rate: 5.0e-6
+  max_train_steps: 400
+  grad_clip_norm: 1.0
+
+loss:
+  # Paper-optimal config for DreamBooth (Table 1, AWWL row).
+  name: adaptive_wavelet
+  alpha: 0.8
+  power: 2.0
+  wavelet_type: db1
+  levels: 1
+  weighting: normalized   # paper eqs. (4)-(5). Use "boosted" for the alternative ablation.
+
+output:
+  dir: ./runs/dreambooth

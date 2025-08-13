@@ -1,0 +1,36 @@
+# AWWL via DreamBooth+LoRA on a HuggingFace face dataset.
+# Replaces AWWL/finetune.py.
+_base_: base.yaml
+
+method: dreambooth_lora
+
+model:
+  pretrained_model_name_or_path: runwayml/stable-diffusion-v1-5
+  lora_rank: 4
+  model_weights_path: null
+
+data:
+  hf_dataset_name: flwrlabs/celeba
+  hf_split: train
+  image_column: image
+  resolution: 256
+  num_workers: 4
+  prompt: "face photo"
+
+train:
+  batch_size: 1
+  gradient_accumulation_steps: 1
+  learning_rate: 1.0e-4
+  max_train_steps: 500
+  grad_clip_norm: 1.0
+
+loss:
+  name: mse
+  alpha: 0.8
+  power: 2.0
+  wavelet_type: db1
+  levels: 1
+  weighting: normalized
+
+output:
+  dir: ./runs/dreambooth_lora

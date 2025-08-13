@@ -1,0 +1,16 @@
+# Shared defaults consumed by every config via `_base_: base.yaml`.
+seed: 42
+deterministic: false
+
+logging:
+  level: INFO
+  fmt: "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
+
+precision:
+  mixed_precision: fp16  # one of: no, fp16, bf16
+
+paths:
+  # Root for resolving relative paths (defaults to CWD when null).
+  project_root: null
+  # Where new training runs go. Existing AWWL/AWWL-Diff weights stay where they are.
+  output_root: ./runs
