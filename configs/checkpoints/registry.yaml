@@ -1,0 +1,41 @@
+# Logical-name → absolute-path map for existing checkpoints.
+# Weights live in their original AWWL/ and AWWL-Diff/ trees and are NEVER copied.
+# Override any single path on the CLI: `awwl infer --config ... model.model_weights_path=/abs/path`.
+
+dreambooth:
+  # Best AWWL DreamBooth run (db4 + level 2 + alpha 0.5).
+  proposed_best:    ../AWWL/output/full_benchmark_final_v3/17_proposed_best/unet
+  baseline_mse:     ../AWWL/output/full_benchmark_final_v3/01_baseline_mse/unet
+  baseline_l1:      ../AWWL/output/full_benchmark_final_v3/02_baseline_l1/unet
+  baseline_huber:   ../AWWL/output/full_benchmark_final_v3/03_baseline_huber/unet
+  charbonnier:      ../AWWL/output/full_benchmark_final_v3/04_baseline_charbonnier/unet
+  snr_weighted:     ../AWWL/output/full_benchmark_final_v3/05_baseline_snr/unet
+  kl_x0:            ../AWWL/output/full_benchmark_final_v3/06_baseline_kl_x0/unet
+  vlb:              ../AWWL/output/full_benchmark_final_v3/07_baseline_vlb/unet
+  wavelet_default:  ../AWWL/output/full_benchmark_final_v3/09_wavelet_default/unet
+  wavelet_alpha_05: ../AWWL/output/full_benchmark_final_v3/10_wavelet_alpha_0.5/unet
+  wavelet_alpha_02: ../AWWL/output/full_benchmark_final_v3/11_wavelet_alpha_0.2/unet
+  wavelet_power_10: ../AWWL/output/full_benchmark_final_v3/12_wavelet_power_1.0/unet
+  wavelet_power_30: ../AWWL/output/full_benchmark_final_v3/13_wavelet_power_3.0/unet
+  wavelet_db4:      ../AWWL/output/full_benchmark_final_v3/14_wavelet_db4/unet
+  wavelet_bior13:   ../AWWL/output/full_benchmark_final_v3/15_wavelet_bior1.3/unet
+  wavelet_level_2:  ../AWWL/output/full_benchmark_final_v3/16_wavelet_level_2/unet
+  # Earlier sweep (subject-driven). Keep for parity with publication figures.
+  v2_proposed_best: ../AWWL/output/full_benchmark_final_v2/17_proposed_best/unet
+
+finetune:
+  # Best AWWL-Diff run.
+  proposed_best:        ../AWWL-Diff/rescue_detail_a0.2_p1.0_db1/checkpoint-199
+  baseline_mse:         ../AWWL-Diff/mse/checkpoint-199
+  ablation_best:        ../AWWL-Diff/ablat_best_a0.8_p2.0_db1/checkpoint-199
+  ablation_db4:         ../AWWL-Diff/ablat_db4_a0.8_p2.0_db4/checkpoint-199
+  ablation_alpha_05:    ../AWWL-Diff/ablat_alpha05_a0.5_p2.0_db1/checkpoint-199
+  ablation_alpha_095:   ../AWWL-Diff/ablat_alpha095_a0.95_p2.0_db1/checkpoint-199
+  ablation_power_1:     ../AWWL-Diff/ablat_power1_a0.8_p1.0_db1/checkpoint-199
+  ablation_static:      ../AWWL-Diff/ablat_static_a0.8_p0.0_db1/checkpoint-199
+  baseline_l1:          ../AWWL-Diff/baseline_l1_a0.8_p2.0_db1/checkpoint-199
+  baseline_huber:       ../AWWL-Diff/baseline_huber_a0.8_p2.0_db1/checkpoint-199
+  baseline_perceptual:  ../AWWL-Diff/baseline_perceptual_a0.8_p2.0_db1/checkpoint-199
+  baseline_snr:         ../AWWL-Diff/baseline_snr_a0.8_p2.0_db1/checkpoint-199
+  rescue_gentle:        ../AWWL-Diff/rescue_gentle_a0.5_p0.5_db1/checkpoint-199
+  rescue_static_opt:    ../AWWL-Diff/rescue_static_opt_a0.3_p0.0_db1/checkpoint-199

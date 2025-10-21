@@ -1,0 +1,20 @@
+# CLIP text-image and image-image scoring (DreamBooth eval).
+_base_: ../base.yaml
+
+eval: clip
+
+clip:
+  model_name: openai/clip-vit-base-patch32
+  batch_size: 32
+
+generate:
+  base_model: runwayml/stable-diffusion-v1-5
+  models_root: ../AWWL/output/full_benchmark_final_v3
+  out_root: ./runs/eval/clip
+  n_images_per_prompt: 20
+  batch_size: 4
+  num_inference_steps: 50
+  guidance_scale: 5.0
+  resolution: 512
+  prompts_file: ../assets/prompts/awwl_dreambooth.txt
+  real_images_dir: ../AWWL/dataset
