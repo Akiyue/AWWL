@@ -1,0 +1,48 @@
+# AWWL via from-scratch DDPM fine-tune on CIFAR-10 (AWWL-Diff).
+_base_: base.yaml
+
+method: finetune
+
+model:
+  # The DDPM UNet is built from these dims when training from scratch.
+  image_size: 32
+  in_channels: 3
+  out_channels: 3
+  layers_per_block: 2
+  block_out_channels: [128, 256, 256, 256]
+  down_block_types: [DownBlock2D, DownBlock2D, DownBlock2D, DownBlock2D]
+  up_block_types: [UpBlock2D, UpBlock2D, UpBlock2D, UpBlock2D]
+  # Resume / fine-tune from a saved checkpoint folder.
+  model_weights_path: null
+
+data:
+  dataset_name: cifar10
+  split: train
+  image_size: 32
+  batch_size: 128
+  num_workers: 4
+
+train:
+  num_epochs: 200
+  learning_rate: 2.0e-4
+  lr_warmup_steps: 500
+  save_model_epochs: 20
+  grad_clip_norm: 1.0
+
+scheduler:
+  num_train_timesteps: 1000
+
+loss:
+  # Paper-optimal config for CIFAR-10 unconditional generation
+  # (Table 2, "Proposed" row: alpha=0.2, p=1.0). Low-resolution images rely
+  # on high-frequency detail for identity, so alpha is biased toward
+  # detail bands here, in contrast to DreamBooth (alpha=0.8).
+  name: adaptive_wavelet
+  alpha: 0.2
+  power: 1.0
+  wavelet_type: db1
+  levels: 1
+  weighting: normalized   # paper eqs. (4)-(5).
+
+output:
+  dir: ./runs/finetune

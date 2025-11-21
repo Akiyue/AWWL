@@ -1,0 +1,12 @@
+# FID + Inception Score (Finetune eval).
+_base_: ../base.yaml
+
+eval: fid_is
+
+fid_is:
+  num_samples: 10000
+  batch_size: 128
+  num_inference_steps: 1000
+  real_folder: ../AWWL-Diff/cifar10_train_ref
+  out_folder: ./runs/eval/fid_is/generated
+  log_file: ./runs/eval/fid_is/results.txt
