@@ -1,0 +1,11 @@
+# KID + Precision/Recall + spectral distance (Finetune eval).
+_base_: ../base.yaml
+
+eval: advanced
+
+advanced:
+  batch_size: 64
+  max_images: 10000
+  real_folder: ../AWWL-Diff/cifar10_train_ref
+  fake_folder: ./runs/eval/fid_is/generated
+  log_file: ./runs/eval/advanced/results.txt
