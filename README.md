@@ -91,7 +91,7 @@ with the strongest baselines.
 ## Installation
 
 ```bash
-git clone [<this-repo>](https://github.com/Akiyue/AWWL)
+git clone https://github.com/Akiyue/AWWL.git awwl && cd awwl
 python -m venv .venv && source .venv/bin/activate
 pip install -e ".[eval,plot,dev]"
 ```
@@ -104,9 +104,10 @@ The `eval` extra adds `clean-fid`, `torch-fidelity`, `prdc`, and `scipy`;
 ### Task 1 — DreamBooth (Table 1)
 
 ```bash
-# Train AWWL on the 'sks robot toy' subject (paper config)
+# Train AWWL on the 'sks robot toy' subject (paper config).
+# The default points at ../AWWL/dataset/; override --data.instance_data_dir
+# to point at your own folder of subject images.
 awwl train --config configs/dreambooth.yaml \
-    --override data.instance_data_dir=./assets/data/robot \
     --override data.instance_prompt="a photo of sks robot toy"
 
 # Sample with the three paper prompts
@@ -122,7 +123,7 @@ done
 # Score against the real subject images
 awwl eval --config configs/eval/clip.yaml \
     --override generate.models_root=./runs/dreambooth_all \
-    --override generate.real_images_dir=./assets/data/robot
+    --override generate.real_images_dir=../AWWL/dataset
 ```
 
 The full benchmark sweep (8 baselines + AWWL, three subjects) is captured
@@ -218,8 +219,11 @@ awwl/
 │   ├── eval/{clip,fid_is,advanced}.yaml
 │   └── checkpoints/registry.yaml
 ├── src/awwl/
-│   ├── losses/              # AWWL + 8 baseline losses (one factory)
-│   │   └── adaptive_wavelet.py   # paper eqs. (4)-(7)
+│   ├── losses/              # AWWL + 8 baseline losses, one factory
+│   │   ├── adaptive_wavelet.py   # paper eqs. (4)-(7); also Static (p=0)
+│   │   ├── analytic.py           # mse, l1, huber, charbonnier, vlb, snr, kl
+│   │   ├── perceptual.py         # VGG perceptual loss
+│   │   └── factory.py            # get_loss_function(name, **cfg)
 │   ├── methods/
 │   │   ├── dreambooth/      # SD 1.5 trainer + LoRA variant + inference
 │   │   └── finetune/        # CIFAR-10 DDPM trainer + inference
@@ -285,7 +289,7 @@ mixed-precision relies on non-deterministic kernels.
 
 ## License
 
-MIT. See [`LICENSE`](LICENSE) (to be added).
+MIT. See [`LICENSE`](LICENSE).
 
 ## Contact
 
