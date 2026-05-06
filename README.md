@@ -4,7 +4,7 @@
 > **Do Thi Phuong Thao**¹·², **Tran Ngoc Duc Anh**¹, **Nguyen Van An**¹, **Le Quang Ngoc**¹, **Tran Huy Hoang Son**¹
 > ¹ Faculty of Information Technology, Hanoi University, Vietnam · ² School of Computing, Phenikaa University, Vietnam
 >
-> *International Conference on Information Technology and its Applications* (CITA 2026), Hanoi University.
+> *The Conference on Information Technology and its Applications* (CITA 2026), Hanoi University.
 
 ---
 
@@ -91,7 +91,7 @@ with the strongest baselines.
 ## Installation
 
 ```bash
-git clone <this-repo> awwl && cd awwl
+git clone [<this-repo>](https://github.com/Akiyue/AWWL)
 python -m venv .venv && source .venv/bin/activate
 pip install -e ".[eval,plot,dev]"
 ```
@@ -277,8 +277,7 @@ mixed-precision relies on non-deterministic kernels.
                Loss Function for Diffusion Model Training},
   author    = {Do, Thi Phuong Thao and Tran, Ngoc Duc Anh and
                Nguyen, Van An and Le, Quang Ngoc and Tran, Huy Hoang Son},
-  booktitle = {Proceedings of the International Conference on Information
-               Technology and its Applications (CITA)},
+  booktitle = {Proceedings of The Conference on Information Technology and its Applications (CITA)},
   year      = {2026},
   address   = {Hanoi, Vietnam},
 }
