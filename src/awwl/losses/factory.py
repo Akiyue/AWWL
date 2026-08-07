@@ -18,6 +18,7 @@ import torch
 from awwl.core.exceptions import UnknownLossError
 from awwl.losses import analytic
 from awwl.losses.adaptive_wavelet import AdaptiveWaveletLoss
+from awwl.losses.generalized_wavelet import GeneralizedWaveletLoss
 from awwl.losses.perceptual import PerceptualLoss
 
 LossFn = Callable[..., torch.Tensor]
@@ -32,6 +33,43 @@ _KNOWN: tuple[str, ...] = (
     "snr_weighted",
     "perceptual",
     "adaptive_wavelet",
+    # Extension losses. All share one implementation
+    # (:class:`GeneralizedWaveletLoss`) and differ only in the weighting
+    # strategy and transform they select, so their results are directly
+    # comparable and any difference is attributable to that one change.
+    "wavelet_subband",   # A1: per-level / per-direction schedules
+    "wavelet_spatial",   # A2: weights vary over image position
+    "wavelet_learned",   # A3: uncertainty weighting, optionally sigma-conditioned
+    "wavelet_gradnorm",  # A3: GradNorm balancing across sub-bands
+    "wavelet_lifting",   # A4: learnable wavelet basis
+)
+
+# Defaults per extension loss. Each turns on exactly one axis so a sweep can
+# attribute effects; combining them is done by overriding in the config.
+_EXTENSION_DEFAULTS: dict[str, dict] = {
+    "wavelet_subband": {"weighting_strategy": "rational"},
+    "wavelet_spatial": {"weighting_strategy": "rational", "spatial": True},
+    "wavelet_learned": {"weighting_strategy": "uncertainty"},
+    "wavelet_gradnorm": {"weighting_strategy": "rational", "gradnorm": True},
+    "wavelet_lifting": {"weighting_strategy": "rational", "transform": "lifting"},
+}
+
+# Keys consumed by GeneralizedWaveletLoss itself; everything else in the loss
+# config is forwarded to the weighting strategy.
+_LOSS_BODY_KEYS = frozenset(
+    {
+        "levels",
+        "transform",
+        "wavelet_type",
+        "dwt_mode",
+        "weighting_strategy",
+        "spatial",
+        "normalize_weights",
+        "gradnorm",
+        "gradnorm_asymmetry",
+        "lifting_kernel_size",
+        "learnable_basis",
+    }
 )
 
 
@@ -44,14 +82,20 @@ def get_loss_function(
     """Return a unified loss callable for ``name``.
 
     Args:
-        name: One of: ``mse``, ``l1``, ``huber``, ``charbonnier``, ``kl_x0``,
-            ``vlb``, ``snr_weighted``, ``perceptual``, ``adaptive_wavelet``.
-        noise_scheduler: Required for ``vlb``, ``snr_weighted``, and
-            ``adaptive_wavelet``. Must expose ``alphas_cumprod``.
-        **kwargs: Per-loss hyperparameters. The wavelet loss reads ``levels``,
+        name: Any entry of :func:`known_losses` — the nine published
+            objectives plus the ``wavelet_*`` extension family.
+        noise_scheduler: Required for ``vlb``, ``snr_weighted``,
+            ``adaptive_wavelet`` and every ``wavelet_*`` loss. Must expose
+            ``alphas_cumprod``.
+        **kwargs: Per-loss hyperparameters, normally the whole ``loss:``
+            config block. ``adaptive_wavelet`` reads ``levels``,
             ``wavelet_type``, ``alpha``, ``power``, ``weighting``,
             ``normalize_weights``, ``detail_reduction``, ``level_reduction``
-            and ``dwt_mode``.
+            and ``dwt_mode``. The ``wavelet_*`` losses split their kwargs
+            between the loss body and its weighting strategy, and **ignore**
+            keys the chosen strategy has no use for, so a config written for
+            the published loss can select a learned one by changing
+            ``loss.name`` alone.
 
     Raises:
         UnknownLossError: ``name`` is not a known loss type.
@@ -80,7 +124,35 @@ def get_loss_function(
             sigmas = torch.sqrt(1.0 - alphas_cumprod[timesteps])
             return wavelet(model_pred, target, sigmas)
 
+        _adaptive.module = wavelet
         return _adaptive
+
+    if name in _EXTENSION_DEFAULTS:
+        if noise_scheduler is None:
+            raise ValueError(f"{name} requires noise_scheduler")
+
+        settings = {**_EXTENSION_DEFAULTS[name], **kwargs}
+        # `weighting` names the *published* scheme (eqs. 4-5 = "normalized").
+        # RationalWeighting implements exactly that, so the key is redundant
+        # here; consume it rather than letting a merged config leak it into
+        # the strategy selector.
+        legacy_scheme = settings.pop("weighting", None)
+        if legacy_scheme == "boosted":
+            raise ValueError(
+                f"{name} does not implement the 'boosted' scheme; it is an ablation "
+                "of the published loss. Use loss.name=adaptive_wavelet for that."
+            )
+        body = {k: v for k, v in settings.items() if k in _LOSS_BODY_KEYS}
+        strategy_kwargs = {k: v for k, v in settings.items() if k not in _LOSS_BODY_KEYS}
+        module = GeneralizedWaveletLoss(weighting_kwargs=strategy_kwargs, **body)
+
+        def _generalized(model_pred: torch.Tensor, target: torch.Tensor, *, timesteps: torch.Tensor) -> torch.Tensor:
+            alphas_cumprod = noise_scheduler.alphas_cumprod.to(model_pred.device)
+            sigmas = torch.sqrt(1.0 - alphas_cumprod[timesteps])
+            return module(model_pred, target, sigmas)
+
+        _generalized.module = module
+        return _generalized
 
     if name == "perceptual":
         net = PerceptualLoss().eval()
@@ -135,3 +207,29 @@ def get_loss_function(
 def known_losses() -> tuple[str, ...]:
     """Return the tuple of registered loss names (for help text)."""
     return _KNOWN
+
+
+def loss_module(loss_fn: LossFn) -> torch.nn.Module | None:
+    """The :class:`torch.nn.Module` behind a loss callable, if it has one.
+
+    The factory returns closures so trainers need not care which losses are
+    stateful; this recovers the module for the ones that are.
+    """
+    return getattr(loss_fn, "module", None)
+
+
+def trainable_loss_parameters(loss_fn: LossFn) -> list[torch.nn.Parameter]:
+    """Parameters of a loss that are learned alongside the network.
+
+    Non-empty for the learned-weighting and learnable-basis objectives. These
+    **must** be added to the optimiser — a loss whose weights never receive an
+    update silently degenerates into a fixed-weight objective at its
+    initialisation, which would look like a working experiment while testing
+    nothing. The trainer puts them in their own parameter group so they can
+    take a different learning rate, and includes them in the checkpoint so a
+    resumed run does not reset the learned schedule.
+    """
+    module = loss_module(loss_fn)
+    if module is None:
+        return []
+    return [p for p in module.parameters() if p.requires_grad]

@@ -271,6 +271,37 @@ options exist to resolve discrepancies between the manuscript and this code
 | `detail_reduction` | `mean` | Eq. (7) *sums* the three detail bands; the code averages them — a factor of 3 on the detail term. `sum` implements the equation as written. |
 | `level_reduction` | `sum` | With `levels > 1`, whether the detail term's magnitude grows with the number of levels. |
 
+## Method extensions
+
+The published objective (`adaptive_wavelet`) is frozen. A second family
+generalises it along four independent axes, each selectable with
+`loss.name` and each reducing to the published behaviour when switched off:
+
+| `loss.name` | What varies | Key options |
+| --- | --- | --- |
+| `wavelet_subband` | **A1** — every level and direction gets its own `α`/`p` instead of one shared detail weight. Lets you ask whether the diagonal band HH needs a steeper schedule than LH/HL, and matches the 3-level decomposition Fig. 1 illustrates but the method never used. | `direction_powers`, `level_powers`, `levels`, `share_detail_budget` |
+| `wavelet_spatial` | **A2** — weights depend on *where* the error is, keyed on local coefficient activity in the target. Strongest in the detail phase, inactive at high noise, and renormalised to mean 1 so it redistributes gradient without rescaling it. | `strength`, `window`, `apply_to_ll` |
+| `wavelet_learned` | **A3** — weights are learned, not designed. `conditioned: true` maps σ through a small MLP, so the coarse-to-fine curriculum is an *outcome* rather than an assumption, and `α`/`p` disappear. | `conditioned`, `hidden` |
+| `wavelet_gradnorm` | **A3** — GradNorm over the sub-bands: weights are tuned from the gradient magnitudes each band imposes on the shared trunk. The scheme the paper cites but never implemented. | `gradnorm_asymmetry` |
+| `wavelet_lifting` | **A4** — learnable wavelet basis via the lifting scheme. Perfect reconstruction holds for *any* filter values, so training needs no invertibility constraint. Initialised to Haar. | `lifting_kernel_size`, `learnable_basis` |
+
+The axes compose — `loss.name: wavelet_learned` with `spatial: true` and
+`transform: lifting` is a learned, spatially-adaptive weighting over a learned
+basis. Learned components put their parameters in a separate optimiser group
+(`train.loss_learning_rate`) and into the resume snapshot, so a restarted run
+continues the learned schedule instead of resetting it.
+
+Two caveats worth reporting rather than hiding:
+
+* These default to `normalize_weights: true`, so compare them against the
+  `awwl_normalized` arm, not the published `awwl` arm — otherwise the
+  extension is confounded with the gradient-magnitude schedule.
+* A learned basis is generally not orthonormal, so the Parseval identity no
+  longer holds exactly. `LiftingWavelet.orthogonality_defect()` measures the
+  drift.
+
+Tier 4 of `configs/pipeline/phase0.yaml` runs all of them.
+
 ## Repository layout
 
 ```
@@ -284,8 +315,12 @@ awwl/
 │   ├── pipeline/phase0.yaml # Multi-seed replication sweep
 │   └── checkpoints/registry.yaml
 ├── src/awwl/
-│   ├── losses/              # AWWL + 8 baseline losses, one factory
+│   ├── losses/              # AWWL + baselines + the A1-A4 extensions
 │   │   ├── adaptive_wavelet.py   # paper eqs. (4)-(7); also Static (p=0)
+│   │   ├── generalized_wavelet.py# pluggable weighting + transform
+│   │   ├── weighting.py          # A1 per-subband, A2 spatial, A3 uncertainty
+│   │   ├── gradnorm.py           # A3 GradNorm over sub-bands
+│   │   ├── lifting.py            # A4 learnable wavelet basis
 │   │   ├── analytic.py           # mse, l1, huber, charbonnier, vlb, snr, kl
 │   │   ├── perceptual.py         # VGG perceptual loss
 │   │   └── factory.py            # get_loss_function(name, **cfg)

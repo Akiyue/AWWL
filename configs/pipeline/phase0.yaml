@@ -153,3 +153,84 @@ experiments:
     tier: 3
     overrides:
       loss.name: perceptual
+
+  # ---------------------------------------------------------------- tier 4
+  # The method extensions (A1-A4). Each turns on exactly ONE axis so its
+  # contribution is separately attributable; `awwl_full` composes them.
+  #
+  # Read these against `awwl_normalized` from tier 2, not against `awwl`.
+  # The extension losses hold the summed weight at 1 for every sigma, so
+  # comparing them to the un-normalised published objective would confound the
+  # extension with the gradient-magnitude schedule that normalisation removes.
+  #
+  # ~35 runs, roughly 2 days on 2 GPUs. Only worth spending once tiers 1-2
+  # have said whether there is an effect here to extend at all.
+
+  # A1 -- does the diagonal band need a steeper schedule than LH/HL?
+  - group: awwl_subband
+    tier: 4
+    overrides:
+      loss.name: wavelet_subband
+      loss.alpha: 0.2
+      loss.power: 1.0
+      loss.direction_powers: {hh: 2.0}
+
+  # A1 -- 3-level decomposition, matching what Fig. 1 of the paper illustrates
+  # but the method never used. share_detail_budget keeps the detail mass fixed
+  # so this measures depth, not a larger detail term.
+  - group: awwl_multilevel
+    tier: 4
+    overrides:
+      loss.name: wavelet_subband
+      loss.levels: 3
+      loss.alpha: 0.2
+      loss.power: 1.0
+      loss.share_detail_budget: true
+
+  # A2 -- weights vary over image position, strongest in the detail phase.
+  - group: awwl_spatial
+    tier: 4
+    overrides:
+      loss.name: wavelet_spatial
+      loss.alpha: 0.2
+      loss.power: 1.0
+      loss.strength: 1.0
+
+  # A3 -- the curriculum is learned from sigma rather than assumed to be
+  # sigma^p. This is the run that decides whether alpha and p are needed at all.
+  - group: awwl_learned
+    tier: 4
+    overrides:
+      loss.name: wavelet_learned
+      loss.conditioned: true
+      train.loss_learning_rate: 1.0e-3
+
+  # A3 -- GradNorm, the scheme the paper cites but never implemented.
+  - group: awwl_gradnorm
+    tier: 4
+    overrides:
+      loss.name: wavelet_gradnorm
+      loss.gradnorm_asymmetry: 1.5
+      train.loss_learning_rate: 2.5e-2
+
+  # A4 -- learnable basis. Starts at Haar, so any gain is from the learning.
+  - group: awwl_lifting
+    tier: 4
+    seeds: [1, 2, 3]
+    overrides:
+      loss.name: wavelet_lifting
+      loss.alpha: 0.2
+      loss.power: 1.0
+      train.loss_learning_rate: 1.0e-4
+
+  # Everything at once: learned weights, spatially adaptive, learned basis.
+  - group: awwl_full
+    tier: 4
+    seeds: [1, 2, 3]
+    overrides:
+      loss.name: wavelet_learned
+      loss.conditioned: true
+      loss.spatial: true
+      loss.strength: 1.0
+      loss.transform: lifting
+      train.loss_learning_rate: 1.0e-3

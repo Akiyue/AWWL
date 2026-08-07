@@ -200,6 +200,102 @@ def test_every_sweep_loss_trains(tmp_path, patched_loader, loss_cfg):
     assert train_finetune(cfg).exists()
 
 
+@pytest.mark.parametrize(
+    "loss_cfg",
+    [
+        {"name": "wavelet_subband", "alpha": 0.2, "power": 1.0, "direction_powers": {"hh": 2.0}},
+        {"name": "wavelet_spatial", "alpha": 0.2, "power": 1.0, "strength": 1.0},
+        {"name": "wavelet_learned", "conditioned": True},
+        {"name": "wavelet_learned", "conditioned": False},
+        {"name": "wavelet_gradnorm"},
+        {"name": "wavelet_lifting"},
+    ],
+)
+def test_extension_losses_train_through_the_real_loop(tmp_path, patched_loader, loss_cfg):
+    """A1-A4 must survive the trainer, not just a standalone forward pass."""
+    cfg = _cfg(tmp_path)
+    cfg["loss"] = loss_cfg
+    cfg["output"]["name"] = loss_cfg["name"] + str(loss_cfg.get("conditioned", ""))
+    assert train_finetune(cfg).exists()
+
+
+@pytest.mark.parametrize(
+    "loss_cfg",
+    [
+        {"name": "wavelet_learned", "conditioned": False},
+        {"name": "wavelet_gradnorm"},
+        {"name": "wavelet_lifting"},
+    ],
+)
+def test_learned_loss_parameters_actually_change(tmp_path, patched_loader, loss_cfg):
+    """The failure this guards against is silent.
+
+    If the loss's parameters never reach the optimiser, training still runs and
+    still converges — it just quietly becomes a fixed-weight objective frozen
+    at initialisation. The experiment would look successful while testing
+    nothing, so assert the weights moved.
+    """
+    from diffusers import DDPMScheduler
+
+    from awwl.losses import get_loss_function, trainable_loss_parameters
+
+    reference = get_loss_function(
+        loss_cfg["name"],
+        noise_scheduler=DDPMScheduler(num_train_timesteps=50),
+        **{k: v for k, v in loss_cfg.items() if k != "name"},
+    )
+    before = [p.detach().clone() for p in trainable_loss_parameters(reference)]
+    assert before, "this loss was expected to carry learnable parameters"
+
+    cfg = _cfg(tmp_path)
+    cfg["loss"] = loss_cfg
+    cfg["train"]["loss_learning_rate"] = 0.05  # move visibly within 4 steps
+    cfg["output"]["name"] = "learn_" + loss_cfg["name"]
+    train_finetune(cfg)
+
+    state = torch.load(
+        run_dir_for(cfg) / "state" / _latest_dir(cfg) / "loss.pt",
+        map_location="cpu",
+        weights_only=False,
+    )
+    after = [v for v in state.values() if isinstance(v, torch.Tensor) and v.is_floating_point()]
+    assert any(
+        not torch.allclose(a, b) for a, b in zip(before, after, strict=False)
+    ), "loss parameters are unchanged after training — they never reached the optimiser"
+
+
+def test_learned_loss_state_survives_resume(tmp_path, patched_loader):
+    """A resumed run must not reset the learned schedule to its initialisation."""
+    cfg = _cfg(tmp_path)
+    cfg["loss"] = {"name": "wavelet_learned", "conditioned": False}
+    cfg["train"]["loss_learning_rate"] = 0.05
+    train_finetune(cfg)
+
+    first = torch.load(
+        run_dir_for(cfg) / "state" / _latest_dir(cfg) / "loss.pt",
+        map_location="cpu",
+        weights_only=False,
+    )["weighting.log_vars"].clone()
+
+    cfg_more = _cfg(tmp_path)
+    cfg_more["loss"] = {"name": "wavelet_learned", "conditioned": False}
+    cfg_more["train"]["loss_learning_rate"] = 0.05
+    cfg_more["train"]["num_epochs"] = 4
+    train_finetune(cfg_more)
+
+    second = torch.load(
+        run_dir_for(cfg) / "state" / _latest_dir(cfg) / "loss.pt",
+        map_location="cpu",
+        weights_only=False,
+    )["weighting.log_vars"]
+    assert not torch.allclose(first, second), "training continued but the loss state did not"
+
+
+def _latest_dir(cfg) -> str:
+    pointer = run_dir_for(cfg) / "state" / "latest.json"
+    return json.loads(pointer.read_text(encoding="utf-8"))["dir"]
+
+
 def test_run_dir_separates_seeds_without_an_explicit_name(tmp_path):
     """Two seeds must not share a directory, or they resume from each other."""
     base = {"output": {"dir": "./runs/finetune"}, "loss": {"name": "mse"}, "model": {}}

@@ -31,7 +31,7 @@ from tqdm.auto import tqdm
 
 from awwl.analysis.results import append_result, result_row
 from awwl.data.cifar10 import build_cifar10_dataloader
-from awwl.losses import get_loss_function
+from awwl.losses import get_loss_function, loss_module, trainable_loss_parameters
 from awwl.models.ddpm_unet import load_or_build_ddpm_unet
 from awwl.training.accelerator import build_accelerator
 from awwl.training.checkpointing import CheckpointManager
@@ -89,19 +89,39 @@ def train_finetune(cfg: dict[str, Any]) -> Path:
     )
 
     noise_scheduler = DDPMScheduler(num_train_timesteps=int(sched_cfg["num_train_timesteps"]))
-    optimizer = torch.optim.AdamW(model.parameters(), lr=float(train_cfg["learning_rate"]))
+
+    loss_fn = get_loss_function(
+        loss_cfg["name"],
+        noise_scheduler=noise_scheduler,
+        **{k: v for k, v in loss_cfg.items() if k != "name"},
+    )
+    # The learned-weighting and learnable-basis objectives carry parameters of
+    # their own. They get their own group: a loss whose weights never update
+    # would quietly collapse into a fixed-weight objective frozen at its
+    # initialisation, which looks like a working experiment but tests nothing.
+    loss_params = trainable_loss_parameters(loss_fn)
+    param_groups: list[dict[str, Any]] = [
+        {"params": list(model.parameters()), "lr": float(train_cfg["learning_rate"])}
+    ]
+    if loss_params:
+        param_groups.append(
+            {
+                "params": loss_params,
+                "lr": float(train_cfg.get("loss_learning_rate", train_cfg["learning_rate"])),
+            }
+        )
+        logger.info(
+            "loss '%s' contributes %d learnable tensor(s) to the optimiser",
+            loss_cfg["name"],
+            len(loss_params),
+        )
+    optimizer = torch.optim.AdamW(param_groups)
 
     num_epochs = int(train_cfg["num_epochs"])
     lr_scheduler = get_cosine_schedule_with_warmup(
         optimizer=optimizer,
         num_warmup_steps=int(train_cfg["lr_warmup_steps"]),
         num_training_steps=len(dataloader) * num_epochs,
-    )
-
-    loss_fn = get_loss_function(
-        loss_cfg["name"],
-        noise_scheduler=noise_scheduler,
-        **{k: v for k, v in loss_cfg.items() if k != "name"},
     )
 
     ema = build_ema(model, train_cfg)
@@ -113,15 +133,27 @@ def train_finetune(cfg: dict[str, Any]) -> Path:
         keep_last=int(train_cfg.get("keep_last_states", 2)),
         save_every_epochs=int(train_cfg.get("save_state_epochs", 5)),
     )
+    loss_core_pre = loss_module(loss_fn)
+    ckpt_extras = {"loss": loss_core_pre} if loss_params else {}
+
     resumed = None
     if bool(train_cfg.get("resume", True)):
-        resumed = ckpt.load(model=model, optimizer=optimizer, lr_scheduler=lr_scheduler, ema=ema)
+        resumed = ckpt.load(
+            model=model,
+            optimizer=optimizer,
+            lr_scheduler=lr_scheduler,
+            ema=ema,
+            extras=ckpt_extras,
+        )
 
     model, optimizer, dataloader, lr_scheduler = accelerator.prepare(
         model, optimizer, dataloader, lr_scheduler
     )
     if ema is not None:
         ema.to(accelerator.device)
+    if loss_core_pre is not None:
+        # Moves parameter .data in place, so the optimiser's references stay valid.
+        loss_core_pre.to(accelerator.device)
 
     start_epoch = resumed.epoch + 1 if resumed else 0
     global_step = resumed.global_step if resumed else 0
@@ -146,6 +178,21 @@ def train_finetune(cfg: dict[str, Any]) -> Path:
     started = time.time()
     last_ckpt: Path | None = None
 
+    # GradNorm balances sub-bands using the gradients they impose on the last
+    # shared layer. `conv_out` is the natural choice for a UNet: every band's
+    # error reaches the network through it.
+    loss_core = loss_core_pre
+    gradnorm_shared = None
+    gradnorm_weights = None
+    if loss_core is not None and getattr(loss_core, "gradnorm", None) is not None:
+        base = accelerator.unwrap_model(model)
+        shared = getattr(base, "conv_out", None)
+        gradnorm_shared = list(shared.parameters()) if shared is not None else [
+            p for p in base.parameters() if p.requires_grad
+        ][-1:]
+        gradnorm_weights = [loss_core.gradnorm.weights]
+        logger.info("GradNorm active over %d sub-bands", loss_core.gradnorm.n_tasks)
+
     for epoch in range(start_epoch, num_epochs):
         model.train()
         progress = tqdm(
@@ -168,12 +215,25 @@ def train_finetune(cfg: dict[str, Any]) -> Path:
                 noise_pred = model(noisy_images, timesteps, return_dict=False)[0]
                 loss = loss_fn(noise_pred, noise, timesteps=timesteps)
 
+                # GradNorm tunes its weights from the gradients the sub-bands
+                # impose on the shared trunk, so it needs its own second-order
+                # pass *before* the network's backward frees the graph.
+                if gradnorm_shared is not None:
+                    aux = loss_core.gradnorm_loss(gradnorm_shared)
+                    if aux is not None:
+                        aux.backward(retain_graph=True, inputs=gradnorm_weights)
+
                 accelerator.backward(loss)
                 if accelerator.sync_gradients:
                     accelerator.clip_grad_norm_(model.parameters(), grad_clip)
                 optimizer.step()
                 lr_scheduler.step()
                 optimizer.zero_grad(set_to_none=True)
+                if gradnorm_shared is not None:
+                    # Rescale the balancer's weights back to a fixed sum, so
+                    # their overall magnitude cannot drift into an implicit
+                    # learning-rate change.
+                    loss_core.after_optimizer_step()
 
             if accelerator.sync_gradients:
                 global_step += 1
@@ -203,6 +263,7 @@ def train_finetune(cfg: dict[str, Any]) -> Path:
                     optimizer=optimizer,
                     lr_scheduler=lr_scheduler,
                     ema=ema,
+                    extras=ckpt_extras,
                     meta={"seed": seed, "loss_name": loss_cfg["name"]},
                 )
 

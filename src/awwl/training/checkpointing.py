@@ -94,9 +94,18 @@ class CheckpointManager:
         optimizer: torch.optim.Optimizer,
         lr_scheduler: Any | None = None,
         ema: Any | None = None,
+        extras: dict[str, Any] | None = None,
         meta: dict[str, Any] | None = None,
     ) -> Path:
-        """Write one state snapshot and repoint ``latest.json`` at it."""
+        """Write one state snapshot and repoint ``latest.json`` at it.
+
+        Args:
+            extras: Additional ``state_dict``-bearing objects to persist, keyed
+                by filename stem. Used for losses that carry learned
+                parameters — without this a resumed run would restart the
+                learned weighting from its initialisation while the network
+                continued, silently invalidating the run.
+        """
         self.state_root.mkdir(parents=True, exist_ok=True)
         final = self.state_root / f"step-{global_step:09d}"
         staging = self.state_root / f"step-{global_step:09d}.tmp"
@@ -110,6 +119,8 @@ class CheckpointManager:
             torch.save(lr_scheduler.state_dict(), staging / "lr_scheduler.pt")
         if ema is not None:
             torch.save(ema.state_dict(), staging / "ema.pt")
+        for label, obj in (extras or {}).items():
+            torch.save(obj.state_dict(), staging / f"{label}.pt")
         torch.save(_rng_state(), staging / "rng.pt")
 
         payload = {"epoch": int(epoch), "global_step": int(global_step), **(meta or {})}
@@ -163,6 +174,7 @@ class CheckpointManager:
         optimizer: torch.optim.Optimizer | None = None,
         lr_scheduler: Any | None = None,
         ema: Any | None = None,
+        extras: dict[str, Any] | None = None,
         map_location: str | torch.device = "cpu",
     ) -> ResumeState | None:
         """Restore everything found in the latest snapshot.
@@ -191,6 +203,8 @@ class CheckpointManager:
             self._load_into(lr_scheduler, state_dir / "lr_scheduler.pt", map_location, "lr_scheduler")
         if ema is not None:
             self._load_into(ema, state_dir / "ema.pt", map_location, "ema")
+        for label, obj in (extras or {}).items():
+            self._load_into(obj, state_dir / f"{label}.pt", map_location, label)
 
         rng_path = state_dir / "rng.pt"
         if rng_path.exists():
