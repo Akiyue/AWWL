@@ -1,0 +1,155 @@
+# Phase 0 — "does the effect survive multiple seeds?"
+#
+# The published CIFAR-10 table separates MSE (16.68), AWWL (16.62) and the
+# static wavelet variant (16.55) by less than a tenth of a FID point, from one
+# seed each. Seed-to-seed spread for this recipe is typically several times
+# that, so before any Q1 extension is worth compute, the sweep below has to
+# establish that there is an effect to extend.
+#
+# Tiers run in order and the runner drains one before starting the next, so a
+# budget cut simply means stopping after a tier rather than half-finishing
+# everything:
+#
+#   tier 1  the survival test + convergence curves          15 runs
+#   tier 2  the alpha confound, eq.(7) form, and EMA        16 runs
+#   tier 3  the remaining published baselines               25 runs
+#
+# Rough cost on 2x RTX 5000 Ada (one run per GPU, no DDP): ~3 h per training
+# run, ~6 min per 10k-image DDIM-100 sample set, a few minutes per metric
+# pass. Tier 1 lands in about a day, all three tiers in roughly four.
+#
+# Prerequisite (once):   awwl prepare-data --output ./data/cifar10_train_png
+# Run (repeatable):      awwl pipeline run -m configs/pipeline/phase0.yaml --gpus 0,1
+# Inspect:               awwl pipeline status -m configs/pipeline/phase0.yaml
+#
+# Re-running after a crash is the intended workflow, not a recovery procedure:
+# finished jobs are skipped and interrupted ones resume from their own last
+# checkpoint.
+
+name: phase0
+base_config: configs/finetune.yaml
+output_root: ./runs/phase0
+ledger: ./runs/phase0/results.jsonl
+real_images: ./data/cifar10_train_png
+
+defaults:
+  seeds: [1, 2, 3, 4, 5]
+  # Only the final checkpoint by default; tier 1 overrides this to trace the
+  # whole curve, which is what answers "does AWWL reach a given FID earlier?"
+  eval_epochs: [199]
+  sample:
+    num_samples: 10000
+    sampler: ddim         # DDIM-100 over DDPM-1000: ~10x cheaper, and the
+    steps: 100            # comparison is internally consistent either way.
+    batch_size: 256       # Never mix samplers within one table.
+    seed: 12345
+  overrides:
+    train.num_epochs: 200
+    train.save_model_epochs: 40
+
+experiments:
+
+  # ---------------------------------------------------------------- tier 1
+  # Three configurations, five seeds, evaluated at five checkpoints each.
+  # Answers two questions at once: is the AWWL-vs-MSE gap larger than seed
+  # noise, and does AWWL converge faster (an independent, compute-saving
+  # claim that does not depend on winning on final FID).
+
+  - group: mse
+    tier: 1
+    eval_epochs: [39, 79, 119, 159, 199]
+    overrides:
+      loss.name: mse
+
+  - group: static_wavelet
+    tier: 1
+    eval_epochs: [39, 79, 119, 159, 199]
+    overrides:
+      loss.name: adaptive_wavelet
+      loss.alpha: 0.2
+      loss.power: 0.0        # p=0: fixed weights, no temporal adaptation
+      loss.wavelet_type: db1
+
+  - group: awwl
+    tier: 1
+    eval_epochs: [39, 79, 119, 159, 199]
+    overrides:
+      loss.name: adaptive_wavelet
+      loss.alpha: 0.2
+      loss.power: 1.0
+      loss.wavelet_type: db1
+
+  # ---------------------------------------------------------------- tier 2
+  # The confounds. Each of these isolates one thing the current manuscript
+  # leaves entangled.
+
+  # Total weight held at 1 for every sigma. If AWWL's advantage survives this,
+  # it really is a frequency effect; if it disappears, alpha was acting as a
+  # Min-SNR-style timestep reweighting and the "resolution law" in the
+  # conclusion needs rewriting. This single comparison is the highest-value
+  # experiment in the file.
+  - group: awwl_normalized
+    tier: 2
+    overrides:
+      loss.name: adaptive_wavelet
+      loss.alpha: 0.2
+      loss.power: 1.0
+      loss.normalize_weights: true
+
+  # The objective as eq. (7) actually writes it (detail bands summed, not
+  # averaged). Reconciles the paper with the released code.
+  - group: awwl_eq7
+    tier: 2
+    overrides:
+      loss.name: adaptive_wavelet
+      loss.alpha: 0.2
+      loss.power: 1.0
+      loss.detail_reduction: sum
+
+  # EMA arm. Published DDPM CIFAR-10 FIDs (~3) come from EMA weights; these
+  # runs sit near 17 without it. Three seeds is enough to see whether EMA
+  # preserves the ordering of the losses or flattens it — if it flattens it,
+  # every conclusion drawn from non-EMA runs is about optimiser noise.
+  - group: mse_ema
+    tier: 2
+    seeds: [1, 2, 3]
+    overrides:
+      loss.name: mse
+      train.use_ema: true
+
+  - group: awwl_ema
+    tier: 2
+    seeds: [1, 2, 3]
+    overrides:
+      loss.name: adaptive_wavelet
+      loss.alpha: 0.2
+      loss.power: 1.0
+      train.use_ema: true
+
+  # ---------------------------------------------------------------- tier 3
+  # The rest of Table 2, so the published comparison itself gets error bars.
+
+  - group: l1
+    tier: 3
+    overrides:
+      loss.name: l1
+
+  - group: huber
+    tier: 3
+    overrides:
+      loss.name: huber
+
+  - group: charbonnier
+    tier: 3
+    overrides:
+      loss.name: charbonnier
+
+  - group: snr_weighted
+    tier: 3
+    overrides:
+      loss.name: snr_weighted
+
+  - group: perceptual
+    tier: 3
+    overrides:
+      loss.name: perceptual

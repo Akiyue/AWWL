@@ -26,8 +26,25 @@ train:
   num_epochs: 200
   learning_rate: 2.0e-4
   lr_warmup_steps: 500
-  save_model_epochs: 20
+  # Sampling checkpoints. At 40 this yields epochs 39/79/119/159/199, the
+  # points the convergence-curve experiment evaluates.
+  save_model_epochs: 40
   grad_clip_norm: 1.0
+
+  # Crash recovery. Full training state (optimiser, LR schedule, EMA, RNG) is
+  # written every `save_state_epochs` and picked up automatically on restart,
+  # so a killed run continues rather than starting over. A CIFAR-10 epoch is
+  # about a minute, so 5 bounds the work lost by a crash at ~5 minutes.
+  resume: true
+  save_state_epochs: 5
+  keep_last_states: 2
+
+  # Exponential moving average of the weights. OFF by default because the
+  # paper's numbers were produced without it — but standard DDPM training
+  # samples from the EMA copy, and enabling it moves every metric, so runs
+  # with and without must be reported as separate configurations.
+  use_ema: false
+  ema_decay: 0.9999
 
 scheduler:
   num_train_timesteps: 1000
@@ -43,6 +60,19 @@ loss:
   wavelet_type: db1
   levels: 1
   weighting: normalized   # paper eqs. (4)-(5).
+
+  # Eqs. (4)-(5) do not sum to a constant: the total weight runs from alpha at
+  # high noise to (1-alpha) at low noise, so alpha is also a global timestep
+  # reweighting. Setting this to true fixes the total at 1 for every sigma,
+  # isolating the frequency balance. False reproduces the paper.
+  normalize_weights: false
+
+  # How the three detail bands combine. "mean" is what the released code does
+  # and what produced the paper's tables; "sum" is what eq. (7) literally
+  # writes. They differ by a factor of 3 on the detail term — see
+  # scripts/verify_loss_math.py.
+  detail_reduction: mean
+  level_reduction: sum
 
 output:
   dir: ./runs/finetune

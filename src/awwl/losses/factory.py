@@ -49,7 +49,9 @@ def get_loss_function(
         noise_scheduler: Required for ``vlb``, ``snr_weighted``, and
             ``adaptive_wavelet``. Must expose ``alphas_cumprod``.
         **kwargs: Per-loss hyperparameters. The wavelet loss reads ``levels``,
-            ``wavelet_type``, ``alpha``, ``power``, ``weighting``.
+            ``wavelet_type``, ``alpha``, ``power``, ``weighting``,
+            ``normalize_weights``, ``detail_reduction``, ``level_reduction``
+            and ``dwt_mode``.
 
     Raises:
         UnknownLossError: ``name`` is not a known loss type.
@@ -67,6 +69,10 @@ def get_loss_function(
             alpha=float(kwargs.get("alpha", 0.8)),
             power=float(kwargs.get("power", 2.0)),
             weighting=str(kwargs.get("weighting", "normalized")),  # type: ignore[arg-type]
+            normalize_weights=bool(kwargs.get("normalize_weights", False)),
+            detail_reduction=str(kwargs.get("detail_reduction", "mean")),  # type: ignore[arg-type]
+            level_reduction=str(kwargs.get("level_reduction", "sum")),  # type: ignore[arg-type]
+            dwt_mode=str(kwargs.get("dwt_mode", "zero")),
         )
 
         def _adaptive(model_pred: torch.Tensor, target: torch.Tensor, *, timesteps: torch.Tensor) -> torch.Tensor:

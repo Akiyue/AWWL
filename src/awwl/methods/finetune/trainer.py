@@ -1,13 +1,26 @@
 """From-scratch DDPM trainer for the AWWL-Diff recipe.
 
-Replaces ``AWWL-Diff/train_cifar10.py``. The training loop is unchanged, but
-hyperparameters come from a config dict and the loss-history JSON logger is
-used in every run (the older ``train.py`` did not log it).
+Replaces ``AWWL-Diff/train_cifar10.py``. The optimisation recipe is unchanged
+from the paper's runs; what has been added is the machinery a multi-seed study
+needs:
+
+* **Auto-resume.** Full training state (optimiser moments, LR-scheduler
+  position, EMA shadow, RNG) is snapshotted under ``<run>/state`` and picked
+  up automatically on restart, so a killed job continues instead of silently
+  starting over. See :mod:`awwl.training.checkpointing`.
+* **Optional EMA** (``train.use_ema``), off by default — see
+  :mod:`awwl.training.ema` for why it matters and why it is not the default.
+* **Per-epoch sampling checkpoints** at ``train.save_model_epochs``, which are
+  what the convergence-curve experiment evaluates.
+* **A results-ledger row** per finished run, so statistics never depend on
+  parsing directory names.
 """
 
 from __future__ import annotations
 
+import json
 import logging
+import time
 from pathlib import Path
 from typing import Any
 
@@ -16,10 +29,13 @@ from diffusers import DDPMPipeline, DDPMScheduler
 from diffusers.optimization import get_cosine_schedule_with_warmup
 from tqdm.auto import tqdm
 
+from awwl.analysis.results import append_result, result_row
 from awwl.data.cifar10 import build_cifar10_dataloader
 from awwl.losses import get_loss_function
 from awwl.models.ddpm_unet import load_or_build_ddpm_unet
 from awwl.training.accelerator import build_accelerator
+from awwl.training.checkpointing import CheckpointManager
+from awwl.training.ema import build_ema
 from awwl.training.loss_history import LossHistoryLogger
 from awwl.utils.io import ensure_dir
 
@@ -33,15 +49,18 @@ def train_finetune(cfg: dict[str, Any]) -> Path:
         cfg: A merged config dict (see ``configs/finetune.yaml``).
 
     Returns:
-        Path to the final saved checkpoint folder.
+        Path to the final saved sampling checkpoint folder.
     """
     model_cfg = cfg["model"]
     data_cfg = cfg["data"]
     train_cfg = cfg["train"]
     loss_cfg = cfg["loss"]
     sched_cfg = cfg["scheduler"]
-    weights_path = model_cfg.get("model_weights_path")
-    out_dir = ensure_dir(_run_dir(cfg))
+    seed = int(cfg.get("seed", 42))
+    out_dir = ensure_dir(run_dir_for(cfg))
+    # Snapshot the resolved config so downstream evaluation can recover the
+    # run's identity without re-deriving it from the directory name.
+    (out_dir / "config.json").write_text(json.dumps(cfg, indent=2, default=str), encoding="utf-8")
 
     accelerator = build_accelerator(
         mixed_precision=cfg["precision"]["mixed_precision"],
@@ -53,6 +72,7 @@ def train_finetune(cfg: dict[str, Any]) -> Path:
         batch_size=int(data_cfg["batch_size"]),
         num_workers=int(data_cfg.get("num_workers", 4)),
         split=data_cfg.get("split", "train"),
+        seed=seed,
     )
 
     builder_kwargs = {
@@ -64,7 +84,9 @@ def train_finetune(cfg: dict[str, Any]) -> Path:
         "down_block_types": tuple(model_cfg["down_block_types"]),
         "up_block_types": tuple(model_cfg["up_block_types"]),
     }
-    model = load_or_build_ddpm_unet(weights_path=weights_path, builder_kwargs=builder_kwargs)
+    model = load_or_build_ddpm_unet(
+        weights_path=model_cfg.get("model_weights_path"), builder_kwargs=builder_kwargs
+    )
 
     noise_scheduler = DDPMScheduler(num_train_timesteps=int(sched_cfg["num_train_timesteps"]))
     optimizer = torch.optim.AdamW(model.parameters(), lr=float(train_cfg["learning_rate"]))
@@ -79,16 +101,33 @@ def train_finetune(cfg: dict[str, Any]) -> Path:
     loss_fn = get_loss_function(
         loss_cfg["name"],
         noise_scheduler=noise_scheduler,
-        alpha=loss_cfg.get("alpha", 0.8),
-        power=loss_cfg.get("power", 2.0),
-        wavelet_type=loss_cfg.get("wavelet_type", "db1"),
-        levels=loss_cfg.get("levels", 1),
-        weighting=loss_cfg.get("weighting", "normalized"),
+        **{k: v for k, v in loss_cfg.items() if k != "name"},
     )
+
+    ema = build_ema(model, train_cfg)
+
+    # Resume before `accelerator.prepare` so the plain module is the one whose
+    # state_dict is overwritten; prepare() may wrap it in DDP afterwards.
+    ckpt = CheckpointManager(
+        out_dir,
+        keep_last=int(train_cfg.get("keep_last_states", 2)),
+        save_every_epochs=int(train_cfg.get("save_state_epochs", 5)),
+    )
+    resumed = None
+    if bool(train_cfg.get("resume", True)):
+        resumed = ckpt.load(model=model, optimizer=optimizer, lr_scheduler=lr_scheduler, ema=ema)
 
     model, optimizer, dataloader, lr_scheduler = accelerator.prepare(
         model, optimizer, dataloader, lr_scheduler
     )
+    if ema is not None:
+        ema.to(accelerator.device)
+
+    start_epoch = resumed.epoch + 1 if resumed else 0
+    global_step = resumed.global_step if resumed else 0
+    if start_epoch >= num_epochs:
+        logger.info("run already complete at epoch %d/%d; nothing to do", start_epoch, num_epochs)
+        return _final_checkpoint(out_dir, num_epochs)
 
     history = LossHistoryLogger(
         output_dir=out_dir,
@@ -97,14 +136,14 @@ def train_finetune(cfg: dict[str, Any]) -> Path:
             "power": loss_cfg.get("power"),
             "wavelet": loss_cfg.get("wavelet_type"),
             "loss_name": loss_cfg["name"],
+            "seed": seed,
         },
-        resume=weights_path is not None,
+        resume=resumed is not None,
     )
 
-    start_epoch = _resume_epoch(weights_path, num_epochs)
     save_every = int(train_cfg.get("save_model_epochs", 20))
     grad_clip = float(train_cfg.get("grad_clip_norm", 1.0))
-
+    started = time.time()
     last_ckpt: Path | None = None
 
     for epoch in range(start_epoch, num_epochs):
@@ -115,73 +154,143 @@ def train_finetune(cfg: dict[str, Any]) -> Path:
             desc=f"epoch {epoch}",
         )
         for batch in dataloader:
-            clean_images = batch["images"]
-            noise = torch.randn(clean_images.shape, device=clean_images.device)
-            bsz = clean_images.shape[0]
-            timesteps = torch.randint(
-                0, noise_scheduler.config.num_train_timesteps, (bsz,), device=clean_images.device
-            ).long()
-            noisy_images = noise_scheduler.add_noise(clean_images, noise, timesteps)
-            noise_pred = model(noisy_images, timesteps, return_dict=False)[0]
-            loss = loss_fn(noise_pred, noise, timesteps=timesteps)
+            with accelerator.accumulate(model):
+                clean_images = batch["images"]
+                noise = torch.randn(clean_images.shape, device=clean_images.device)
+                bsz = clean_images.shape[0]
+                timesteps = torch.randint(
+                    0,
+                    noise_scheduler.config.num_train_timesteps,
+                    (bsz,),
+                    device=clean_images.device,
+                ).long()
+                noisy_images = noise_scheduler.add_noise(clean_images, noise, timesteps)
+                noise_pred = model(noisy_images, timesteps, return_dict=False)[0]
+                loss = loss_fn(noise_pred, noise, timesteps=timesteps)
 
-            accelerator.backward(loss)
-            accelerator.clip_grad_norm_(model.parameters(), grad_clip)
-            optimizer.step()
-            lr_scheduler.step()
-            optimizer.zero_grad(set_to_none=True)
+                accelerator.backward(loss)
+                if accelerator.sync_gradients:
+                    accelerator.clip_grad_norm_(model.parameters(), grad_clip)
+                optimizer.step()
+                lr_scheduler.step()
+                optimizer.zero_grad(set_to_none=True)
+
+            if accelerator.sync_gradients:
+                global_step += 1
+                if ema is not None:
+                    ema.step(accelerator.unwrap_model(model))
 
             value = float(loss.detach().item())
             history.append(value)
             progress.update(1)
             progress.set_postfix(loss=value)
+        progress.close()
 
-        if accelerator.is_main_process and (
-            (epoch + 1) % save_every == 0 or epoch == num_epochs - 1
-        ):
-            pipeline = DDPMPipeline(
-                unet=accelerator.unwrap_model(model), scheduler=noise_scheduler
-            )
-            ckpt = out_dir / f"checkpoint-{epoch}"
-            pipeline.save_pretrained(ckpt)
-            history.flush()
-            last_ckpt = ckpt
-            logger.info("saved checkpoint %s", ckpt)
+        if accelerator.is_main_process:
+            unwrapped = accelerator.unwrap_model(model)
+            if (epoch + 1) % save_every == 0 or epoch == num_epochs - 1:
+                last_ckpt = _export_pipeline(
+                    unwrapped, noise_scheduler, ema, out_dir / f"checkpoint-{epoch}"
+                )
+                history.flush()
+                logger.info("saved sampling checkpoint %s", last_ckpt)
+            if ckpt.should_save(epoch, num_epochs):
+                history.flush()
+                ckpt.save(
+                    epoch=epoch,
+                    global_step=global_step,
+                    model=unwrapped,
+                    optimizer=optimizer,
+                    lr_scheduler=lr_scheduler,
+                    ema=ema,
+                    meta={"seed": seed, "loss_name": loss_cfg["name"]},
+                )
 
     if last_ckpt is None:
         raise RuntimeError("training finished without saving any checkpoint")
+
+    if accelerator.is_main_process:
+        append_result(
+            _ledger_path(cfg, out_dir),
+            result_row(
+                cfg,
+                exp=str(cfg.get("output", {}).get("name", out_dir.name)),
+                group=str(cfg.get("output", {}).get("group", loss_cfg["name"])),
+                kind="train",
+                metrics={
+                    "final_epoch": num_epochs - 1,
+                    "global_step": global_step,
+                    "train_seconds": round(time.time() - started, 1),
+                    "checkpoint": str(last_ckpt),
+                },
+            ),
+        )
     return last_ckpt
 
 
-def _run_dir(cfg: dict[str, Any]) -> Path:
-    """Mirror the AWWL-Diff convention: ``<output_dir>_a<a>_p<p>_<wavelet>``."""
-    base = cfg["output"]["dir"]
-    weights_path = cfg["model"].get("model_weights_path")
-    if weights_path:
-        return Path(weights_path).parent
-    loss_cfg = cfg["loss"]
-    return Path(
-        f"{base}_a{loss_cfg.get('alpha', 0.8)}"
-        f"_p{loss_cfg.get('power', 2.0)}"
-        f"_{loss_cfg.get('wavelet_type', 'db1')}"
+def _export_pipeline(
+    model: torch.nn.Module,
+    noise_scheduler: DDPMScheduler,
+    ema: Any | None,
+    target: Path,
+) -> Path:
+    """Write a sampling-ready ``DDPMPipeline``, using EMA weights when present."""
+    if ema is not None:
+        with ema.as_active(model):
+            DDPMPipeline(unet=model, scheduler=noise_scheduler).save_pretrained(target)
+    else:
+        DDPMPipeline(unet=model, scheduler=noise_scheduler).save_pretrained(target)
+    return target
+
+
+def _final_checkpoint(out_dir: Path, num_epochs: int) -> Path:
+    """Path of the last sampling checkpoint of a completed run."""
+    final = out_dir / f"checkpoint-{num_epochs - 1}"
+    if final.exists():
+        return final
+    existing = sorted(out_dir.glob("checkpoint-*"), key=lambda p: int(p.name.split("-")[-1]))
+    if existing:
+        return existing[-1]
+    raise RuntimeError(
+        f"{out_dir} reports a completed run but has no checkpoint-* folder; "
+        "delete its state/ directory to retrain"
     )
 
 
-def _resume_epoch(weights_path: str | None, total_epochs: int) -> int:
-    """Parse ``checkpoint-XX`` from a resume path, returning ``XX + 1`` (or 0)."""
-    if not weights_path:
-        return 0
-    name = Path(weights_path).name
-    if not name.startswith("checkpoint-"):
-        return 0
-    try:
-        epoch = int(name.split("-")[-1]) + 1
-    except ValueError:
-        return 0
-    if epoch >= total_epochs:
-        logger.warning(
-            "checkpoint already at epoch %d but target is %d — increase num_epochs to continue",
-            epoch - 1,
-            total_epochs,
+def _ledger_path(cfg: dict[str, Any], out_dir: Path) -> Path:
+    """Where to append the results row (shared ledger, or per-run fallback)."""
+    configured = cfg.get("output", {}).get("ledger")
+    return Path(configured) if configured else out_dir / "results.jsonl"
+
+
+def run_dir_for(cfg: dict[str, Any]) -> Path:
+    """Resolve a run's output directory.
+
+    ``output.name`` wins when set (the pipeline runner always sets it, which
+    keeps one directory per experiment × seed). Otherwise fall back to the
+    AWWL-Diff convention ``<dir>_a<alpha>_p<power>_<wavelet>``, extended with
+    the loss name and seed — without those, two seeds or two losses would
+    write into the same folder and resume from each other's state.
+    """
+    output_cfg = cfg.get("output", {})
+    base = Path(output_cfg["dir"])
+    name = output_cfg.get("name")
+    if name:
+        return base / str(name)
+
+    weights_path = cfg.get("model", {}).get("model_weights_path")
+    if weights_path:
+        return Path(weights_path).parent
+
+    loss_cfg = cfg.get("loss", {})
+    loss_name = loss_cfg.get("name", "mse")
+    seed = cfg.get("seed", 42)
+    if loss_name == "adaptive_wavelet":
+        tag = (
+            f"a{loss_cfg.get('alpha', 0.8)}"
+            f"_p{loss_cfg.get('power', 2.0)}"
+            f"_{loss_cfg.get('wavelet_type', 'db1')}"
         )
-    return epoch
+    else:
+        tag = loss_name
+    return Path(f"{base}_{tag}_s{seed}")

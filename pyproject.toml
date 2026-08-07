@@ -26,6 +26,9 @@ dependencies = [
     "accelerate>=0.28",
     "datasets>=2.18",
     "pytorch-wavelets>=1.3.0",
+    # pytorch-wavelets imports pywt but does not declare it, so a fresh
+    # install resolves without PyWavelets and then fails at import time.
+    "PyWavelets>=1.4",
     "Pillow",
     "numpy",
     "pandas",

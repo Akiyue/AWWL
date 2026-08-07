@@ -58,8 +58,16 @@ The reference implementation lives in
 | Static Wavelet (p=0)  | 0.298 ± 0.035  | 0.878 ± 0.057      |
 | **AWWL (Ours)** *(α=0.8, p=2.0)* | 0.306 ± 0.036 | 0.889 ± 0.057 |
 
-AWWL is the only method ranking in the top two for **both** metrics —
-a Pareto-optimal balance between semantic alignment and identity fidelity.
+AWWL is among the strongest methods on both metrics at once — 2nd on CLIP,
+and within noise of 2nd on Similarity (L₁'s 0.890 leads by 0.001, far inside
+the ±0.055 spread) — avoiding the sharp polarisation of the single-objective
+baselines.
+
+> ⚠️ **These are single-run numbers.** The gaps between methods (~0.01-0.02)
+> are much smaller than the reported standard deviations (~0.035-0.057), so
+> the ordering above is not yet established. See
+> [`docs/PHASE0.md`](docs/PHASE0.md) for the multi-seed replication that
+> tests it.
 
 ### Table 2 — CIFAR-10 unconditional generation (200 epochs)
 
@@ -75,6 +83,13 @@ a Pareto-optimal balance between semantic alignment and identity fidelity.
 
 AWWL achieves the best Inception Score and KID, with FID and Recall on par
 with the strongest baselines.
+
+> ⚠️ **Single seed per row.** The top three rows are separated by less than
+> 0.15 FID, which is smaller than the usual seed-to-seed spread for this
+> recipe — and the best FID in the table belongs to the static (p=0) ablation,
+> not to AWWL. Sampling used ancestral DDPM without EMA weights, which is why
+> the absolute values sit well above published DDPM CIFAR-10 FIDs. The
+> replication in [`docs/PHASE0.md`](docs/PHASE0.md) addresses all three.
 
 ### Key ablation findings (Table 3)
 
@@ -207,6 +222,55 @@ awwl infer --method dreambooth \
 Weights are **never copied or modified** — the registry resolves to the
 original `AWWL/` and `AWWL-Diff/` folders that produced the paper's numbers.
 
+## Replication and sweeps
+
+Single runs cannot separate the methods above, so the repo ships a resumable
+multi-GPU pipeline for multi-seed replication. Full rationale, cost estimates
+and how to read the outcome: [`docs/PHASE0.md`](docs/PHASE0.md).
+
+```bash
+# Free, CPU-only: check three mathematical properties of the objective
+python scripts/verify_loss_math.py
+
+# One-off: CIFAR-10 as PNGs for the FID/KID reference set
+awwl prepare-data --output ./data/cifar10_train_png
+
+# The sweep. Re-run this exact command after any crash — it resumes.
+awwl pipeline run -m configs/pipeline/phase0.yaml --gpus 0,1
+
+awwl pipeline status -m configs/pipeline/phase0.yaml
+awwl pipeline reset  -m configs/pipeline/phase0.yaml   # requeue failures
+```
+
+Jobs are tracked in SQLite (`runs/phase0/pipeline/state.db`), each runs as a
+subprocess pinned to one GPU, and a job whose worker dies is requeued from its
+heartbeat. Training resumes from a full state snapshot — optimiser moments,
+LR-scheduler position, EMA shadow and RNG — written every few epochs, so a
+crash costs minutes rather than hours. Interrupted sampling resumes too.
+
+Results land in an append-only `results.jsonl`, analysed with:
+
+```bash
+awwl stats -l runs/phase0/results.jsonl --metric fid --epoch 199 --baseline mse
+awwl stats -l runs/phase0/results.jsonl --metric fid --curve
+```
+
+which reports mean ± std with 95% CIs per configuration, then a seed-paired
+t-test and Wilcoxon signed-rank test against the baseline, Holm-Bonferroni
+corrected across the comparisons.
+
+## Loss options beyond the paper's configuration
+
+`AdaptiveWaveletLoss` defaults reproduce the published runs exactly. Three
+options exist to resolve discrepancies between the manuscript and this code
+(all verified numerically by `scripts/verify_loss_math.py`):
+
+| Option | Default | What it changes |
+| --- | --- | --- |
+| `normalize_weights` | `false` | Eqs. (4)-(5) do **not** sum to a constant: the total runs from `α` at high noise to `1-α` at low noise, so `α` is also a Min-SNR-style timestep reweighting. `true` pins the total at 1 for every σ, isolating the frequency balance. |
+| `detail_reduction` | `mean` | Eq. (7) *sums* the three detail bands; the code averages them — a factor of 3 on the detail term. `sum` implements the equation as written. |
+| `level_reduction` | `sum` | With `levels > 1`, whether the detail term's magnitude grows with the number of levels. |
+
 ## Repository layout
 
 ```
@@ -217,6 +281,7 @@ awwl/
 │   ├── dreambooth_lora.yaml
 │   ├── finetune.yaml        # Table 2, paper-optimal alpha=0.2, p=1.0, db1
 │   ├── eval/{clip,fid_is,advanced}.yaml
+│   ├── pipeline/phase0.yaml # Multi-seed replication sweep
 │   └── checkpoints/registry.yaml
 ├── src/awwl/
 │   ├── losses/              # AWWL + 8 baseline losses, one factory
@@ -226,17 +291,27 @@ awwl/
 │   │   └── factory.py            # get_loss_function(name, **cfg)
 │   ├── methods/
 │   │   ├── dreambooth/      # SD 1.5 trainer + LoRA variant + inference
-│   │   └── finetune/        # CIFAR-10 DDPM trainer + inference
+│   │   └── finetune/        # CIFAR-10 DDPM trainer + inference (DDPM/DDIM)
+│   ├── pipeline/            # Resumable sweeps
+│   │   ├── store.py              # SQLite job queue, crash recovery
+│   │   ├── manifest.py           # experiment matrix -> job DAG
+│   │   └── runner.py             # one subprocess worker per GPU
+│   ├── analysis/            # Results ledger + significance testing
+│   │   ├── results.py            # append-only results.jsonl
+│   │   └── stats.py              # CIs, paired t-test, Wilcoxon, Holm
 │   ├── data/                # DreamBooth / HF-image / CIFAR-10 datasets
 │   ├── models/              # SD components, DDPM UNet, LoRA injection
 │   ├── evaluation/          # CLIP, FID/IS, KID/PR/spectral, timestep
 │   ├── plotting/            # Bar/scatter, radar, ablation, grids, etc.
-│   ├── training/            # Accelerator + per-step loss-history JSON
+│   ├── training/            # Accelerator, EMA, crash-safe checkpointing
 │   ├── utils/               # YAML loader, seeding, logging, paths
 │   ├── core/                # Registries, exceptions
-│   └── cli.py               # `awwl train | infer | eval | list-checkpoints`
-├── scripts/                 # Thin shims around the CLI
-├── tests/                   # CPU smoke tests (~3 s)
+│   └── cli.py               # train | infer | eval | eval-samples |
+│                            # prepare-data | pipeline | stats
+├── scripts/
+│   └── verify_loss_math.py  # CPU checks of Parseval / eq.(7) / the alpha confound
+├── docs/PHASE0.md           # How to run the replication, and how to read it
+├── tests/                   # CPU tests (~30 s)
 ├── assets/prompts/          # The three paper prompts
 └── MIGRATION.md             # Per-file map AWWL/, AWWL-Diff/ → src/awwl/
 ```
@@ -261,10 +336,15 @@ Every baseline in Tables 1–2 ships in [`src/awwl/losses/`](src/awwl/losses/):
 ## Tests + lint
 
 ```bash
-pytest                    # 22 smoke tests, CPU only, ~3 s
+pytest                    # CPU only, no GPU or network needed
 ruff check src tests      # static checks
 black --check src tests
 ```
+
+The suite covers the loss zoo, the Parseval / eq.(7) / α-confound properties
+asserted in `docs/PHASE0.md`, checkpoint save-resume (including a torn
+snapshot and a dangling pointer), and the job store's exclusivity,
+dependency ordering and stale-heartbeat recovery.
 
 ## Reproducibility
 

@@ -5,14 +5,18 @@ Subcommands:
 * ``train`` — run a method's trainer with a YAML config.
 * ``infer`` — sample images from a fine-tuned checkpoint.
 * ``eval`` — run an evaluation suite (CLIP / FID-IS / advanced).
+* ``eval-samples`` — score one sample folder and append to the results ledger.
+* ``pipeline`` — run / inspect / reset a resumable multi-GPU sweep.
+* ``stats`` — confidence intervals and significance tests over the ledger.
 * ``list-checkpoints`` — print logical names from the registry.
 
-Every subcommand accepts ``--override key.path=value`` repeats to tweak the
-config without editing the YAML.
+Every config-taking subcommand accepts ``--override key.path=value`` repeats
+to tweak the config without editing the YAML.
 """
 
 from __future__ import annotations
 
+import json
 import logging
 import sys
 from pathlib import Path
@@ -21,11 +25,20 @@ import typer
 
 from awwl.core.exceptions import AWWLError
 from awwl.methods import KNOWN_METHODS, get_trainer
-from awwl.utils import apply_overrides, load_yaml, resolve_weights, set_seed, setup_logging
+from awwl.utils import (
+    apply_overrides,
+    load_yaml,
+    resolve_weights,
+    set_seed,
+    setup_logging,
+    use_utf8_output,
+)
 
 logger = logging.getLogger("awwl.cli")
 
 app = typer.Typer(add_completion=False, no_args_is_help=True, help="AWWL command-line interface.")
+pipeline_app = typer.Typer(add_completion=False, no_args_is_help=True, help="Resumable experiment sweeps.")
+app.add_typer(pipeline_app, name="pipeline")
 
 
 def _load_cfg(config: Path, overrides: list[str]) -> dict:
@@ -63,6 +76,10 @@ def infer_cmd(
     prompt: str = typer.Option("a photo of sks robot toy on the beach at sunset", "--prompt"),
     num_samples: int = typer.Option(100, "--num-samples", "-n"),
     base_model: str = typer.Option("runwayml/stable-diffusion-v1-5", "--base-model", help="DreamBooth only."),
+    sampler: str = typer.Option("ddpm", "--sampler", help="finetune only: ddpm | ddim."),
+    steps: int | None = typer.Option(None, "--steps", help="Denoising steps (default 1000 ddpm / 100 ddim)."),
+    batch_size: int = typer.Option(128, "--batch-size", help="finetune only: samples per forward pass."),
+    sample_seed: int | None = typer.Option(None, "--sample-seed", help="finetune only: seeds the sampling noise."),
     project_root: Path | None = typer.Option(None, "--project-root", help="Defaults to the parent of this CLI."),
     device: str = typer.Option("cuda", "--device"),
 ) -> None:
@@ -100,6 +117,10 @@ def infer_cmd(
             checkpoint_path=resolved,
             output_dir=output_dir,
             num_samples=num_samples,
+            batch_size=batch_size,
+            num_inference_steps=steps,
+            sampler=sampler,  # type: ignore[arg-type]
+            seed=sample_seed,
             device=device,
         )
     else:
@@ -165,6 +186,202 @@ def eval_cmd(
         raise typer.Exit(2)
 
 
+@app.command("prepare-data")
+def prepare_data_cmd(
+    output: Path = typer.Option(Path("./data/cifar10_train_png"), "--output", "-o", help="Reference PNG folder."),
+    split: str = typer.Option("train", "--split", help="CIFAR-10 split to dump."),
+    download_root: Path = typer.Option(Path("./data"), "--download-root", help="Where torchvision caches CIFAR-10."),
+) -> None:
+    """Dump CIFAR-10 to PNGs for use as the FID/KID reference set.
+
+    Run once before ``awwl pipeline run``; the sweep's evaluation jobs all
+    point at this folder. Idempotent — re-running skips an existing dump.
+    """
+    setup_logging("INFO")
+    from awwl.data.cifar10 import dump_reference_split
+
+    out = dump_reference_split(output_dir=output, split=split, download_root=download_root)
+    typer.echo(f"reference images: {out} ({sum(1 for _ in out.glob('*.png'))} files)")
+
+
+@app.command("eval-samples")
+def eval_samples_cmd(
+    run_dir: Path = typer.Option(..., "--run-dir", help="Training run folder (supplies config.json identity)."),
+    samples: Path = typer.Option(..., "--samples", exists=True, help="Folder of generated PNGs."),
+    real: Path = typer.Option(..., "--real", exists=True, help="Reference image folder."),
+    ledger: Path = typer.Option(..., "--ledger", help="results.jsonl to append to."),
+    epoch: int | None = typer.Option(None, "--epoch", help="Checkpoint epoch these samples came from."),
+    max_images: int = typer.Option(10000, "--max-images", help="Cap for KID / precision-recall."),
+    skip_advanced: bool = typer.Option(False, "--skip-advanced", help="FID + IS only (much faster)."),
+) -> None:
+    """Score one sample folder and append a row to the results ledger.
+
+    Reads ``<run-dir>/config.json`` so the ledger row carries the run's full
+    hyperparameter identity, which is what ``awwl stats`` groups on.
+    """
+    setup_logging("INFO")
+    from awwl.analysis.results import append_result, result_row
+    from awwl.evaluation import compute_advanced_metrics, compute_fid_is
+
+    cfg_path = run_dir / "config.json"
+    if not cfg_path.exists():
+        typer.echo(f"no config.json in {run_dir}; was this run produced by `awwl train`?", err=True)
+        raise typer.Exit(2)
+    cfg = json.loads(cfg_path.read_text(encoding="utf-8"))
+
+    metrics = dict(
+        compute_fid_is(fake_folder=samples, real_folder=real, exp_name=run_dir.name)
+    )
+    if not skip_advanced:
+        metrics.update(
+            compute_advanced_metrics(
+                real_folder=real, fake_folder=samples, exp_name=run_dir.name, max_images=max_images
+            )
+        )
+
+    output_cfg = cfg.get("output", {})
+    append_result(
+        ledger,
+        result_row(
+            cfg,
+            exp=str(output_cfg.get("name", run_dir.name)),
+            group=str(output_cfg.get("group", cfg.get("loss", {}).get("name", "?"))),
+            kind="eval",
+            metrics=metrics,
+            epoch=epoch,
+            samples_dir=str(samples),
+            num_samples=sum(1 for _ in samples.glob("*.png")),
+        ),
+    )
+    typer.echo(json.dumps(metrics, indent=2, default=str))
+    typer.echo(f"appended to {ledger}")
+
+
+@pipeline_app.command("run")
+def pipeline_run_cmd(
+    manifest: Path = typer.Option(..., "--manifest", "-m", exists=True, help="Pipeline manifest YAML."),
+    gpus: str | None = typer.Option(None, "--gpus", help="Comma-separated device ids, e.g. 0,1. Defaults to all."),
+    max_tier: int | None = typer.Option(None, "--max-tier", help="Only run jobs at or below this tier."),
+    max_attempts: int = typer.Option(3, "--max-attempts", help="Retries before a job is parked as failed."),
+    stale_after: float = typer.Option(900.0, "--stale-after", help="Seconds without a heartbeat before requeueing."),
+    dry_run: bool = typer.Option(False, "--dry-run", help="Expand the manifest and print the plan, run nothing."),
+) -> None:
+    """Run a sweep, resuming whatever a previous invocation left unfinished.
+
+    Safe to re-run at any time: finished jobs are skipped, jobs interrupted by
+    a crash are requeued, and each training job picks up from its own last
+    checkpoint. If the server dies mid-sweep, run the identical command again.
+    """
+    setup_logging("INFO")
+    from awwl.pipeline import build_jobs, default_gpus, format_status, load_manifest, run_pipeline
+    from awwl.pipeline.store import JobStore
+
+    spec = load_manifest(manifest)
+    jobs = build_jobs(spec, manifest_dir=manifest.parent)
+    root = Path(spec["output_root"])
+    store = JobStore(root / "pipeline" / "state.db", stale_after=stale_after, max_attempts=max_attempts)
+    added = store.add_jobs(jobs)
+    typer.echo(f"manifest '{spec['name']}': {len(jobs)} job(s), {added} newly queued")
+
+    if dry_run:
+        for job in store.list_jobs():
+            typer.echo(f"  [{job.status:>7}] tier{job.tier} {job.job_id}")
+        raise typer.Exit(0)
+
+    devices = [g.strip() for g in gpus.split(",") if g.strip()] if gpus else default_gpus()
+    typer.echo(f"workers: {', '.join('gpu' + d for d in devices)}")
+
+    run_pipeline(
+        store,
+        gpus=devices,
+        log_dir=root / "pipeline" / "logs",
+        max_tier=max_tier,
+        cwd=Path.cwd(),
+    )
+    typer.echo("")
+    typer.echo(format_status(store))
+
+    # Exit non-zero only for jobs that exhausted their retries — a job that
+    # failed once and then succeeded is a successful sweep.
+    from awwl.pipeline.store import FAILED
+
+    parked = store.list_jobs(status=FAILED)
+    if parked:
+        typer.echo("")
+        for job in parked:
+            log = root / "pipeline" / "logs" / (job.job_id.replace(":", "__") + ".log")
+            typer.echo(f"--- {job.job_id}\n    full log: {log}\n", err=True)
+        raise typer.Exit(1)
+
+
+@pipeline_app.command("status")
+def pipeline_status_cmd(
+    manifest: Path = typer.Option(..., "--manifest", "-m", exists=True, help="Pipeline manifest YAML."),
+) -> None:
+    """Print queue progress and any failures."""
+    setup_logging("WARNING")
+    from awwl.pipeline import load_manifest
+    from awwl.pipeline.runner import format_status
+    from awwl.pipeline.store import JobStore
+
+    spec = load_manifest(manifest)
+    store = JobStore(Path(spec["output_root"]) / "pipeline" / "state.db")
+    typer.echo(format_status(store))
+
+
+@pipeline_app.command("reset")
+def pipeline_reset_cmd(
+    manifest: Path = typer.Option(..., "--manifest", "-m", exists=True, help="Pipeline manifest YAML."),
+    running: bool = typer.Option(False, "--running", help="Also requeue jobs stuck in 'running'."),
+) -> None:
+    """Requeue failed jobs so the next ``pipeline run`` retries them."""
+    setup_logging("WARNING")
+    from awwl.pipeline import load_manifest
+    from awwl.pipeline.store import FAILED, RUNNING, JobStore
+
+    spec = load_manifest(manifest)
+    store = JobStore(Path(spec["output_root"]) / "pipeline" / "state.db")
+    statuses = (FAILED, RUNNING) if running else (FAILED,)
+    typer.echo(f"requeued {store.reset(statuses=statuses)} job(s)")
+
+
+@app.command("stats")
+def stats_cmd(
+    ledger: Path = typer.Option(..., "--ledger", "-l", exists=True, help="results.jsonl, or a folder holding some."),
+    metric: str = typer.Option("fid", "--metric", help="Ledger field to analyse, e.g. fid, is_mean, kid."),
+    baseline: str | None = typer.Option(None, "--baseline", help="Config to test the others against, e.g. mse."),
+    kind: str = typer.Option("eval", "--kind", help="Ledger row kind to read."),
+    epoch: int | None = typer.Option(None, "--epoch", help="Restrict to one checkpoint epoch."),
+    curve: bool = typer.Option(False, "--curve", help="Print metric-vs-epoch instead of a significance test."),
+    alpha: float = typer.Option(0.05, "--alpha", help="Family-wise significance level."),
+) -> None:
+    """Summarise the results ledger with confidence intervals and paired tests.
+
+    Without ``--baseline`` it prints mean ± std and a 95% CI per configuration.
+    With one, it adds a seed-paired t-test and Wilcoxon test of every other
+    configuration against it, Holm-corrected across the comparisons.
+    """
+    setup_logging("WARNING")
+    from awwl.analysis import compare_to_baseline, load_results, summarize_groups
+    from awwl.analysis.stats import convergence_table, format_comparison_table, format_summary_table
+
+    rows = load_results(ledger, kind=kind)
+    if epoch is not None:
+        rows = [r for r in rows if r.get("epoch") == epoch]
+    if not rows:
+        typer.echo(f"no '{kind}' rows in {ledger}" + (f" at epoch {epoch}" if epoch else ""), err=True)
+        raise typer.Exit(1)
+
+    if curve:
+        typer.echo(convergence_table(rows, metric=metric))
+        raise typer.Exit(0)
+
+    typer.echo(format_summary_table(summarize_groups(rows, metric=metric), metric=metric))
+    if baseline:
+        typer.echo("")
+        typer.echo(format_comparison_table(compare_to_baseline(rows, metric=metric, baseline=baseline, alpha=alpha)))
+
+
 @app.command("list-checkpoints")
 def list_checkpoints(
     project_root: Path | None = typer.Option(None, "--project-root"),
@@ -181,6 +398,7 @@ def list_checkpoints(
 
 def main() -> None:
     """Module entry-point used both by ``python -m awwl.cli`` and the script alias."""
+    use_utf8_output()
     try:
         app()
     except AWWLError as exc:

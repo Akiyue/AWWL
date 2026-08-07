@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
+import torch
 from datasets import load_dataset
 from torch.utils.data import DataLoader, Dataset
 from torchvision import transforms
@@ -22,11 +23,18 @@ def build_cifar10_dataloader(
     split: str = "train",
     horizontal_flip: bool = True,
     shuffle: bool = True,
+    seed: int | None = None,
 ):
     """Return a ``DataLoader`` yielding ``{"images": tensor}`` batches.
 
     Mirrors the AWWL-Diff training recipe: resize to ``image_size`` (32 by
     default), optional horizontal flip, normalize to ``[-1, 1]``.
+
+    Args:
+        seed: When given, drives the shuffling generator so that two runs with
+            the same seed see the same batch order. Without it, multi-seed
+            comparisons differ in both initialisation *and* data order, which
+            confounds the per-seed variance estimate.
     """
     dataset = load_dataset("cifar10", split=split)
     pipeline = [
@@ -44,11 +52,16 @@ def build_cifar10_dataloader(
         return {"images": [preprocess(img.convert("RGB")) for img in examples["img"]]}
 
     dataset.set_transform(_transform)
+    generator = None
+    if seed is not None:
+        generator = torch.Generator()
+        generator.manual_seed(int(seed))
     return DataLoader(
         dataset,
         batch_size=batch_size,
         shuffle=shuffle,
         num_workers=num_workers,
+        generator=generator,
     )
 
 
