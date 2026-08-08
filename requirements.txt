@@ -6,6 +6,8 @@ accelerate>=0.28
 datasets>=2.18
 pytorch-wavelets>=1.3.0
 PyWavelets>=1.4          # pytorch-wavelets imports pywt without declaring it
+setuptools<81            # ...and pkg_resources, dropped from setuptools 81 and
+                         # absent by default on Python 3.12
 Pillow
 numpy
 pandas

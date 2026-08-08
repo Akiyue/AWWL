@@ -29,6 +29,11 @@ dependencies = [
     # pytorch-wavelets imports pywt but does not declare it, so a fresh
     # install resolves without PyWavelets and then fails at import time.
     "PyWavelets>=1.4",
+    # Same story for pkg_resources, which pytorch-wavelets' dtcwt module
+    # imports at package level. setuptools 81 drops it and Python 3.12
+    # environments no longer ship it by default, so `import awwl.losses`
+    # fails on a clean install without this pin.
+    "setuptools<81",
     "Pillow",
     "numpy",
     "pandas",

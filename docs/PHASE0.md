@@ -40,11 +40,28 @@ pip install -e ".[eval,plot,dev]"
 awwl prepare-data --output ./data/cifar10_train_png
 ```
 
-Check the GPUs are visible:
+Check the GPUs are visible, then that the suite passes:
 
 ```bash
 python -c "import torch; print(torch.cuda.device_count())"   # expect 2
+pytest -q                                                    # expect 163 passed
 ```
+
+### If the install fails at import
+
+`pytorch-wavelets` imports two things it never declares, so a clean resolve
+can succeed and then break on the first `import awwl`:
+
+| Error | Fix |
+| --- | --- |
+| `No module named 'pywt'` | `pip install PyWavelets` |
+| `No module named 'pkg_resources'` | `pip install "setuptools<81"` — setuptools 81 drops `pkg_resources`, and Python 3.12 environments no longer ship it by default |
+
+Both are pinned in `pyproject.toml`, so this only bites an environment that
+already had a conflicting version. A harmless `ResourceTracker.__del__ ...
+'_thread.RLock' object has no attribute '_recursion_count'` at interpreter
+shutdown comes from the `multiprocess` package pulled in by `datasets`; it
+appears after the run finishes and affects nothing.
 
 ---
 
