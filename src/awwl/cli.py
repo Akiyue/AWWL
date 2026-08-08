@@ -189,18 +189,30 @@ def eval_cmd(
 @app.command("prepare-data")
 def prepare_data_cmd(
     output: Path = typer.Option(Path("./data/cifar10_train_png"), "--output", "-o", help="Reference PNG folder."),
-    split: str = typer.Option("train", "--split", help="CIFAR-10 split to dump."),
-    download_root: Path = typer.Option(Path("./data"), "--download-root", help="Where torchvision caches CIFAR-10."),
+    dataset: str = typer.Option("cifar10", "--dataset", help="'cifar10', a HuggingFace id, or a local folder."),
+    image_size: int = typer.Option(32, "--image-size", help="Resolution to write; must match what the model generates."),
+    split: str = typer.Option("train", "--split", help="Dataset split to dump."),
+    max_images: int | None = typer.Option(None, "--max-images", help="Cap the dump (default: all)."),
 ) -> None:
-    """Dump CIFAR-10 to PNGs for use as the FID/KID reference set.
+    """Dump a dataset to PNGs for use as the FID/KID reference set.
 
-    Run once before ``awwl pipeline run``; the sweep's evaluation jobs all
-    point at this folder. Idempotent — re-running skips an existing dump.
+    Run once per (dataset, resolution) before ``awwl pipeline run``. The
+    reference must be written at the resolution the model generates — FID
+    compares Inception features of both sets, so a mismatch silently produces
+    numbers that cannot be compared with published ones.
+
+    Idempotent: re-running skips an existing dump.
     """
     setup_logging("INFO")
-    from awwl.data.cifar10 import dump_reference_split
+    from awwl.data.images import dump_reference_images
 
-    out = dump_reference_split(output_dir=output, split=split, download_root=download_root)
+    out = dump_reference_images(
+        dataset_name=dataset,
+        output_dir=output,
+        image_size=image_size,
+        split=split,
+        max_images=max_images,
+    )
     typer.echo(f"reference images: {out} ({sum(1 for _ in out.glob('*.png'))} files)")
 
 
@@ -255,6 +267,154 @@ def eval_samples_cmd(
     )
     typer.echo(json.dumps(metrics, indent=2, default=str))
     typer.echo(f"appended to {ledger}")
+
+
+@app.command("eval-dreambooth")
+def eval_dreambooth_cmd(
+    run_dir: Path = typer.Option(..., "--run-dir", help="DreamBooth run folder (holds unet/ and config.json)."),
+    real: Path = typer.Option(..., "--real", exists=True, help="Folder of real subject images."),
+    ledger: Path = typer.Option(..., "--ledger", help="results.jsonl to append to."),
+    prompts_file: Path = typer.Option(Path("assets/prompts/awwl_dreambooth.txt"), "--prompts", help="One prompt per line."),
+    num_images: int = typer.Option(20, "--num-images", help="Images generated per prompt."),
+    steps: int = typer.Option(50, "--steps", help="Denoising steps per image."),
+    guidance: float = typer.Option(7.5, "--guidance"),
+    base_model: str = typer.Option("runwayml/stable-diffusion-v1-5", "--base-model"),
+    device: str = typer.Option("cuda", "--device"),
+) -> None:
+    """Score one DreamBooth run: CLIP alignment + subject similarity.
+
+    Generates images for each prompt, then writes a ledger row carrying both
+    metrics — which is what lets ``awwl stats`` put confidence intervals on
+    Table 1, whose gaps are currently far smaller than its own error bars.
+    """
+    setup_logging("INFO")
+    import torch
+    from transformers import CLIPModel, CLIPProcessor
+
+    from awwl.analysis.results import append_result, result_row
+    from awwl.evaluation import image_image_similarity, text_image_similarity
+    from awwl.methods.dreambooth import build_pipeline, generate_images
+
+    cfg_path = run_dir / "config.json"
+    if not cfg_path.exists():
+        typer.echo(f"no config.json in {run_dir}; was this produced by `awwl train`?", err=True)
+        raise typer.Exit(2)
+    cfg = json.loads(cfg_path.read_text(encoding="utf-8"))
+
+    prompts = [p.strip() for p in prompts_file.read_text(encoding="utf-8").splitlines() if p.strip()]
+    if not prompts:
+        typer.echo(f"no prompts in {prompts_file}", err=True)
+        raise typer.Exit(2)
+
+    unet_dir = run_dir / "unet" if (run_dir / "unet").exists() else run_dir
+    use_cuda = device.startswith("cuda") and torch.cuda.is_available()
+    pipe = build_pipeline(
+        base_model=base_model,
+        unet_dir=unet_dir,
+        device=device if use_cuda else "cpu",
+        torch_dtype=torch.float16 if use_cuda else torch.float32,
+    )
+
+    clip_device = "cuda" if use_cuda else "cpu"
+    clip_model = CLIPModel.from_pretrained("openai/clip-vit-base-patch32").to(clip_device).eval()
+    clip_processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
+
+    clip_scores: list[float] = []
+    similarities: list[float] = []
+    for index, prompt in enumerate(prompts):
+        out_dir = run_dir / "samples" / f"prompt{index}"
+        generate_images(
+            pipeline=pipe,
+            prompt=prompt,
+            seeds=list(range(1, num_images + 1)),
+            output_dir=out_dir,
+            num_inference_steps=steps,
+            guidance_scale=guidance,
+        )
+        images = sorted(p for p in out_dir.glob("*") if p.suffix.lower() in (".png", ".jpg"))
+        clip_scores += text_image_similarity(
+            clip_model=clip_model, clip_processor=clip_processor,
+            prompt=prompt, image_paths=images, device=clip_device,
+        )
+        similarities += image_image_similarity(
+            clip_model=clip_model, clip_processor=clip_processor,
+            real_images_dir=real, generated_image_paths=images, device=clip_device,
+        )
+
+    import statistics
+
+    metrics = {
+        "clip_score": statistics.fmean(clip_scores),
+        "clip_score_std": statistics.pstdev(clip_scores) if len(clip_scores) > 1 else 0.0,
+        "similarity": statistics.fmean(similarities),
+        "similarity_std": statistics.pstdev(similarities) if len(similarities) > 1 else 0.0,
+        "n_images": len(clip_scores),
+        "n_prompts": len(prompts),
+    }
+    output_cfg = cfg.get("output", {})
+    append_result(
+        ledger,
+        result_row(
+            cfg,
+            exp=str(output_cfg.get("name", run_dir.name)),
+            group=str(output_cfg.get("group", cfg.get("loss", {}).get("name", "?"))),
+            kind="eval",
+            metrics=metrics,
+        ),
+    )
+    typer.echo(json.dumps(metrics, indent=2))
+    typer.echo(f"appended to {ledger}")
+
+
+@app.command("measure-cost")
+def measure_cost_cmd(
+    config: Path = typer.Option(Path("configs/finetune.yaml"), "--config", "-c", exists=True),
+    override: list[str] = typer.Option([], "--override", "-o", help="key.path=value override (repeatable)."),
+    losses: str = typer.Option(
+        "mse,adaptive_wavelet,wavelet_subband,wavelet_spatial,wavelet_learned,wavelet_lifting",
+        "--losses",
+        help="Comma-separated loss names to compare.",
+    ),
+    iters: int = typer.Option(20, "--iters", help="Timed steps per loss (after warm-up)."),
+    warmup: int = typer.Option(5, "--warmup"),
+    out: Path | None = typer.Option(None, "--out", help="Also write the markdown table here."),
+) -> None:
+    """Measure step time, memory, FLOPs and parameters per loss.
+
+    Produces the evidence the "negligible computational cost" claim currently
+    lacks — and can falsify it: the DWT is not free, and a learned weighting
+    adds both parameters and a second backward pass.
+    """
+    setup_logging("INFO")
+    from awwl.evaluation import format_cost_table, measure_costs
+
+    cfg = _load_cfg(config, override)
+    names = [n.strip() for n in losses.split(",") if n.strip()]
+    table = format_cost_table(measure_costs(cfg, names, iters=iters, warmup=warmup))
+    typer.echo(table)
+    if out:
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(table, encoding="utf-8")
+        typer.echo(f"\nwritten to {out}")
+
+
+@app.command("plot-curriculum")
+def plot_curriculum_cmd(
+    run_dir: Path = typer.Option(..., "--run-dir", exists=True, help="Run folder with config.json."),
+    out: Path | None = typer.Option(None, "--out", help="Output image (default <run>/curriculum.png)."),
+    points: int = typer.Option(101, "--points", help="How many sigma values to evaluate."),
+) -> None:
+    """Plot the sub-band schedule a trained run actually applies.
+
+    For the learned objectives this is the headline figure: it shows whether
+    the network rediscovered coarse-to-fine on its own, and whether the total
+    weight stays flat across the schedule or drifts the way the published
+    equations do.
+    """
+    setup_logging("INFO")
+    from awwl.plotting.curriculum import plot_run_curriculum
+
+    typer.echo(f"wrote {plot_run_curriculum(run_dir, out_path=out, points=points)}")
 
 
 @pipeline_app.command("run")

@@ -30,7 +30,7 @@ from diffusers.optimization import get_cosine_schedule_with_warmup
 from tqdm.auto import tqdm
 
 from awwl.analysis.results import append_result, result_row
-from awwl.data.cifar10 import build_cifar10_dataloader
+from awwl.data.images import build_image_dataloader
 from awwl.losses import get_loss_function, loss_module, trainable_loss_parameters
 from awwl.models.ddpm_unet import load_or_build_ddpm_unet
 from awwl.training.accelerator import build_accelerator
@@ -67,7 +67,8 @@ def train_finetune(cfg: dict[str, Any]) -> Path:
         gradient_accumulation_steps=int(train_cfg.get("gradient_accumulation_steps", 1)),
     )
 
-    dataloader = build_cifar10_dataloader(
+    dataloader = build_image_dataloader(
+        dataset_name=str(data_cfg.get("dataset_name", "cifar10")),
         image_size=int(data_cfg["image_size"]),
         batch_size=int(data_cfg["batch_size"]),
         num_workers=int(data_cfg.get("num_workers", 4)),

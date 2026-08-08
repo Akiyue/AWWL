@@ -1,0 +1,105 @@
+# Table 1 with error bars — the cheapest rigor in the whole project.
+#
+# The published DreamBooth table separates its methods by ~0.01-0.02 while
+# reporting standard deviations of ~0.035-0.057. The ordering is therefore not
+# established, and the claim built on it ("AWWL is the only method in the top
+# two for both metrics") cannot be checked from one run per loss.
+#
+# A run here is 400 steps at batch size 1: minutes, not hours. Five seeds
+# across nine losses is well under a day on one GPU, which makes this the best
+# rigor-per-GPU-hour available anywhere in this repo — do it before the
+# CIFAR-10 tiers if time is short.
+#
+# Prerequisite: a folder of real subject images (the DreamBooth instance set),
+# pointed at by `real_images` below and by data.instance_data_dir.
+#
+#   awwl pipeline run -m configs/pipeline/dreambooth_seeds.yaml --gpus 0,1
+#
+# Then:
+#   awwl stats -l runs/dreambooth_seeds/results.jsonl --metric clip_score  --baseline mse
+#   awwl stats -l runs/dreambooth_seeds/results.jsonl --metric similarity  --baseline mse
+
+name: dreambooth_seeds
+method: dreambooth
+base_config: configs/dreambooth.yaml
+output_root: ./runs/dreambooth_seeds
+ledger: ./runs/dreambooth_seeds/results.jsonl
+
+# Real subject images, used as the reference for image-image similarity.
+real_images: ../AWWL/dataset
+
+defaults:
+  seeds: [1, 2, 3, 4, 5]
+  sample:
+    num_samples: 20        # images per prompt
+    steps: 50
+    prompts: assets/prompts/awwl_dreambooth.txt
+
+experiments:
+
+  # --- tier 1: the published comparison, replicated -----------------------
+  - group: mse
+    tier: 1
+    overrides: {loss.name: mse}
+
+  - group: awwl
+    tier: 1
+    overrides:
+      loss.name: adaptive_wavelet
+      loss.alpha: 0.8          # the paper's DreamBooth optimum
+      loss.power: 2.0
+
+  # p=0 isolates the temporal schedule from the wavelet decomposition.
+  - group: static_wavelet
+    tier: 1
+    overrides:
+      loss.name: adaptive_wavelet
+      loss.alpha: 0.8
+      loss.power: 0.0
+
+  # Charbonnier and L1 are the two rows AWWL is claimed to beat on similarity
+  # by 0.001-0.018 — squarely inside the reported spread.
+  - group: l1
+    tier: 1
+    overrides: {loss.name: l1}
+
+  - group: charbonnier
+    tier: 1
+    overrides: {loss.name: charbonnier}
+
+  # --- tier 2: the confound, and the rest of the table --------------------
+
+  # alpha=0.8 here vs alpha=0.2 on CIFAR-10 is the "Alpha Paradox". Holding the
+  # total weight at 1 separates the frequency balance from the timestep
+  # reweighting alpha also performs; if the DreamBooth optimum moves toward
+  # 0.5 under normalisation, the resolution explanation loses its evidence.
+  - group: awwl_normalized
+    tier: 2
+    overrides:
+      loss.name: adaptive_wavelet
+      loss.alpha: 0.8
+      loss.power: 2.0
+      loss.normalize_weights: true
+
+  - group: snr_weighted
+    tier: 2
+    overrides: {loss.name: snr_weighted}
+
+  - group: huber
+    tier: 2
+    overrides: {loss.name: huber}
+
+  - group: perceptual
+    tier: 2
+    overrides: {loss.name: perceptual}
+
+  # --- tier 3: does a learned weighting transfer to fine-tuning? ----------
+  # On CIFAR-10 the learned objective removes the need to pick alpha. If it
+  # also matches the hand-tuned alpha=0.8 here, the "not plug-and-play"
+  # objection to the published method is answered rather than argued.
+  - group: awwl_learned
+    tier: 3
+    overrides:
+      loss.name: wavelet_learned
+      loss.conditioned: true
+      train.loss_learning_rate: 1.0e-3

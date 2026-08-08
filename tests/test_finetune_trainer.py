@@ -43,7 +43,7 @@ def patched_loader(monkeypatch):
         seen.update(kwargs)
         return DataLoader(_RandomImages(), batch_size=4)
 
-    monkeypatch.setattr(trainer_mod, "build_cifar10_dataloader", _build)
+    monkeypatch.setattr(trainer_mod, "build_image_dataloader", _build)
     return seen
 
 

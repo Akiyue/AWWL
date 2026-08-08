@@ -43,7 +43,13 @@ from torch import nn
 
 from awwl.losses.gradnorm import GradNormBalancer
 from awwl.losses.lifting import LiftingWavelet
-from awwl.losses.weighting import LL, BandWeighting, build_weighting, split_key
+from awwl.losses.weighting import (
+    LL,
+    BandWeighting,
+    build_weighting,
+    min_snr_weight,
+    split_key,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -74,6 +80,12 @@ class GeneralizedWaveletLoss(nn.Module):
         gradnorm: Balance the sub-bands with GradNorm instead of the weighting
             strategy's own output (A3). Requires the trainer to call
             :meth:`gradnorm_loss` each step.
+        snr_gamma: Compose with Min-SNR-γ timestep weighting (B2). The two act
+            on different axes — Min-SNR across timesteps, the wavelet
+            weighting across spatial frequencies — so this tests whether the
+            frequency schedule contributes anything beyond the implicit
+            timestep reweighting it already performs. Applied after
+            normalisation, which would otherwise cancel it. ``None`` disables.
         lifting_kernel_size / learnable_basis: Options for ``"lifting"``.
         loss_func: Pointwise loss per band, ``reduction="none"``.
     """
@@ -91,6 +103,7 @@ class GeneralizedWaveletLoss(nn.Module):
         normalize_weights: bool = True,
         gradnorm: bool = False,
         gradnorm_asymmetry: float = 1.5,
+        snr_gamma: float | None = None,
         lifting_kernel_size: int = 3,
         learnable_basis: bool = True,
         loss_func=F.mse_loss,
@@ -101,6 +114,7 @@ class GeneralizedWaveletLoss(nn.Module):
 
         self.levels = levels
         self.transform_name = transform
+        self.snr_gamma = float(snr_gamma) if snr_gamma is not None else None
         self.loss_func = loss_func
 
         if transform == "dwt":
@@ -207,6 +221,11 @@ class GeneralizedWaveletLoss(nn.Module):
             # prediction, so the model cannot lower its own weight by shrinking
             # its outputs.
             weights = self.weighting(sig, references=target_bands)
+            if self.snr_gamma is not None:
+                # After normalisation: a global per-timestep factor would be
+                # divided straight back out if applied before it.
+                snr = min_snr_weight(sig, self.snr_gamma)
+                weights = {k: v * snr for k, v in weights.items()}
             self._last_band_losses = {k: v.mean() for k, v in per_element.items()}
 
             total = pred.new_zeros(())

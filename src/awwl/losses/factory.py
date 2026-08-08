@@ -42,6 +42,7 @@ _KNOWN: tuple[str, ...] = (
     "wavelet_learned",   # A3: uncertainty weighting, optionally sigma-conditioned
     "wavelet_gradnorm",  # A3: GradNorm balancing across sub-bands
     "wavelet_lifting",   # A4: learnable wavelet basis
+    "wavelet_minsnr",    # B2: AWWL composed with Min-SNR timestep weighting
 )
 
 # Defaults per extension loss. Each turns on exactly one axis so a sweep can
@@ -52,6 +53,7 @@ _EXTENSION_DEFAULTS: dict[str, dict] = {
     "wavelet_learned": {"weighting_strategy": "uncertainty"},
     "wavelet_gradnorm": {"weighting_strategy": "rational", "gradnorm": True},
     "wavelet_lifting": {"weighting_strategy": "rational", "transform": "lifting"},
+    "wavelet_minsnr": {"weighting_strategy": "rational", "snr_gamma": 5.0},
 }
 
 # Keys consumed by GeneralizedWaveletLoss itself; everything else in the loss
@@ -67,6 +69,7 @@ _LOSS_BODY_KEYS = frozenset(
         "normalize_weights",
         "gradnorm",
         "gradnorm_asymmetry",
+        "snr_gamma",
         "lifting_kernel_size",
         "learnable_basis",
     }

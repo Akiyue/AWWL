@@ -259,6 +259,45 @@ which reports mean ± std with 95% CIs per configuration, then a seed-paired
 t-test and Wilcoxon signed-rank test against the baseline, Holm-Bonferroni
 corrected across the comparisons.
 
+### Other datasets and resolutions
+
+`data.dataset_name` accepts `cifar10`, any HuggingFace hub id, or a local
+image folder, so testing whether the optimal `α` follows resolution is a
+config change rather than a code change — the claim currently rests on two
+points (32×32 and 512×512):
+
+```bash
+awwl prepare-data --dataset huggan/CelebA-HQ --image-size 64 -o ./data/celeba64
+awwl train -c configs/finetune.yaml     -o data.dataset_name=huggan/CelebA-HQ -o data.image_size=64 -o model.image_size=64
+```
+
+The reference set must be dumped at the resolution the model generates — FID
+compares Inception features of both sets, and a mismatch produces numbers that
+cannot be compared with published ones.
+
+### DreamBooth with error bars
+
+Table 1's gaps (~0.01) are smaller than its own reported spread
+(~0.035-0.057), and a run is 400 steps at batch 1 — minutes. This is the
+cheapest rigor in the repo:
+
+```bash
+awwl pipeline run -m configs/pipeline/dreambooth_seeds.yaml --gpus 0,1
+awwl stats -l runs/dreambooth_seeds/results.jsonl --metric clip_score --baseline mse
+awwl stats -l runs/dreambooth_seeds/results.jsonl --metric similarity --baseline mse
+```
+
+### Cost, and the curriculum figure
+
+```bash
+# Evidence for (or against) "negligible computational cost"
+awwl measure-cost --losses mse,adaptive_wavelet,wavelet_learned --out cost.md
+
+# What schedule a trained run actually applies — for a learned weighting this
+# shows whether the network rediscovered coarse-to-fine on its own
+awwl plot-curriculum --run-dir runs/phase0/awwl_learned_s1
+```
+
 ## Loss options beyond the paper's configuration
 
 `AdaptiveWaveletLoss` defaults reproduce the published runs exactly. Three
@@ -284,6 +323,7 @@ generalises it along four independent axes, each selectable with
 | `wavelet_learned` | **A3** — weights are learned, not designed. `conditioned: true` maps σ through a small MLP, so the coarse-to-fine curriculum is an *outcome* rather than an assumption, and `α`/`p` disappear. | `conditioned`, `hidden` |
 | `wavelet_gradnorm` | **A3** — GradNorm over the sub-bands: weights are tuned from the gradient magnitudes each band imposes on the shared trunk. The scheme the paper cites but never implemented. | `gradnorm_asymmetry` |
 | `wavelet_lifting` | **A4** — learnable wavelet basis via the lifting scheme. Perfect reconstruction holds for *any* filter values, so training needs no invertibility constraint. Initialised to Haar. | `lifting_kernel_size`, `learnable_basis` |
+| `wavelet_minsnr` | **B2** — composed with Min-SNR-γ timestep weighting. The two act on different axes (timestep vs spatial frequency), so this tests whether the frequency schedule adds anything beyond the implicit timestep reweighting it already performs. | `snr_gamma` |
 
 The axes compose — `loss.name: wavelet_learned` with `spatial: true` and
 `transform: lifting` is a learned, spatially-adaptive weighting over a learned

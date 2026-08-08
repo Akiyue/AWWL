@@ -3,11 +3,20 @@
 Replaces ``AWWL/dreambooth.py``. The training loop is identical in spirit but
 all configuration arrives as a typed dict (loaded from
 ``configs/dreambooth.yaml``) and every hyperparameter is exposed there.
+
+Table 1's differences (~0.01) are far smaller than its reported spread
+(~0.035-0.057), so it needs the same seed replication as the CIFAR-10 table.
+A run here is 400 steps at batch 1 — minutes, not hours — which makes
+multi-seed DreamBooth by far the cheapest rigor available. What that needs
+from the trainer is a per-(config, seed) output directory, a config snapshot
+and a ledger row, all added below; the optimisation itself is untouched.
 """
 
 from __future__ import annotations
 
+import json
 import logging
+import time
 from pathlib import Path
 from typing import Any
 
@@ -15,8 +24,9 @@ import torch
 from torch.utils.data import DataLoader
 from tqdm.auto import tqdm
 
+from awwl.analysis.results import append_result, result_row
 from awwl.data.dreambooth_dataset import DreamBoothDataset
-from awwl.losses import get_loss_function
+from awwl.losses import get_loss_function, trainable_loss_parameters
 from awwl.models.sd_components import load_sd_components
 from awwl.training.accelerator import build_accelerator, compute_dtype_for
 from awwl.utils.io import ensure_dir
@@ -37,7 +47,10 @@ def train_dreambooth(cfg: dict[str, Any]) -> Path:
     data_cfg = cfg["data"]
     train_cfg = cfg["train"]
     loss_cfg = cfg["loss"]
-    out_dir = ensure_dir(cfg["output"]["dir"])
+    seed = int(cfg.get("seed", 42))
+    out_dir = ensure_dir(dreambooth_run_dir(cfg))
+    (out_dir / "config.json").write_text(json.dumps(cfg, indent=2, default=str), encoding="utf-8")
+    started = time.time()
 
     accelerator = build_accelerator(
         mixed_precision=cfg["precision"]["mixed_precision"],
@@ -56,7 +69,16 @@ def train_dreambooth(cfg: dict[str, Any]) -> Path:
         tokenizer=components.tokenizer,
         size=int(data_cfg["resolution"]),
     )
-    dataloader = DataLoader(dataset, batch_size=int(train_cfg["batch_size"]), shuffle=True)
+    # Seed the shuffle so two seeds of the same config differ in
+    # initialisation noise, not also in the order the subject images arrive.
+    generator = torch.Generator()
+    generator.manual_seed(seed)
+    dataloader = DataLoader(
+        dataset,
+        batch_size=int(train_cfg["batch_size"]),
+        shuffle=True,
+        generator=generator,
+    )
 
     optimizer = torch.optim.AdamW(components.unet.parameters(), lr=float(train_cfg["learning_rate"]))
 
@@ -69,12 +91,25 @@ def train_dreambooth(cfg: dict[str, Any]) -> Path:
     loss_fn = get_loss_function(
         loss_cfg["name"],
         noise_scheduler=components.noise_scheduler,
-        alpha=loss_cfg.get("alpha", 0.8),
-        power=loss_cfg.get("power", 2.0),
-        wavelet_type=loss_cfg.get("wavelet_type", "db1"),
-        levels=loss_cfg.get("levels", 1),
-        weighting=loss_cfg.get("weighting", "normalized"),
+        **{k: v for k, v in loss_cfg.items() if k != "name"},
     )
+    # Learned objectives (wavelet_learned / _gradnorm / _lifting) carry their
+    # own parameters; without this group they would stay frozen at their
+    # initialisation while appearing to train normally.
+    loss_params = trainable_loss_parameters(loss_fn)
+    if loss_params:
+        from awwl.losses import loss_module
+
+        module = loss_module(loss_fn)
+        if module is not None:
+            module.to(accelerator.device)
+        optimizer.add_param_group(
+            {
+                "params": loss_params,
+                "lr": float(train_cfg.get("loss_learning_rate", train_cfg["learning_rate"])),
+            }
+        )
+        logger.info("loss '%s' adds %d learnable tensor(s)", loss_cfg["name"], len(loss_params))
 
     max_steps = int(train_cfg["max_train_steps"])
     grad_clip = float(train_cfg.get("grad_clip_norm", 1.0))
@@ -132,4 +167,39 @@ def train_dreambooth(cfg: dict[str, Any]) -> Path:
         unet_unwrapped = accelerator.unwrap_model(components.unet)
         unet_unwrapped.save_pretrained(save_path)
         logger.info("saved DreamBooth UNet to %s", save_path)
+
+        output_cfg = cfg.get("output", {})
+        ledger = output_cfg.get("ledger")
+        append_result(
+            Path(ledger) if ledger else out_dir / "results.jsonl",
+            result_row(
+                cfg,
+                exp=str(output_cfg.get("name", out_dir.name)),
+                group=str(output_cfg.get("group", loss_cfg["name"])),
+                kind="train",
+                metrics={
+                    "global_step": global_step,
+                    "train_seconds": round(time.time() - started, 1),
+                    "checkpoint": str(save_path),
+                    "instance_prompt": data_cfg.get("instance_prompt"),
+                },
+            ),
+        )
     return save_path
+
+
+def dreambooth_run_dir(cfg: dict[str, Any]) -> Path:
+    """One directory per (config, seed).
+
+    ``output.name`` wins when the pipeline sets it. The fallback appends the
+    loss name and seed, because the previous behaviour — writing straight into
+    ``output.dir`` — meant two seeds of the same config silently overwrote each
+    other's weights.
+    """
+    output_cfg = cfg.get("output", {})
+    base = Path(output_cfg["dir"])
+    name = output_cfg.get("name")
+    if name:
+        return base / str(name)
+    loss_name = cfg.get("loss", {}).get("name", "mse")
+    return base / f"{loss_name}_s{cfg.get('seed', 42)}"

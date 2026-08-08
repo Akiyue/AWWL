@@ -48,6 +48,28 @@ DIRECTIONS = ("lh", "hl", "hh")
 LL = "ll"
 
 
+def min_snr_weight(sigmas: torch.Tensor, gamma: float) -> torch.Tensor:
+    """Min-SNR-γ timestep weight, expressed in terms of σ.
+
+    With ``σ = sqrt(1 - ᾱ_t)`` the signal-to-noise ratio is
+    ``SNR = ᾱ_t / (1 - ᾱ_t) = (1 - σ²) / σ²``, and Min-SNR scales each
+    timestep's loss by ``min(SNR, γ) / SNR``. That leaves high-noise steps
+    untouched and progressively damps the low-noise ones, whose SNR would
+    otherwise let them dominate the gradient.
+
+    This exists so AWWL and Min-SNR can be **combined**. The two act on
+    different axes — Min-SNR redistributes across *timesteps*, the wavelet
+    weighting across *spatial frequencies* — so composing them is a real
+    experiment rather than a redundancy, and it is the concrete test of
+    whether the paper's schedule adds anything beyond an implicit timestep
+    reweighting. Applied *after* any normalisation, since normalising would
+    otherwise cancel a global per-timestep factor.
+    """
+    sigma_sq = sigmas.clamp(1e-4, 1 - 1e-4).pow(2)
+    snr = (1.0 - sigma_sq) / sigma_sq
+    return snr.clamp(max=gamma) / snr
+
+
 def band_keys(levels: int) -> list[str]:
     """Names of every sub-band produced by an ``levels``-deep decomposition."""
     keys = [LL]

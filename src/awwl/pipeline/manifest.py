@@ -83,9 +83,12 @@ def build_jobs(manifest: dict[str, Any], *, manifest_dir: Path | None = None) ->
 
     name = str(manifest["name"])
     base_config = str(manifest["base_config"])
+    method = str(manifest.get("method", "finetune"))
     output_root = Path(manifest["output_root"])
     ledger = str(manifest.get("ledger", output_root / "results.jsonl"))
     real_images = manifest.get("real_images")
+    if method not in ("finetune", "dreambooth"):
+        raise ConfigError(f"manifest {name}: unsupported method {method!r}")
 
     defaults = manifest.get("defaults", {}) or {}
     default_seeds = list(defaults.get("seeds", [42]))
@@ -133,6 +136,39 @@ def build_jobs(manifest: dict[str, Any], *, manifest_dir: Path | None = None) ->
                     attempts=0,
                 )
             )
+
+            if method == "dreambooth":
+                if real_images:
+                    jobs.append(
+                        Job(
+                            job_id=f"{name}:eval:{exp}",
+                            pipeline=name,
+                            kind="eval",
+                            group_id=group,
+                            tier=tier,
+                            depends_on=train_id,
+                            payload={
+                                "argv": _cli(
+                                    "eval-dreambooth",
+                                    "--run-dir", str(run_dir),
+                                    "--real", str(real_images),
+                                    "--ledger", ledger,
+                                    "--num-images", str(sample_cfg.get("num_samples", 20)),
+                                    "--steps", str(sample_cfg.get("steps", 50)),
+                                    *(
+                                        ["--prompts", str(sample_cfg["prompts"])]
+                                        if sample_cfg.get("prompts")
+                                        else []
+                                    ),
+                                ),
+                                "run_dir": str(run_dir),
+                                "exp": exp,
+                            },
+                            status="pending",
+                            attempts=0,
+                        )
+                    )
+                continue
 
             for epoch in eval_epochs:
                 checkpoint = run_dir / f"checkpoint-{epoch}"
