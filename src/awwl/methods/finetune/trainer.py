@@ -74,6 +74,8 @@ def train_finetune(cfg: dict[str, Any]) -> Path:
         num_workers=int(data_cfg.get("num_workers", 4)),
         split=data_cfg.get("split", "train"),
         seed=seed,
+        source=str(data_cfg.get("source", "auto")),
+        root=str(data_cfg.get("root", "./data")),
     )
 
     builder_kwargs = {

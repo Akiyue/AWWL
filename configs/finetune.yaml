@@ -16,11 +16,20 @@ model:
   model_weights_path: null
 
 data:
+  # 'cifar10', any HuggingFace hub id, or a local image folder. Changing this
+  # (plus image_size / model.image_size) is all a new resolution needs.
   dataset_name: cifar10
   split: train
   image_size: 32
   batch_size: 128
   num_workers: 4
+
+  # CIFAR-10 only. 'auto' reads from the Hub and falls back to the local
+  # torchvision copy if the Hub is unreachable or rejects the dataset id.
+  # Pin to 'torchvision' for offline runs, or 'hf' when a table must state
+  # exactly where its data came from.
+  source: auto
+  root: ./data
 
 train:
   num_epochs: 200

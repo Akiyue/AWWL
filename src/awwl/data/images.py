@@ -40,6 +40,9 @@ def build_transform(image_size: int, *, horizontal_flip: bool) -> transforms.Com
     Centre-crop after resizing the short side keeps the aspect ratio, which
     matters for face and scene datasets where a plain resize would squash the
     image and change its frequency content — the very thing being measured.
+    CIFAR-10 is already square and uses
+    :func:`awwl.data.cifar10.build_transform` instead, which preserves the
+    published recipe's plain resize.
     """
     steps = [
         transforms.Resize(image_size),
@@ -75,6 +78,8 @@ def build_image_dataloader(
     shuffle: bool = True,
     seed: int | None = None,
     image_column: str = "image",
+    source: str = "auto",
+    root: str = "./data",
 ):
     """Return a ``DataLoader`` yielding ``{"images": tensor}`` batches.
 
@@ -83,6 +88,9 @@ def build_image_dataloader(
         seed: Drives the shuffling generator so two runs with the same seed see
             the same batch order — without it a multi-seed comparison varies
             data order as well as initialisation.
+        source: CIFAR-10 only — ``"auto"`` (Hub, falling back to the local
+            torchvision copy), ``"hf"`` or ``"torchvision"``.
+        root: Where torchvision caches CIFAR-10.
     """
     if dataset_name == CIFAR10:
         return build_cifar10_dataloader(
@@ -93,6 +101,8 @@ def build_image_dataloader(
             horizontal_flip=horizontal_flip,
             shuffle=shuffle,
             seed=seed,
+            source=source,
+            root=root,
         )
 
     hf = load_hf_image_dataset(dataset_name, split=split)

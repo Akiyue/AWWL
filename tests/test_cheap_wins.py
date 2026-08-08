@@ -165,6 +165,66 @@ def test_cifar10_still_routes_to_the_published_loader(monkeypatch):
     )
     assert images.build_image_dataloader(dataset_name="cifar10", seed=7) == "loader"
     assert called["seed"] == 7
+    assert called["source"] == "auto"
+
+
+# ------------------------------------------------------ CIFAR-10 source
+
+
+def test_cifar10_falls_back_to_torchvision_when_the_hub_fails(monkeypatch, tmp_path):
+    """The Hub dropped single-segment dataset ids and now raises mid-resolution.
+
+    A fixed 50 000-image dataset must not need a live API, so an unavailable
+    Hub degrades to the local torchvision copy instead of killing the run.
+    """
+    from awwl.data import cifar10
+
+    def _boom(*a, **kw):
+        raise RuntimeError("HfUriError: Repository id must be 'namespace/name'")
+
+    built = {}
+
+    class _FakeTV:
+        def __init__(self, **kw):
+            built.update(kw)
+
+        def __len__(self):
+            return 4
+
+        def __getitem__(self, idx):
+            return {"images": torch.zeros(3, 8, 8)}
+
+    monkeypatch.setattr(cifar10, "_load_hf", _boom)
+    monkeypatch.setattr(cifar10, "_TorchvisionCifar", _FakeTV)
+
+    loader = cifar10.build_cifar10_dataloader(
+        image_size=8, batch_size=2, num_workers=0, root=tmp_path
+    )
+    assert next(iter(loader))["images"].shape == (2, 3, 8, 8)
+    assert built["train"] is True
+
+
+def test_cifar10_hub_source_fails_loudly(monkeypatch):
+    """A table that must state its data source cannot silently switch."""
+    from awwl.data import cifar10
+
+    monkeypatch.setattr(cifar10, "_load_hf", lambda *a, **kw: (_ for _ in ()).throw(RuntimeError("down")))
+    with pytest.raises(RuntimeError, match="down"):
+        cifar10.build_cifar10_dataloader(source="hf")
+
+
+def test_cifar10_rejects_an_unknown_source():
+    from awwl.data import cifar10
+
+    with pytest.raises(ValueError, match="source must be"):
+        cifar10.build_cifar10_dataloader(source="telepathy")
+
+
+def test_canonical_hub_id_is_tried_first():
+    """'cifar10' alone is what newer huggingface_hub clients reject."""
+    from awwl.data.cifar10 import _HF_IDS
+
+    assert _HF_IDS[0] == "uoft-cs/cifar10"
 
 
 # ------------------------------------------- DreamBooth in the pipeline
