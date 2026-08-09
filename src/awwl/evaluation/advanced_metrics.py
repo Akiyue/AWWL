@@ -28,14 +28,21 @@ logger = logging.getLogger(__name__)
 _VALID_EXTS = (".png", ".jpg")
 
 
+def _list_images(folder: str | Path) -> list[Path]:
+    """Sorted image paths in ``folder``, resolved so relative inputs are safe."""
+    root = Path(folder).resolve()
+    return sorted(p for p in root.iterdir() if p.suffix.lower() in _VALID_EXTS)
+
+
 class _ImagePathDataset(Dataset):
     """Simple list-of-files dataset that resizes to 299×299 for Inception."""
 
     def __init__(self, folder: str | Path, *, max_imgs: int = 10000) -> None:
-        self._files = [
-            Path(folder) / f
-            for f in sorted(p for p in Path(folder).iterdir() if p.suffix.lower() in _VALID_EXTS)
-        ][:max_imgs]
+        # `iterdir()` already yields folder-prefixed paths. Re-joining them
+        # onto the folder used to be harmless only because pathlib discards the
+        # left operand when the right is absolute — with a *relative* folder it
+        # produced 'data/x/data/x/00000.png' and a FileNotFoundError.
+        self._files = _list_images(folder)[:max_imgs]
         self._transform = transforms.Compose(
             [
                 transforms.Resize((299, 299)),
@@ -86,10 +93,7 @@ def _kid_mmd(X: np.ndarray, Y: np.ndarray) -> float:
 
 def _radial_spectrum(folder: str | Path, *, device: str, batch_size: int = 64, max_imgs: int = 2000) -> np.ndarray:
     """Average radial FFT log-magnitude profile over grayscale images."""
-    files = [
-        Path(folder) / f
-        for f in sorted(p for p in Path(folder).iterdir() if p.suffix.lower() in _VALID_EXTS)
-    ][:max_imgs]
+    files = _list_images(folder)[:max_imgs]
     accumulated: torch.Tensor | None = None
     counts: torch.Tensor | None = None
     r_flat: torch.Tensor | None = None

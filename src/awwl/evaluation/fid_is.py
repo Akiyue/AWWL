@@ -30,6 +30,8 @@ def compute_fid_is(
         Dict with keys ``fid``, ``is_mean``, ``is_std``. Values default to
         ``-1.0`` if the corresponding computation raised.
     """
+    _patch_scipy_sqrtm_disp()
+
     from cleanfid import fid as cleanfid
     from torch_fidelity import calculate_metrics
 
@@ -64,6 +66,73 @@ def compute_fid_is(
         _append_log(Path(log_file), exp_name=exp_name, fid=fid_score, is_mean=is_mean, is_std=is_std)
 
     return {"fid": float(fid_score), "is_mean": is_mean, "is_std": is_std}
+
+
+def _patch_scipy_sqrtm_disp() -> bool:
+    """Restore ``scipy.linalg.sqrtm``'s ``disp`` argument for ``clean-fid``.
+
+    SciPy removed ``disp`` in 1.17; ``clean-fid`` still calls
+    ``sqrtm(sigma1 @ sigma2, disp=False)``, so FID dies with ``sqrtm() got an
+    unexpected keyword argument 'disp'`` *after* both feature-extraction passes
+    have run — several minutes of GPU time thrown away per evaluation, and on a
+    sweep, once per configuration.
+
+    The old contract was: ``disp=False`` returns ``(X, errest)`` instead of
+    ``X``. This shim reproduces it, including ``errest``, so FID values are
+    unchanged — it restores a calling convention, it does not alter the
+    computation.
+
+    One deliberate difference: SciPy also *silenced* the ill-conditioning
+    warning under ``disp=False``, and this does not. clean-fid discards the
+    error estimate, so suppressing the warning too would leave a singular
+    covariance completely unreported. It fires when the sample count is small
+    relative to the 2048-dimensional features — expected on a few-hundred-image
+    smoke test, a real signal on a full evaluation.
+
+    Returns ``True`` when a patch was applied. No-op on SciPy versions that
+    still accept the argument.
+    """
+    try:
+        import numpy as np
+        from scipy import linalg
+    except ImportError:  # pragma: no cover - scipy is an eval extra
+        return False
+
+    if getattr(linalg.sqrtm, "_awwl_disp_shim", False):
+        return True
+
+    import inspect
+
+    try:
+        if "disp" in inspect.signature(linalg.sqrtm).parameters:
+            return False
+    except (TypeError, ValueError):  # pragma: no cover - C-implemented callable
+        pass
+
+    original = linalg.sqrtm
+
+    def sqrtm(A, disp=True, **legacy):
+        # SciPy 1.17 narrowed the signature to sqrtm(A) alone; `blocksize` went
+        # the same way as `disp`, so accept and drop any leftover keywords
+        # rather than trading one TypeError for another.
+        legacy.pop("blocksize", None)
+        result = original(A, **legacy)
+        if disp:
+            return result
+        # SciPy's historical error estimate for the returned root.
+        with np.errstate(invalid="ignore", divide="ignore"):
+            arg_norm = np.linalg.norm(A, "fro")
+            errest = (
+                np.linalg.norm(result @ result - A, "fro") / arg_norm
+                if arg_norm
+                else 0.0
+            )
+        return result, errest
+
+    sqrtm._awwl_disp_shim = True
+    linalg.sqrtm = sqrtm
+    logger.info("patched scipy.linalg.sqrtm to accept 'disp' (removed in SciPy 1.17)")
+    return True
 
 
 def _append_log(path: Path, *, exp_name: str, fid: float, is_mean: float, is_std: float) -> None:
