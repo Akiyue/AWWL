@@ -269,6 +269,45 @@ def test_manifest_rejects_an_unknown_method(tmp_path):
         build_jobs(load_manifest(path))
 
 
+def test_prompt_subject_mismatch_is_detected():
+    """The paper's three prompts belong to three different subjects.
+
+    DreamBooth fine-tunes one subject per run, so pairing all three with a
+    single run scores two of them against a subject the model never saw —
+    which is not what subject-driven fidelity measures.
+    """
+    from awwl.cli import _prompts_not_matching_subject
+
+    prompts = [
+        "a photo of sks dog in a cyberpunk neon city",
+        "a photo of sks robot toy on the beach at sunset",
+        "a photo of sks vase as a watercolor painting",
+    ]
+    mismatched = _prompts_not_matching_subject("a photo of sks robot toy", prompts)
+    assert len(mismatched) == 2
+    assert all("robot toy" not in p for p in mismatched)
+
+
+def test_subject_consistent_prompt_file_has_no_mismatches():
+    from pathlib import Path
+
+    from awwl.cli import _prompts_not_matching_subject
+
+    prompts = [
+        p.strip()
+        for p in Path("assets/prompts/robot_toy.txt").read_text(encoding="utf-8").splitlines()
+        if p.strip()
+    ]
+    assert len(prompts) == 3
+    assert _prompts_not_matching_subject("a photo of sks robot toy", prompts) == []
+
+
+def test_subject_check_is_skipped_without_a_rare_token():
+    from awwl.cli import _prompts_not_matching_subject
+
+    assert _prompts_not_matching_subject("a photo of a cat", ["anything at all"]) == []
+
+
 def test_dreambooth_run_dir_separates_seeds():
     """Previously every seed wrote into output.dir and overwrote the last."""
     from awwl.methods.dreambooth.trainer import dreambooth_run_dir

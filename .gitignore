@@ -36,3 +36,6 @@ Cita_2025_Hanu.pdf
 
 # Local-only scripts (history bootstrapper)
 .history.py
+
+# clean-fid caches its InceptionV3 weights into the CWD on first use
+inception-2015-12-05.pt

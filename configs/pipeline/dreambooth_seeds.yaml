@@ -11,7 +11,15 @@
 # CIFAR-10 tiers if time is short.
 #
 # Prerequisite: a folder of real subject images (the DreamBooth instance set),
-# pointed at by `real_images` below and by data.instance_data_dir.
+# pointed at by `real_images` below and by data.instance_data_dir. The Google
+# DreamBooth dataset (github.com/google/dreambooth) is the standard source and
+# makes the table reproducible by reviewers; point at ONE subject folder.
+#
+# Three things must agree, or CLIP score measures the wrong subject:
+#   data.instance_data_dir  -> dataset/<subject>
+#   data.instance_prompt    -> 'a photo of sks <subject>'
+#   sample.prompts          -> assets/prompts/<subject>.txt
+# `awwl eval-dreambooth` warns when they do not.
 #
 #   awwl pipeline run -m configs/pipeline/dreambooth_seeds.yaml --gpus 0,1
 #
@@ -33,7 +41,12 @@ defaults:
   sample:
     num_samples: 20        # images per prompt
     steps: 50
-    prompts: assets/prompts/awwl_dreambooth.txt
+    # MUST name the same subject as data.instance_prompt in
+    # configs/dreambooth.yaml. DreamBooth fine-tunes one subject per run,
+    # so a prompt naming a different one measures how well the model draws
+    # something it never learned. Per-subject files live in assets/prompts/;
+    # each holds the paper's three contexts for that one subject.
+    prompts: assets/prompts/robot_toy.txt
 
 experiments:
 

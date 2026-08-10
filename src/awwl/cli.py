@@ -306,6 +306,18 @@ def eval_dreambooth_cmd(
         typer.echo(f"no prompts in {prompts_file}", err=True)
         raise typer.Exit(2)
 
+    instance_prompt = str(cfg.get("data", {}).get("instance_prompt", ""))
+    mismatched = _prompts_not_matching_subject(instance_prompt, prompts)
+    if mismatched:
+        typer.echo(
+            f"WARNING: {len(mismatched)} of {len(prompts)} prompts do not mention the subject "
+            f"this run was trained on ({instance_prompt!r}).\n"
+            "  CLIP score then measures agreement with a subject the model never saw, which is "
+            "not what subject-driven fidelity means. Use a prompt file for this subject.\n"
+            "  Mismatched: " + "; ".join(mismatched),
+            err=True,
+        )
+
     unet_dir = run_dir / "unet" if (run_dir / "unet").exists() else run_dir
     use_cuda = device.startswith("cuda") and torch.cuda.is_available()
     pipe = build_pipeline(
@@ -360,10 +372,33 @@ def eval_dreambooth_cmd(
             group=str(output_cfg.get("group", cfg.get("loss", {}).get("name", "?"))),
             kind="eval",
             metrics=metrics,
+            instance_prompt=instance_prompt,
+            prompts_file=str(prompts_file),
+            prompt_subject_mismatches=len(mismatched),
         ),
     )
     typer.echo(json.dumps(metrics, indent=2))
     typer.echo(f"appended to {ledger}")
+
+
+def _prompts_not_matching_subject(instance_prompt: str, prompts: list[str]) -> list[str]:
+    """Prompts that omit the subject phrase the run was fine-tuned on.
+
+    DreamBooth trains one subject per run, so a prompt naming a different one
+    turns CLIP score into a measure of how well the model renders something it
+    never learned. The paper's three prompts each belong to a different subject
+    (dog / robot toy / vase) and therefore only make sense against three
+    separately fine-tuned models — pairing all three with one run silently
+    scores two of them against the wrong subject.
+
+    Matching is on the identifier phrase from ``sks`` onward, which is how the
+    rare-token convention marks the subject.
+    """
+    lowered = instance_prompt.lower()
+    if "sks" not in lowered:
+        return []
+    subject = lowered[lowered.index("sks") :].strip().rstrip(".,")
+    return [p for p in prompts if subject not in p.lower()]
 
 
 @app.command("measure-cost")
