@@ -13,12 +13,15 @@
 #
 # Usage:
 #   bash scripts/reeval_samples.sh
-#   GROUPS="awwl_normalized awwl_eq7" bash scripts/reeval_samples.sh
+#   CONFIGS="awwl_normalized awwl_eq7" bash scripts/reeval_samples.sh
 #   EPOCH=119 FULL=1 bash scripts/reeval_samples.sh
 #
 # Environment overrides:
 #   ROOT    sweep output directory        (default runs/phase0)
-#   GROUPS  space-separated config names  (default the tier-1 three)
+#   CONFIGS space-separated config names  (default the tier-1 three)
+#           NOT named GROUPS: bash reserves that for the caller's group ids,
+#           so assigning to it is ignored and the loop silently walks
+#           numeric gids instead of experiment names.
 #   SEEDS   space-separated seeds         (default 1..5)
 #   EPOCH   checkpoint epoch to score     (default 199)
 #   REAL    reference image folder        (default ./data/cifar10_train_png)
@@ -28,7 +31,7 @@
 set -uo pipefail
 
 ROOT=${ROOT:-runs/phase0}
-GROUPS=${GROUPS:-"mse static_wavelet awwl"}
+CONFIGS=${CONFIGS:-"mse static_wavelet awwl"}
 SEEDS=${SEEDS:-"1 2 3 4 5"}
 EPOCH=${EPOCH:-199}
 REAL=${REAL:-./data/cifar10_train_png}
@@ -50,7 +53,7 @@ ok=0
 skipped=0
 failed=0
 
-for g in ${GROUPS}; do
+for g in ${CONFIGS}; do
   for s in ${SEEDS}; do
     run_dir="${ROOT}/${g}_s${s}"
     samples="${run_dir}/samples/ep${EPOCH}"
