@@ -94,3 +94,61 @@ def test_sqrtm_shim_is_idempotent():
 
     root, _ = linalg.sqrtm(np.eye(2), disp=False)
     assert np.allclose(root, np.eye(2))
+
+
+# ------------------------------------------------------- spectral banding
+
+
+def test_band_deviations_locates_the_difference():
+    """A scalar distance cannot say *where* a loss changed the spectrum.
+
+    The whole premise of a frequency-aware objective is a correction at high
+    frequencies, so the band split is what separates 'the mechanism works' from
+    'something changed, elsewhere'.
+    """
+    from awwl.evaluation.spectrum import band_deviations
+
+    real = np.zeros(30)
+    model = np.zeros(30)
+    model[20:] = -2.0  # deficit confined to the top third
+
+    low, mid, high = band_deviations(model, real)
+    assert low == pytest.approx(0.0)
+    assert mid == pytest.approx(0.0)
+    assert high == pytest.approx(-2.0)
+
+
+def test_band_deviations_are_signed():
+    """Sign distinguishes too-little energy (over-smoothing) from too much."""
+    from awwl.evaluation.spectrum import band_deviations
+
+    real = np.zeros(30)
+    assert band_deviations(np.full(30, 1.5), real)[0] > 0
+    assert band_deviations(np.full(30, -1.5), real)[0] < 0
+
+
+def test_band_deviations_tolerate_length_mismatch():
+    from awwl.evaluation.spectrum import band_deviations
+
+    assert len(band_deviations(np.zeros(24), np.zeros(30))) == 3
+
+
+def test_band_table_renders(tmp_path):
+    from awwl.evaluation.spectrum import format_band_table
+
+    real = np.zeros(30)
+    table = format_band_table(real, {"mse": np.full(30, -3.0), "awwl": np.full(30, -1.0)})
+    assert "mse" in table and "awwl" in table and "high" in table
+
+
+def test_profiles_by_config_skips_missing_runs(tmp_path, caplog):
+    from awwl.evaluation.spectrum import profiles_by_config
+
+    folder = tmp_path / "awwl_s1" / "samples" / "ep199"
+    folder.mkdir(parents=True)
+    for i in range(3):
+        Image.new("RGB", (32, 32), color=(i * 60, 10, 10)).save(folder / f"{i}.png")
+
+    profiles = profiles_by_config(tmp_path, configs=["awwl", "absent"], seeds=[1, 2], epoch=199)
+    assert set(profiles) == {"awwl"}, "a config with no samples must be skipped, not crash"
+    assert profiles["awwl"].ndim == 1

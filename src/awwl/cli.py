@@ -433,6 +433,61 @@ def measure_cost_cmd(
         typer.echo(f"\nwritten to {out}")
 
 
+@app.command("spectrum")
+def spectrum_cmd(
+    root: Path = typer.Option(Path("runs/phase0"), "--root", exists=True, help="Sweep output directory."),
+    real: Path = typer.Option(Path("./data/cifar10_train_png"), "--real", exists=True, help="Reference images."),
+    configs: str = typer.Option("mse,static_wavelet,awwl", "--configs", help="Comma-separated config names."),
+    seeds: str = typer.Option("1,2,3,4,5", "--seeds", help="Comma-separated seeds to average."),
+    epoch: int = typer.Option(199, "--epoch"),
+    highlight: str | None = typer.Option(None, "--highlight", help="Config drawn bold (default: the last one)."),
+    max_images: int = typer.Option(2000, "--max-images", help="Images per run used for the FFT."),
+    out: Path | None = typer.Option(None, "--out", help="Figure path (default <root>/spectrum.png)."),
+) -> None:
+    """Compare radial power spectra against the real images.
+
+    Answers the question a single ``spec_dist`` number cannot: *where* on the
+    frequency axis a loss changes the output. A frequency-aware objective
+    claims to correct the high-frequency end, so a gain concentrated at low
+    frequencies would mean the effect is real but not the advertised
+    mechanism.
+    """
+    setup_logging("INFO")
+    from awwl.evaluation.spectrum import format_band_table, profiles_by_config, radial_profile
+    from awwl.plotting.spectrum import plot_spectrum_deviation
+
+    names = [c.strip() for c in configs.split(",") if c.strip()]
+    seed_list = [int(s) for s in seeds.split(",") if s.strip()]
+
+    typer.echo("computing the reference spectrum…")
+    real_profile = radial_profile(real, max_images=max_images)
+    if real_profile is None:
+        typer.echo(f"no images in {real}", err=True)
+        raise typer.Exit(1)
+
+    profiles = profiles_by_config(
+        root, configs=names, seeds=seed_list, epoch=epoch, max_images=max_images
+    )
+    if not profiles:
+        typer.echo("no sample folders found; has the sweep produced samples?", err=True)
+        raise typer.Exit(1)
+
+    typer.echo("")
+    typer.echo(format_band_table(real_profile, profiles))
+
+    key = highlight if highlight in profiles else names[-1]
+    if key not in profiles:
+        key = next(iter(profiles))
+    figure = out or root / "spectrum.png"
+    plot_spectrum_deviation(
+        real=real_profile,
+        baselines={k: v for k, v in profiles.items() if k != key},
+        highlight=(key, profiles[key]),
+        output_path=figure,
+    )
+    typer.echo(f"\nwrote {figure}")
+
+
 @app.command("plot-curriculum")
 def plot_curriculum_cmd(
     run_dir: Path = typer.Option(..., "--run-dir", exists=True, help="Run folder with config.json."),
