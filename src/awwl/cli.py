@@ -470,8 +470,7 @@ def sensitivity_cmd(
     if out:
         out.parent.mkdir(parents=True, exist_ok=True)
         out.write_text(table, encoding="utf-8")
-        typer.echo(f"
-written to {out}")
+        typer.echo(f"\nwritten to {out}")
 
 
 @app.command("spectrum")
