@@ -93,12 +93,19 @@ class BandWeighting(nn.Module):
     normalisation and the optional extra loss term some strategies need.
     """
 
-    def __init__(self, *, levels: int = 1, normalize: bool = False) -> None:
+    def __init__(
+        self, *, levels: int = 1, normalize: bool = False, normalize_scale: float = 1.0
+    ) -> None:
         super().__init__()
         if levels < 1:
             raise ValueError(f"levels must be >= 1, got {levels}")
         self.levels = levels
         self.normalize = normalize
+        # The published weighting averages 0.5 over the schedule. Normalising
+        # to 1.0 therefore doubles the mean gradient magnitude, smuggling an
+        # effective learning-rate change into what is meant to be a pure
+        # shape ablation. Pass 0.5 to hold the average fixed.
+        self.normalize_scale = float(normalize_scale)
         self.keys = band_keys(levels)
 
     def raw_weights(
@@ -124,7 +131,7 @@ class BandWeighting(nn.Module):
         # flattened back to a constant.
         total = sum(w.mean(dim=tuple(range(1, w.dim())), keepdim=True) for w in weights.values())
         total = total + 1e-8
-        return {k: w / total for k, w in weights.items()}
+        return {k: self.normalize_scale * w / total for k, w in weights.items()}
 
     def penalty(self) -> torch.Tensor:
         """Extra term added to the total loss (zero for hand-designed schemes)."""
@@ -187,8 +194,9 @@ class RationalWeighting(BandWeighting):
         level_powers: list[float] | dict[int, float] | None = None,
         share_detail_budget: bool = False,
         normalize: bool = False,
+        normalize_scale: float = 1.0,
     ) -> None:
-        super().__init__(levels=levels, normalize=normalize)
+        super().__init__(levels=levels, normalize=normalize, normalize_scale=normalize_scale)
         if not 0.0 <= alpha <= 1.0:
             raise ValueError(f"alpha must be in [0, 1], got {alpha}")
         self.alpha = alpha
@@ -261,8 +269,11 @@ class SpatialWeighting(BandWeighting):
         window: int = 3,
         apply_to_ll: bool = False,
         normalize: bool = False,
+        normalize_scale: float = 1.0,
     ) -> None:
-        super().__init__(levels=base.levels, normalize=normalize)
+        super().__init__(
+            levels=base.levels, normalize=normalize, normalize_scale=normalize_scale
+        )
         if strength < 0:
             raise ValueError(f"strength must be >= 0, got {strength}")
         if window < 1 or window % 2 == 0:
@@ -338,8 +349,9 @@ class UncertaintyWeighting(BandWeighting):
         hidden: int = 32,
         init_log_var: float = 0.0,
         normalize: bool = False,
+        normalize_scale: float = 1.0,
     ) -> None:
-        super().__init__(levels=levels, normalize=normalize)
+        super().__init__(levels=levels, normalize=normalize, normalize_scale=normalize_scale)
         self.conditioned = conditioned
         n_bands = len(self.keys)
         if conditioned:
@@ -410,6 +422,7 @@ def build_weighting(
     *,
     levels: int = 1,
     normalize: bool = False,
+    normalize_scale: float = 1.0,
     **kwargs,
 ) -> BandWeighting:
     """Construct a weighting strategy by name.
@@ -421,15 +434,23 @@ def build_weighting(
     """
     if name == "rational":
         return RationalWeighting(
-            levels=levels, normalize=normalize, **_accepted(RationalWeighting, kwargs)
+            levels=levels,
+            normalize=normalize,
+            normalize_scale=normalize_scale,
+            **_accepted(RationalWeighting, kwargs),
         )
     if name == "uncertainty":
         return UncertaintyWeighting(
-            levels=levels, normalize=normalize, **_accepted(UncertaintyWeighting, kwargs)
+            levels=levels,
+            normalize=normalize,
+            normalize_scale=normalize_scale,
+            **_accepted(UncertaintyWeighting, kwargs),
         )
     if name == "spatial":
         spatial_kwargs = _accepted(SpatialWeighting, kwargs)
         spatial_kwargs.pop("base", None)
         base = RationalWeighting(levels=levels, **_accepted(RationalWeighting, kwargs))
-        return SpatialWeighting(base, normalize=normalize, **spatial_kwargs)
+        return SpatialWeighting(
+            base, normalize=normalize, normalize_scale=normalize_scale, **spatial_kwargs
+        )
     raise ValueError(f"unknown weighting {name!r}; known: rational, spatial, uncertainty")

@@ -96,6 +96,24 @@ experiments:
       loss.power: 1.0
       loss.normalize_weights: true
 
+  # The arm above is NOT a clean ablation on its own: the published total
+  # averages 0.5 over the schedule, so normalising it to 1.0 also doubles the
+  # mean gradient magnitude. Any difference then confounds "shape of the
+  # weighting" with "twice the learning rate".
+  #
+  # This holds the average at 0.5, so only the shape changes. Compare against
+  # `awwl`, and read the pair together: if both lose to MSE, the frequency
+  # weighting itself is what hurts; if only the unmatched one loses, the
+  # earlier result was a learning-rate artefact.
+  - group: awwl_norm_matched
+    tier: 2
+    overrides:
+      loss.name: adaptive_wavelet
+      loss.alpha: 0.2
+      loss.power: 1.0
+      loss.normalize_weights: true
+      loss.normalize_scale: 0.5
+
   # The objective as eq. (7) actually writes it (detail bands summed, not
   # averaged). Reconciles the paper with the released code.
   - group: awwl_eq7

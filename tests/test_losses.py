@@ -135,6 +135,36 @@ def test_normalize_weights_holds_the_total_at_one(alpha, detail_reduction):
     assert torch.allclose(totals, torch.ones_like(totals), atol=1e-4)
 
 
+def test_default_normalisation_doubles_the_mean_gradient_scale():
+    """The published total averages 0.5, so normalising to 1.0 is also a 2x LR.
+
+    This is why ``awwl_normalized`` at the default scale is not a clean
+    ablation: it changes the weighting *shape* and the overall gradient
+    magnitude at once, and the two cannot be told apart afterwards.
+    """
+    sigmas = torch.linspace(0.001, 0.999, 999)
+    published = AdaptiveWaveletLoss(alpha=0.2, power=1.0).weights_at(sigmas)["total"]
+    scaled = AdaptiveWaveletLoss(
+        alpha=0.2, power=1.0, normalize_weights=True
+    ).weights_at(sigmas)["total"]
+    assert published.mean() == pytest.approx(0.5, abs=1e-3)
+    assert scaled.mean() == pytest.approx(1.0, abs=1e-3)
+
+
+@pytest.mark.parametrize("alpha", [0.2, 0.8])
+def test_normalize_scale_matches_the_published_gradient_budget(alpha):
+    """``normalize_scale=0.5`` isolates the shape change from the LR change."""
+    sigmas = torch.linspace(0.001, 0.999, 999)
+    published = AdaptiveWaveletLoss(alpha=alpha, power=1.0).weights_at(sigmas)["total"]
+    matched = AdaptiveWaveletLoss(
+        alpha=alpha, power=1.0, normalize_weights=True, normalize_scale=0.5
+    ).weights_at(sigmas)["total"]
+
+    assert matched.mean() == pytest.approx(float(published.mean()), abs=1e-3)
+    # Still constant in sigma — the confound is removed, not reintroduced.
+    assert torch.allclose(matched, torch.full_like(matched, 0.5), atol=1e-4)
+
+
 def test_normalize_weights_preserves_the_band_ratio():
     """Normalisation must rescale both weights, not re-balance them."""
     sigmas = torch.linspace(0.1, 0.9, 5)

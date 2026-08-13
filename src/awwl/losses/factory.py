@@ -67,6 +67,7 @@ _LOSS_BODY_KEYS = frozenset(
         "weighting_strategy",
         "spatial",
         "normalize_weights",
+        "normalize_scale",
         "gradnorm",
         "gradnorm_asymmetry",
         "snr_gamma",
@@ -117,6 +118,7 @@ def get_loss_function(
             power=float(kwargs.get("power", 2.0)),
             weighting=str(kwargs.get("weighting", "normalized")),  # type: ignore[arg-type]
             normalize_weights=bool(kwargs.get("normalize_weights", False)),
+            normalize_scale=float(kwargs.get("normalize_scale", 1.0)),
             detail_reduction=str(kwargs.get("detail_reduction", "mean")),  # type: ignore[arg-type]
             level_reduction=str(kwargs.get("level_reduction", "sum")),  # type: ignore[arg-type]
             dwt_mode=str(kwargs.get("dwt_mode", "zero")),

@@ -101,6 +101,7 @@ class GeneralizedWaveletLoss(nn.Module):
         weighting_kwargs: dict | None = None,
         spatial: bool = False,
         normalize_weights: bool = True,
+        normalize_scale: float = 1.0,
         gradnorm: bool = False,
         gradnorm_asymmetry: float = 1.5,
         snr_gamma: float | None = None,
@@ -138,7 +139,11 @@ class GeneralizedWaveletLoss(nn.Module):
                 "spatial" if (spatial and weighting_strategy == "rational") else weighting_strategy
             )
             self.weighting = build_weighting(
-                name, levels=levels, normalize=normalize_weights, **kwargs
+                name,
+                levels=levels,
+                normalize=normalize_weights,
+                normalize_scale=normalize_scale,
+                **kwargs,
             )
             if spatial and weighting_strategy != "rational":
                 from awwl.losses.weighting import SpatialWeighting

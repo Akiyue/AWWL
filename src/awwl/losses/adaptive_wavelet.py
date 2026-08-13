@@ -50,9 +50,17 @@ is a global timestep reweighting of exactly the kind Min-SNR / P2 apply,
 and it is a confound for any claim that ``α`` selects a *frequency* trade-off.
 
 Passing ``normalize_weights=True`` divides both weights by ``w_LL + k·w_det``
-so the total is identically 1 at every σ, isolating the frequency balance
-from the gradient-magnitude schedule. This is off by default: the published
-runs did not use it.
+so the total is constant at every σ, isolating the frequency balance from the
+gradient-magnitude schedule. This is off by default: the published runs did
+not use it.
+
+``normalize_scale`` sets that constant, and it matters more than it looks.
+The published total averages **0.5** over the schedule, so normalising to the
+default 1.0 also doubles the mean gradient magnitude — which is an effective
+learning-rate change riding along with the ablation, and makes any difference
+uninterpretable. Set ``normalize_scale=0.5`` to hold the average fixed so that
+only the *shape* of the weighting changes. That is the comparison worth
+reporting; ``1.0`` conflates two things at once.
 
 
 Reductions
@@ -126,6 +134,7 @@ class AdaptiveWaveletLoss(nn.Module):
         power: float = 2.0,
         weighting: WeightingScheme = "normalized",
         normalize_weights: bool = False,
+        normalize_scale: float = 1.0,
         detail_reduction: Reduction = "mean",
         level_reduction: Reduction = "sum",
         dwt_mode: str = "zero",
@@ -151,6 +160,7 @@ class AdaptiveWaveletLoss(nn.Module):
         self.power = power
         self.weighting = weighting
         self.normalize_weights = normalize_weights
+        self.normalize_scale = float(normalize_scale)
         self.detail_reduction = detail_reduction
         self.level_reduction = level_reduction
         self.dwt_mode = dwt_mode
@@ -188,8 +198,8 @@ class AdaptiveWaveletLoss(nn.Module):
 
         if self.normalize_weights:
             total = w_ll + self.detail_multiplicity * w_high + 1e-8
-            w_ll = w_ll / total
-            w_high = w_high / total
+            w_ll = self.normalize_scale * w_ll / total
+            w_high = self.normalize_scale * w_high / total
         return w_ll, w_high
 
     @torch.no_grad()
