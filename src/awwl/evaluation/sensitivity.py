@@ -103,15 +103,30 @@ def attenuate_folder(
     files: list[Path] | None = None,
     cutoff: float = 0.667,
     width: float = 0.5,
+    dither: float = 0.5,
 ) -> Path:
-    """Write copies of ``source`` images with the high band attenuated by ``db``.
+    """Write copies of ``source`` images with the high band scaled by ``db``.
 
-    ``db=0`` still round-trips through the FFT and PNG quantisation, so the
-    zero rung of the curve carries the same numerical noise as the others and
-    the comparison is not biased by processing alone.
+    Negative ``db`` boosts rather than attenuates.
+
+    Args:
+        dither: Uniform noise in ±``dither`` least-significant bits added
+            before rounding to 8-bit.
+
+    Dither is on by default and it is not cosmetic. At ``db=0`` the mask is
+    exactly 1, so the FFT round-trip returns the original integers and no
+    rounding occurs; at any other rung the result is fractional and rounding
+    injects white noise. White noise is flat, so it lands mostly in the high
+    band — the very quantity being manipulated. Without dither the zero rung
+    is the only one with a clean spectrum, and part of every measured change
+    is quantisation rather than the filter. Dithering every rung identically,
+    zero included, makes the comparison isolate the spectral change.
     """
     out = ensure_dir(destination)
     paths = files if files is not None else _list_images(source)
+    # Fixed seed: the dither must not be a source of run-to-run variation in
+    # a measurement whose whole purpose is resolving small differences.
+    rng = np.random.default_rng(0)
 
     gain: np.ndarray | None = None
     for index, path in enumerate(tqdm(paths, desc=f"filter {db:g}dB", leave=False)):
@@ -124,7 +139,10 @@ def attenuate_folder(
             spectrum = np.fft.fftshift(np.fft.fft2(image[:, :, c]))
             filtered = np.fft.ifft2(np.fft.ifftshift(spectrum * gain))
             channels.append(np.real(filtered))
-        stacked = np.clip(np.stack(channels, axis=-1), 0, 255).astype(np.uint8)
+        stacked = np.stack(channels, axis=-1)
+        if dither:
+            stacked = stacked + rng.uniform(-dither, dither, stacked.shape)
+        stacked = np.clip(np.round(stacked), 0, 255).astype(np.uint8)
         Image.fromarray(stacked).save(out / f"{index:06d}.png")
     return out
 
