@@ -433,6 +433,47 @@ def measure_cost_cmd(
         typer.echo(f"\nwritten to {out}")
 
 
+@app.command("sensitivity")
+def sensitivity_cmd(
+    real: Path = typer.Option(Path("./data/cifar10_train_png"), "--real", exists=True, help="Real image folder."),
+    work: Path = typer.Option(Path("runs/sensitivity"), "--work", help="Scratch space for filtered copies."),
+    deltas: str = typer.Option("0,0.25,0.5,1,2,4,8", "--deltas", help="High-band attenuations in dB."),
+    count: int = typer.Option(10000, "--count", help="Images per half."),
+    effect: float | None = typer.Option(None, "--effect", help="A method's measured correction in dB, to locate on the curve."),
+    keep_images: bool = typer.Option(False, "--keep-images", help="Retain filtered folders."),
+    skip_advanced: bool = typer.Option(False, "--skip-advanced", help="FID + IS only (faster)."),
+    out: Path | None = typer.Option(None, "--out", help="Also write the table here."),
+) -> None:
+    """Calibrate FID against a known spectral deficit. No training required.
+
+    Attenuates the high band of *real* images by a known amount and scores
+    them against a disjoint set of real images. The result says how large a
+    spectral deviation has to be before FID responds at all — which turns
+    "FID did not move" into "FID could not have moved", a statement about the
+    metric rather than about any one loss.
+    """
+    setup_logging("INFO")
+    from awwl.evaluation.sensitivity import format_sensitivity_table, measure_sensitivity
+
+    values = [float(d) for d in deltas.split(",") if d.strip()]
+    points = measure_sensitivity(
+        real_folder=real,
+        work_dir=work,
+        deltas=values,
+        count=count,
+        keep_images=keep_images,
+        advanced=not skip_advanced,
+    )
+    table = format_sensitivity_table(points, reference_effect_db=effect)
+    typer.echo("")
+    typer.echo(table)
+    if out:
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(table, encoding="utf-8")
+        typer.echo(f"
+written to {out}")
+
+
 @app.command("spectrum")
 def spectrum_cmd(
     root: Path = typer.Option(Path("runs/phase0"), "--root", exists=True, help="Sweep output directory."),

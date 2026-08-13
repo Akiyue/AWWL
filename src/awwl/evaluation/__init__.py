@@ -10,6 +10,7 @@ from awwl.evaluation.clip_scores import (
 )
 from awwl.evaluation.cost import format_cost_table, measure_costs
 from awwl.evaluation.fid_is import compute_fid_is
+from awwl.evaluation.sensitivity import measure_sensitivity
 from awwl.evaluation.spectrum import radial_profile
 from awwl.evaluation.timestep_analysis import TimestepProfile, evaluate_timestep_errors
 
@@ -22,6 +23,7 @@ __all__ = [
     "evaluate_clip_over_models",
     "evaluate_timestep_errors",
     "image_image_similarity",
+    "measure_sensitivity",
     "radial_profile",
     "text_image_similarity",
 ]
