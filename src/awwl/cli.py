@@ -437,7 +437,8 @@ def measure_cost_cmd(
 def sensitivity_cmd(
     real: Path = typer.Option(Path("./data/cifar10_train_png"), "--real", exists=True, help="Real image folder."),
     work: Path = typer.Option(Path("runs/sensitivity"), "--work", help="Scratch space for filtered copies."),
-    deltas: str = typer.Option("0,0.25,0.5,1,2,4,8", "--deltas", help="High-band attenuations in dB."),
+    deltas: str = typer.Option("0,1,2,4,8", "--deltas", help="High-band attenuations in dB; negative boosts."),
+    source: Path | None = typer.Option(None, "--source", help="Filter this folder (e.g. model samples) instead of half of --real."),
     count: int = typer.Option(10000, "--count", help="Images per half."),
     effect: float | None = typer.Option(None, "--effect", help="A method's measured correction in dB, to locate on the curve."),
     keep_images: bool = typer.Option(False, "--keep-images", help="Retain filtered folders."),
@@ -463,6 +464,7 @@ def sensitivity_cmd(
         count=count,
         keep_images=keep_images,
         advanced=not skip_advanced,
+        source=source,
     )
     table = format_sensitivity_table(points, reference_effect_db=effect)
     typer.echo("")

@@ -22,6 +22,17 @@ x-axis is the deviation **measured back** from the filtered images, because a
 gentle transition deliberately spreads the attenuation and a requested 4 dB
 does not land at 4 dB.
 
+**Quantisation floor.** Rungs below roughly 1 dB are not resolvable. At
+0 dB the mask is exactly 1, so the FFT round-trip returns the original
+integers untouched; at any non-zero attenuation the result is fractional and
+rounding to 8-bit adds white noise, which lifts the measured high band by
+~0.7 dB regardless of how little was actually removed. That is why 0.25 dB
+and 0.5 dB both come back as 0.73 dB with identical FID. Read the curve from
+its reliable rungs (>= ~1.7 dB) and extrapolate with the fitted power law;
+to probe below the floor, filter model samples directly with ``source=``
+instead, where the comparison is against real images and no round-trip is
+needed on the reference side.
+
 One honest caveat, which belongs in the paper rather than in a footnote.
 Removing high-frequency energy from an image leaves a spatial signature, and
 an FFT filter's signature is not the same as a diffusion model's
@@ -152,28 +163,41 @@ def measure_sensitivity(
     count: int = 10000,
     keep_images: bool = False,
     advanced: bool = True,
+    source: str | Path | None = None,
 ) -> list[SensitivityPoint]:
-    """Score progressively high-frequency-attenuated real images.
+    """Score progressively high-frequency-attenuated images.
 
     Args:
-        real_folder: Source of real images; split into a reference half and a
-            test half that gets filtered.
+        real_folder: Reference images. Without ``source`` this is also the
+            origin of the filtered set, split into two disjoint halves.
         work_dir: Scratch space for the filtered copies.
-        deltas: Attenuations in dB, ascending. Include 0 for the floor.
-        count: Images per half.
+        deltas: Attenuations in dB. Negative values *boost* the high band,
+            which is how a model's own samples can be given the correction a
+            frequency-aware loss achieves and scored for it.
+        count: Images per side.
         keep_images: Retain the filtered folders for inspection.
         advanced: Also compute KID / precision / recall (slower).
+        source: Filter this folder instead of half of ``real_folder``. Use a
+            model's sample folder to measure sensitivity **at the operating
+            point** — the calibration on real images sits at FID ~5, while
+            models sit far higher, and FID's response to an added perturbation
+            need not be the same at both distances.
     """
     from awwl.evaluation.advanced_metrics import compute_advanced_metrics
     from awwl.evaluation.fid_is import compute_fid_is
 
     work = ensure_dir(work_dir)
-    reference_files, test_files = split_reference(real_folder, count=count)
 
-    reference_dir = work / "reference"
-    if not reference_dir.exists() or len(list(reference_dir.glob("*.png"))) < count:
-        logger.info("materialising the reference half (%d images)", count)
-        attenuate_folder(real_folder, reference_dir, db=0.0, files=reference_files)
+    if source is not None:
+        reference_dir = Path(real_folder)
+        test_files = _list_images(source)[:count]
+        logger.info("filtering %d images from %s against %s", len(test_files), source, reference_dir)
+    else:
+        reference_files, test_files = split_reference(real_folder, count=count)
+        reference_dir = work / "reference"
+        if not reference_dir.exists() or len(list(reference_dir.glob("*.png"))) < count:
+            logger.info("materialising the reference half (%d images)", count)
+            attenuate_folder(real_folder, reference_dir, db=0.0, files=reference_files)
 
     reference_profile = radial_profile(reference_dir, max_images=2000)
 
@@ -181,7 +205,7 @@ def measure_sensitivity(
     for db in deltas:
         folder = work / f"delta_{db:g}dB".replace(".", "p")
         logger.info("=== %.3g dB", db)
-        attenuate_folder(real_folder, folder, db=db, files=test_files)
+        attenuate_folder(source or real_folder, folder, db=db, files=test_files)
 
         # Verify the filter did what was asked, in the same band the study
         # reports; a requested value that lands elsewhere moves the threshold.
