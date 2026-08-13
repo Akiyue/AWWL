@@ -488,6 +488,40 @@ def spectrum_cmd(
     typer.echo(f"\nwrote {figure}")
 
 
+@app.command("compare-samples")
+def compare_samples_cmd(
+    root: Path = typer.Option(Path("runs/phase0"), "--root", exists=True, help="Sweep output directory."),
+    configs: str = typer.Option("mse,awwl", "--configs", help="Comma-separated config names, one row each."),
+    seed: int = typer.Option(1, "--seed", help="Which training seed's samples to show."),
+    epoch: int = typer.Option(199, "--epoch"),
+    count: int = typer.Option(12, "--count", help="Columns, i.e. matched samples shown."),
+    start: int = typer.Option(0, "--start", help="First sample index."),
+    scale: int = typer.Option(3, "--scale", help="Integer upscale; 32px is unreadable in print."),
+    out: Path | None = typer.Option(None, "--out", help="Figure path (default <root>/compare.png)."),
+) -> None:
+    """Side-by-side samples from the same initial noise, one row per loss.
+
+    The sweep seeds every configuration's sampler identically, so column *i*
+    starts from the same latent in every row and any visible difference is
+    attributable to the objective. This is the perceptual check on a spectral
+    result: if closing the frequency gap is not visible here, the shift is
+    real but sub-perceptual.
+    """
+    setup_logging("INFO")
+    from awwl.plotting.paired_grid import paired_sample_grid
+
+    names = [c.strip() for c in configs.split(",") if c.strip()]
+    folders = {n: root / f"{n}_s{seed}" / "samples" / f"ep{epoch}" for n in names}
+    figure = paired_sample_grid(
+        folders,
+        output_path=out or root / "compare.png",
+        count=count,
+        start=start,
+        scale=scale,
+    )
+    typer.echo(f"wrote {figure}")
+
+
 @app.command("plot-curriculum")
 def plot_curriculum_cmd(
     run_dir: Path = typer.Option(..., "--run-dir", exists=True, help="Run folder with config.json."),

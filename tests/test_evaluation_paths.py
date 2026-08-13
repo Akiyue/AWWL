@@ -152,3 +152,42 @@ def test_profiles_by_config_skips_missing_runs(tmp_path, caplog):
     profiles = profiles_by_config(tmp_path, configs=["awwl", "absent"], seeds=[1, 2], epoch=199)
     assert set(profiles) == {"awwl"}, "a config with no samples must be skipped, not crash"
     assert profiles["awwl"].ndim == 1
+
+
+# ------------------------------------------------------ paired sample grid
+
+
+def _fake_samples(root, config, seed, n=6):
+    folder = root / f"{config}_s{seed}" / "samples" / "ep199"
+    folder.mkdir(parents=True)
+    for i in range(n):
+        Image.new("RGB", (32, 32), color=(i * 30, 0, 0)).save(folder / f"{i:05d}.png")
+    return folder
+
+
+def test_paired_grid_puts_one_row_per_config(tmp_path):
+    from awwl.plotting.paired_grid import paired_sample_grid
+
+    folders = {c: _fake_samples(tmp_path, c, 1) for c in ("mse", "awwl")}
+    out = paired_sample_grid(folders, output_path=tmp_path / "cmp.png", count=4, scale=2)
+
+    assert out.exists()
+    image = Image.open(out)
+    assert image.width > image.height, "4 columns of 2 rows should be wider than tall"
+
+
+def test_paired_grid_reports_a_missing_folder(tmp_path):
+    from awwl.plotting.paired_grid import paired_sample_grid
+
+    folders = {"mse": _fake_samples(tmp_path, "mse", 1), "absent": tmp_path / "nope"}
+    with pytest.raises(FileNotFoundError, match="absent"):
+        paired_sample_grid(folders, output_path=tmp_path / "cmp.png")
+
+
+def test_paired_grid_start_offset_selects_later_samples(tmp_path):
+    from awwl.plotting.paired_grid import paired_sample_grid
+
+    folders = {"mse": _fake_samples(tmp_path, "mse", 1, n=10)}
+    assert paired_sample_grid(
+        folders, output_path=tmp_path / "cmp.png", count=3, start=5
+    ).exists()

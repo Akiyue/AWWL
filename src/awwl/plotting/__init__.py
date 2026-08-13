@@ -22,6 +22,7 @@ from awwl.plotting.bar_scatter import plot_dreambooth_comparison
 from awwl.plotting.curriculum import plot_run_curriculum, plot_weight_profile
 from awwl.plotting.grids import make_image_grid
 from awwl.plotting.loss_curve import LossCurveSpec, plot_loss_curves
+from awwl.plotting.paired_grid import paired_sample_grid
 from awwl.plotting.radar import RadarPlotSpec, RadarStyle, plot_radar
 from awwl.plotting.spectrum import plot_spectrum_deviation
 
@@ -32,6 +33,7 @@ __all__ = [
     "RadarPlotSpec",
     "RadarStyle",
     "make_image_grid",
+    "paired_sample_grid",
     "plot_ablation",
     "plot_dreambooth_comparison",
     "plot_loss_curves",
