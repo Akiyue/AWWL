@@ -11,6 +11,13 @@ the whole premise is a correction at **high** frequencies, so an improvement
 concentrated at low frequencies would mean the mechanism is real but is not
 the advertised one. :func:`band_deviations` splits the profile into low / mid
 / high thirds so the claim can be checked rather than assumed.
+
+Profiles are in **decibels** (``20·log10|F|``). Earlier revisions used a
+natural log, which is 2.303x larger and is not dB; ``spec_dist`` values
+recorded in the results ledger before this change are in those legacy units
+and are 5.3x larger (the metric squares the profile difference). Do not mix
+the two in one table — re-score with ``FULL=1 bash scripts/reeval_samples.sh``
+to bring old runs onto the dB scale.
 """
 
 from __future__ import annotations
@@ -31,8 +38,9 @@ def radial_profile(folder: str | Path, *, max_images: int = 10000) -> np.ndarray
     """Average radially-binned FFT log-magnitude across images in ``folder``.
 
     Returns:
-        A 1-D NumPy array of length ``min(image_height, image_width)//2 + 1``,
-        or ``None`` if the folder is empty.
+        A 1-D NumPy array in **decibels** (``20·log10|F|``) of length
+        ``min(image_height, image_width)//2 + 1``, or ``None`` if the folder
+        is empty.
     """
     folder = Path(folder)
     files = [p for p in folder.iterdir() if p.suffix.lower() in _VALID_EXTS][:max_images]
@@ -47,7 +55,10 @@ def radial_profile(folder: str | Path, *, max_images: int = 10000) -> np.ndarray
             logger.warning("could not read %s: %s", f, exc)
             continue
         fft = np.fft.fftshift(np.fft.fft2(data))
-        psd = 20 * np.log(np.abs(fft) + 1e-8)
+        # 20*log10 = decibels. The original used a natural log, which is
+        # 2.303x larger and is not dB -- a reader seeing '20 log' assumes
+        # dB and would read the effect as more than twice its real size.
+        psd = 20 * np.log10(np.abs(fft) + 1e-8)
 
         h, w = data.shape
         ys, xs = np.indices((h, w))

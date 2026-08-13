@@ -92,7 +92,7 @@ def _kid_mmd(X: np.ndarray, Y: np.ndarray) -> float:
 
 
 def _radial_spectrum(folder: str | Path, *, device: str, batch_size: int = 64, max_imgs: int = 2000) -> np.ndarray:
-    """Average radial FFT log-magnitude profile over grayscale images."""
+    """Average radial FFT magnitude profile, in decibels, over grayscale images."""
     files = _list_images(folder)[:max_imgs]
     accumulated: torch.Tensor | None = None
     counts: torch.Tensor | None = None
@@ -102,7 +102,9 @@ def _radial_spectrum(folder: str | Path, *, device: str, batch_size: int = 64, m
         batch = [np.array(Image.open(p).convert("L")) for p in files[i : i + batch_size]]
         tensor = torch.tensor(np.array(batch), dtype=torch.float32, device=device)
         fft = torch.fft.fftshift(torch.fft.fft2(tensor))
-        mag = 20 * torch.log(torch.abs(fft) + 1e-8)
+        # Decibels, matching awwl.evaluation.spectrum. A natural log here
+        # would make the two implementations disagree by 2.303x.
+        mag = 20 * torch.log10(torch.abs(fft) + 1e-8)
 
         if accumulated is None:
             h, w = tensor.shape[1:]

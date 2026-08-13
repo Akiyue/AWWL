@@ -39,3 +39,8 @@ Cita_2025_Hanu.pdf
 
 # clean-fid caches its InceptionV3 weights into the CWD on first use
 inception-2015-12-05.pt
+
+# Paper drafts and analysis notes: kept local until submission
+docs/PAPER_OUTLINE.md
+AWWL_*.md
+paper/
