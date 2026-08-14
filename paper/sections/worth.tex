@@ -1,0 +1,78 @@
+\section{What the correction is worth}
+\label{sec:worth}
+
+Sections \ref{sec:replication} and \ref{sec:mechanism} leave an obvious
+question unanswered: how much \emph{should} FID have moved? Without that
+number, ``the metrics did not respond'' is an observation rather than an
+argument.
+
+We answer it by applying the correction directly. Taking each model's own
+samples and boosting the high band by \SI{0.41}{\decibel} --- the amount the
+trained objective achieves --- is a pure post-process, so the resulting change
+in FID isolates the value of the spectral correction from everything else
+training might have altered.
+
+\begin{table}[t]
+\centering
+\caption{The correction applied as a Fourier post-process, five seeds per arm.
+The \SI{0}{\decibel} column reproduces the sweep's FID exactly, validating the
+apparatus.}
+\label{tab:worth}
+\begin{tabular}{lrrr}
+\toprule
+& Spectral deficit & FID & FID after $+\SI{0.41}{\decibel}$ \\
+\midrule
+MSE & \SI{2.22}{\decibel} & $\fidMSE \pm 0.210$ & $\mathbf{\fidMSEboost \pm 0.202}$ \\
+Frequency-aware & \SI{1.80}{\decibel} & $\fidAWWL \pm 0.344$ & $\fidAWWLboost \pm 0.335$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Two independent measurements agree that the objective corrects
+$\correction \pm 0.18$~\si{\decibel}: the difference of deficits in
+Table~\ref{tab:worth}, and the band analysis of \S\ref{sec:mechanism} obtained
+by a different route.
+
+Applying that correction post hoc is worth $\boostValue \pm \boostCI$~FID. The
+accounting follows immediately.
+
+\begin{table}[t]
+\centering
+\caption{The objective falls \shortfall~FID short of what its own spectral
+correction predicts.}
+\label{tab:accounting}
+\begin{tabular}{lr}
+\toprule
+& FID \\
+\midrule
+MSE baseline & \fidMSE \\
+Predicted for the objective from its own spectral correction & \fidMSEboost \\
+Objective, measured & \fidAWWL \\
+\midrule
+\textbf{Unexplained penalty} & $\mathbf{+\shortfall}$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The objective buys $0.35$~FID of spectral improvement and pays roughly
+$1.1$~FID for it elsewhere. Two framings of the same fact are worth stating
+separately:
+
+\begin{itemize}
+  \item MSE plus a twenty-line Fourier post-process (\fidMSEboost) outperforms
+    the trained objective (\fidAWWL) by \shortfall~FID, at no training cost.
+  \item The objective plus the same post-process (\fidAWWLboost) is
+    \emph{still} worse than plain MSE (\fidMSE). The correction cannot recover
+    what obtaining it costs.
+\end{itemize}
+
+\paragraph{Measurement hazard: calibrate away from the minimum.}
+We first calibrated FID's sensitivity on real images --- attenuating one half
+of a real set and scoring it against the other. That measures sensitivity at
+the \emph{minimum} of the distance, where the first derivative vanishes and
+perturbations are penalised quadratically. It implied a \SI{0.41}{\decibel}
+correction was worth $0.010$~FID and would require some 17\,500 seeds to
+detect. Measured at the operating point, where the derivative is non-zero, the
+same correction is worth $\boostValue$ --- thirtyfold larger. Sensitivity
+calibrations for a generative metric must be performed away from the minimum;
+we drew, and retract, the opposite conclusion from the wrong calibration.

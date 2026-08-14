@@ -1,0 +1,29 @@
+\section{The objective family}
+\label{sec:family}
+
+Write $\hat{\epsilon}$ for the predicted noise and $\epsilon$ for the target.
+A sub-band objective applies a linear transform $W$---here a 2-D discrete
+wavelet transform---to both and weights the resulting bands:
+\begin{equation}
+  \mathcal{L} = \sum_{b} w_b(\sigma_t) \,\big\| (W\hat{\epsilon})_b - (W\epsilon)_b \big\|_2^2 .
+  \label{eq:family}
+\end{equation}
+
+Because $W$ is linear, $W\hat{\epsilon} - W\epsilon = W(\hat{\epsilon} -
+\epsilon)$: the bands being weighted are bands of the \emph{prediction
+residual}, not of any image. This is worth stating plainly, because motivations
+phrased in terms of separating image structure from texture describe something
+the objective does not do---the $\epsilon$-prediction target is white noise and
+has no structure to decompose.
+
+For an orthonormal basis, Parseval's identity gives
+\begin{equation}
+  \tfrac{1}{4}\textstyle\sum_b \operatorname{mean}\big((W r)_b^2\big)
+  = \operatorname{mean}(r^2), \qquad r = \hat{\epsilon} - \epsilon,
+  \label{eq:parseval}
+\end{equation}
+verified numerically to a relative error of $7.4\times 10^{-8}$ for the Haar
+basis. An \emph{unweighted} sub-band loss is therefore exactly the pixel MSE,
+and every member of the family redistributes one fixed error budget across
+orthogonal bands. Any gain must come from \emph{how} the budget is split; none
+can come from added information.

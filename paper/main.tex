@@ -1,0 +1,74 @@
+% Frequency-aware diffusion losses: what a spectral correction is worth.
+%
+% Deliberately plain `article` rather than a venue template. The target venue
+% is not settled, and swapping \documentclass late is far cheaper than
+% unpicking a template's own section and float conventions from the prose.
+% To move to LNCS: change the class, replace \maketitle's block, keep sections.
+%
+% Build:  bash paper/build.sh      (or: latexmk -pdf main.tex)
+
+\documentclass[11pt,a4paper]{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[margin=2.5cm]{geometry}
+\usepackage{amsmath,amssymb}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{siunitx}
+\usepackage{xcolor}
+\usepackage[numbers,sort&compress]{natbib}
+\usepackage[hidelinks]{hyperref}
+
+\graphicspath{{figures/}}
+
+% Numbers that appear in more than one place. Defining them once means a
+% re-run updates every mention, rather than leaving one stale figure in the
+% abstract to be found by a referee.
+\newcommand{\deficitHigh}{2.20}          % MSE high-band deficit, dB
+\newcommand{\correction}{0.42}           % AWWL's spectral correction, dB
+\newcommand{\boostValue}{0.346}          % FID gained by applying it post hoc
+\newcommand{\boostCI}{0.015}
+\newcommand{\shortfall}{0.79}            % FID short of its own prediction
+\newcommand{\fidMSE}{18.460}
+\newcommand{\fidAWWL}{18.901}
+\newcommand{\fidMSEboost}{18.114}
+\newcommand{\fidAWWLboost}{18.568}
+
+% Open questions, visible in the draft and impossible to forget at submission.
+\newcommand{\todo}[1]{\textcolor{red}{\textbf{[TODO: #1]}}}
+\newcommand{\pending}[1]{\textcolor{blue}{\textbf{[PENDING: #1]}}}
+
+\title{Frequency-Aware Diffusion Losses Pay More Than They Buy}
+
+\author{%
+  \todo{author list; declare the CITA 2026 conference version here}%
+}
+\date{Draft --- \today}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+\input{sections/abstract}
+\end{abstract}
+
+\input{sections/introduction}
+\input{sections/related}
+\input{sections/background}
+\input{sections/family}
+\input{sections/confound}
+\input{sections/protocol}
+\input{sections/replication}
+\input{sections/results}
+\input{sections/mechanism}
+\input{sections/worth}
+\input{sections/generality}
+\input{sections/discussion}
+\input{sections/limitations}
+\input{sections/conclusion}
+
+\bibliographystyle{plainnat}
+\bibliography{refs}
+
+\end{document}

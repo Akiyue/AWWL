@@ -1,0 +1,58 @@
+\section{The mechanism works}
+\label{sec:mechanism}
+
+\begin{table}[t]
+\centering
+\caption{Signed deviation from the real radial spectrum in decibels; negative
+means too little energy. The static ablation is indistinguishable from MSE.}
+\label{tab:bands}
+\begin{tabular}{lrrr}
+\toprule
+Configuration & Low & Mid & High \\
+\midrule
+MSE & $-0.36$ & $-0.80$ & $-2.20$ \\
+Static wavelet ($p{=}0$) & $-0.35$ & $-0.79$ & $-2.23$ \\
+Frequency-aware & $-0.31$ & $-0.56$ & $\mathbf{-1.79}$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=0.85\linewidth]{spectrum.png}
+\caption{Deviation from the real spectrum against normalised frequency. The
+MSE and static-wavelet curves coincide across the entire axis: the wavelet
+decomposition on its own changes nothing. Only the time-dependent schedule
+separates from them, and the gap widens with frequency.}
+\label{fig:spectrum}
+\end{figure}
+
+Table~\ref{tab:bands} and Figure~\ref{fig:spectrum} establish three things.
+
+The premise holds: the deficit is roughly sixfold worse at high frequency than
+at low. The objective's improvement is largest there in absolute terms
+(\SI{0.41}{\decibel} against \SI{0.05}{\decibel} at low frequency), so the
+correction lands where the method says it should. We state this precisely: the
+improvement is \emph{broadband with a high-frequency tilt}, not an exclusively
+high-frequency correction --- the proportional gain is largest in the mid band,
+and a referee will recompute.
+
+The wavelet decomposition contributes nothing. The static ablation, which keeps
+the decomposition and removes only the dependence on $\sigma$, overlaps MSE
+across the whole frequency axis. The temporal schedule is the entire effect.
+The correction also survives the protocol of \S\ref{sec:confound}
+($p = 0.0056$), so it is a genuine frequency effect rather than the timestep
+confound in disguise.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{compare.png}
+\caption{Samples from identical initial noise, one row per objective. A
+\SI{0.4}{\decibel} high-frequency change at $32\times32$ is below the visible
+threshold.}
+\label{fig:compare}
+\end{figure}
+
+Finally, the correction is not visible. Figure~\ref{fig:compare} pairs samples
+on their initial latent, so any difference would be attributable to the
+objective; none is apparent.

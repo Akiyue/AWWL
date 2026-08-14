@@ -1,0 +1,44 @@
+\section{Introduction}
+\label{sec:intro}
+
+Samples from diffusion models are spectrally deficient, and measurably so. On
+CIFAR-10 the radial power spectrum of DDPM samples sits \SI{0.36}{\decibel}
+below that of real images at low frequency and \deficitHigh~\si{\decibel} below
+at high frequency---a sixfold tilt with frequency
+(\S\ref{sec:mechanism}). The observation is not new
+\citep{durall2020watch,dzanic2020fourier,schwarz2021frequency}, and it has
+motivated a family of training objectives that weight wavelet or Fourier
+sub-bands of the loss, often on a schedule tied to the diffusion noise level
+\citep{jiang2021focal,phung2023wavelet,huang2024wavedm}.
+
+The premise is sound. This paper asks whether the remedy works, and---when it
+does not---why, in terms precise enough to apply to the family rather than to
+one implementation.
+
+\paragraph{Contributions.}
+\begin{enumerate}
+  \item An analytic characterisation of the objective family: on an
+    orthonormal basis, sub-band weighting reallocates a fixed error budget and
+    adds no information (\S\ref{sec:family}).
+  \item A confound in the standard weighting, which is simultaneously a
+    timestep reweighting, and a protocol that separates the two
+    (\S\ref{sec:confound}).
+  \item A five-seed audit showing the mechanism works while every metric
+    stays flat (\S\ref{sec:replication}, \S\ref{sec:mechanism}).
+  \item A direct measurement of what the correction is worth, and the finding
+    that the trained objective falls \shortfall~FID short of it
+    (\S\ref{sec:worth}).
+  \item Two measurement hazards that each reversed a conclusion mid-study and
+    that generalise beyond this paper (\S\ref{sec:replication},
+    \S\ref{sec:worth}).
+\end{enumerate}
+
+\paragraph{Relation to a prior conference version.}
+The objective audited here was introduced in a conference paper by a subset of
+the present authors \citep{thao2026awwl}, which reported gains on CIFAR-10 and
+on subject-driven fine-tuning from single runs. This paper is not an extension
+of that work in the usual sense: it re-evaluates those claims under seed
+replication and does not reproduce them. We report the disagreement in full,
+including two measurement errors of our own that had to be corrected before the
+comparison could be trusted.
+\todo{confirm the target venue's policy on extensions that revise a prior result}

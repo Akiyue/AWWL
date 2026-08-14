@@ -1,0 +1,79 @@
+\section{Results}
+\label{sec:results}
+
+All tables in this section are generated directly from the results ledger by
+\texttt{scripts/make\_tables.py}; none of the numbers are transcribed. Arms
+averaged over fewer than five seeds carry a superscript.
+
+% Generated tables. \IfFileExists keeps the draft building on a machine that
+% has the manuscript but not the sweep output.
+\IfFileExists{tables/full.tex}{\input{tables/full}}{%
+  \begin{table}[t]\centering
+  \fbox{\parbox{0.8\linewidth}{\centering\vspace{4mm}
+  \textbf{tables/full.tex not built}\\[1mm]
+  run \texttt{python scripts/make\_tables.py}\vspace{4mm}}}
+  \caption{Full results across objectives and metrics.}\label{tab:full}
+  \end{table}}
+
+% The fallback carries the label as well as the box: without it every \ref to
+% the table dangles, and a dangling reference is easy to stop noticing.
+\IfFileExists{tables/compare_fid.tex}{\input{tables/compare_fid}}{%
+  \begin{table}[t]\centering
+  \fbox{\parbox{0.8\linewidth}{\centering\vspace{4mm}
+  \textbf{tables/compare\_fid.tex not built}\\[1mm]
+  run \texttt{python scripts/make\_tables.py}\vspace{4mm}}}
+  \caption{Paired comparison against MSE on FID.}\label{tab:compare-fid}
+  \end{table}}
+
+Table~\ref{tab:full} reports every objective on every metric;
+Table~\ref{tab:compare-fid} gives the paired comparison against MSE. Three
+readings matter.
+
+\paragraph{The published objective is not better on any metric.}
+Its FID, Inception Score and KID all sit on the wrong side of the baseline, and
+none of the three differences clears significance. The point estimates are
+consistent with each other in sign, which is worth more than any of them
+individually: three metrics computed from two different feature pipelines agree
+on the direction.
+
+\paragraph{The ablations that were supposed to isolate the mechanism make it
+worse, significantly.} Both normalised variants and the literal reading of the
+published equation are significantly worse than MSE after correction, while the
+published form itself is not distinguishable from MSE. The ordering is
+informative: the closer the objective gets to being \emph{purely} a frequency
+weighting, the worse it performs. What keeps the published form competitive is
+the timestep reweighting it performs incidentally (\S\ref{sec:confound}).
+
+\paragraph{Seed variance dominates the differences the literature reports.}
+The standard deviation of FID across five seeds of an identical configuration
+is \num{0.21} for the baseline. Improvements reported in this area are
+routinely smaller than that. Any single-run comparison at this scale is
+uninformative regardless of which way it happens to fall, which is the
+methodological point of \citet{bouthillier2021accounting} instantiated for
+diffusion training.
+
+\subsection{Convergence}
+
+The natural fallback for an objective that does not improve final quality is
+that it reaches a given quality sooner. It does not: FID is worse at every
+evaluated checkpoint (\num{59.9} against \num{52.4} at epoch~39, \num{36.9}
+against \num{33.9} at epoch~79, and so on to epoch~199). The gap narrows as
+training proceeds but never closes or reverses.
+
+\subsection{Exponential moving averaging}
+
+EMA is reported as its own configuration because it is standard practice and
+the published runs omit it, so mixing the two would confound the comparison.
+It shifts both arms by less than the seed variance and leaves their ordering
+unchanged, which is expected: at a decay of \num{0.9999} over
+\num{78200} steps the shadow copy averages roughly the last \num{10000} steps,
+by which point the iterate is moving slowly.
+
+\IfFileExists{tables/compare_is.tex}{\input{tables/compare_is}}{%
+  \begin{table}[t]\centering
+  \fbox{\parbox{0.8\linewidth}{\centering\vspace{4mm}
+  \textbf{tables/compare\_is.tex not built}\\[1mm]
+  run \texttt{python scripts/make\_tables.py}\vspace{4mm}}}
+  \caption{Paired comparison against MSE on Inception Score.}
+  \label{tab:compare-ismean}
+  \end{table}}

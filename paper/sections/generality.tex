@@ -1,0 +1,17 @@
+\section{Generality}
+\label{sec:generality}
+
+\pending{DreamBooth, five seeds --- 25/25 trained, evaluation rerunning}
+\pending{tier-4 learned weightings: uncertainty-conditioned, GradNorm,
+per-subband, spatial, learned basis}
+\pending{second resolution (CelebA-64) --- required for a top-tier claim}
+\pending{second architecture (latent diffusion or DiT) --- required likewise}
+
+A learned weighting is the natural objection to \S\ref{sec:confound}: perhaps
+the hand-designed schedule is simply the wrong one. We therefore also train
+objectives whose weights are learned rather than specified---an
+uncertainty-weighted variant conditioned on $\sigma$, which removes $\alpha$
+and $p$ entirely, and a GradNorm balancer over the sub-bands. Either outcome is
+informative. A learned weighting that improves the spectrum further while FID
+stays flat confirms the accounting of \S\ref{sec:worth} on an independent
+mechanism; one that succeeds would be this paper's positive result.

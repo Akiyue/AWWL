@@ -1,0 +1,82 @@
+\section{Discussion}
+\label{sec:discussion}
+
+\subsection{A mechanism can be real and still not pay}
+
+The result that organises this paper is not that a frequency-aware objective
+failed. It is that the objective \emph{succeeded} at the thing it was designed
+to do and lost anyway. It closes \correction~\si{\decibel} of a
+\deficitHigh~\si{\decibel} high-frequency deficit; the correction is
+attributable to the component its design credits, since removing the temporal
+schedule removes the whole effect (\S\ref{sec:mechanism}); and the correction
+is worth $\boostValue$~FID when applied in isolation (\S\ref{sec:worth}). The
+objective nonetheless lands \shortfall~FID short of what that predicts.
+
+This is a different failure from the one usually reported. A method that does
+not work is uninteresting; a method that does exactly what it claims and is
+still outperformed by its baseline says something about the relationship
+between the mechanism and the goal. Here the relationship is that the mechanism
+is not free: reallocating the error budget towards high frequencies means
+allocating less of it everywhere else, and by Eq.~\ref{eq:parseval} that is
+precisely what the reallocation must do. What the objective gives up is not
+visible in the spectrum, because the spectrum is the one thing it was
+optimising.
+
+\subsection{Post-processing as a baseline}
+
+That the same spectral correction can be obtained by a Fourier operation on
+finished samples --- outperforming the trained objective --- is not offered as
+a method. It is offered as a control that this literature does not use and, we
+think, should.
+
+Any objective whose stated mechanism is a change to an image statistic admits
+the same test: apply that change to the baseline's outputs directly and see
+what it is worth. If the trained method does not clear the post-processed
+baseline, the training-time machinery is not paying for itself, whatever the
+ablations show. The test is cheap, it requires no additional training, and it
+would have flagged the objective audited here before any of the sweeps in
+\S\ref{sec:results} were run.
+
+\subsection{What the metrics can and cannot register}
+
+Our two measurement hazards share a structure: in both, a quantity was
+estimated correctly under one set of conditions and read as though it held
+under another.
+
+The KID reversal (\S\ref{sec:replication}) is the familiar version --- a
+bespoke estimator, correct in its own terms, disagreeing in sign with the
+standard one. It is worth reporting because the disagreement was the study's
+only positive result, and because the failure is invisible unless a second
+implementation is run.
+
+The calibration error (\S\ref{sec:worth}) is subtler and, we suspect, more
+common. Measuring how much FID responds to a perturbation of real images
+measures the response \emph{at the minimum}, where the first-order term
+vanishes by construction and the metric is quadratically insensitive. It is a
+natural experiment to design and it gives an answer roughly thirty times too
+small. Sensitivity has to be probed where the model actually sits. We report
+this because we drew the wrong conclusion from it first, and because the same
+design suggests itself to anyone asking the same question.
+
+Neither hazard is an argument against these metrics. Both are arguments for
+asking what a result \emph{should} have been before deciding what it means.
+
+\subsection{Implications for frequency-aware training}
+
+We audit one objective, and we are careful not to generalise the empirical
+result past it. But three parts of the analysis are not specific to it.
+
+Equation~\ref{eq:parseval} constrains the whole family: on an orthonormal
+basis, sub-band weighting redistributes a fixed budget, so every gain is
+someone else's loss and the question is always whether the trade is favourable.
+The confound of \S\ref{sec:confound} arises whenever a weighting depends on
+$\sigma_t$ without its total being held fixed, which is the common case; the
+protocol that separates the axes costs nothing to adopt. And the
+post-processing control of \S\ref{sec:worth} applies to any method that names
+the statistic it intends to change.
+
+Whether other members of the family clear these bars is an empirical question
+we have not answered. We would expect the answer to depend on resolution: at
+$32\times32$ the high-frequency band carries little of the signal that
+Inception features encode, and the trade a frequency-aware objective makes may
+look different where it carries more.

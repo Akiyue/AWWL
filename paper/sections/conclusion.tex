@@ -1,0 +1,17 @@
+\section{Conclusion}
+\label{sec:conclusion}
+
+A frequency-aware diffusion objective can do exactly what it was designed to
+do---measurably correcting a real spectral deficiency, through the component
+its design credits---and still lose to the baseline it was meant to improve
+on. The correction is worth something, and we measure what: $\boostValue$~FID.
+The objective delivers it and gives back three times as much elsewhere, so that
+a post-process obtaining the same correction for free outperforms it.
+
+The broader lesson is about attribution. It is not enough to show that a method
+changes the quantity it targets; the change must be priced against what the
+evaluation metric can register, and against what the method costs to obtain it.
+Both of the measurement hazards we report were caught only because we asked
+what a result \emph{should} have been before accepting what it was.
+
+\todo{revisit once the learned-weighting arms report}

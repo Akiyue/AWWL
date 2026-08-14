@@ -1,0 +1,94 @@
+\section{Related work}
+\label{sec:related}
+
+Four lines of work converge on the question this paper asks: whether a
+measurable spectral correction translates into a measurable improvement.
+
+\subsection{Spectral characterisation of generative models}
+
+Generated images differ from real ones in their Fourier statistics, and the
+difference is systematic. \citet{durall2020watch} traced a high-frequency
+deficit in GAN samples to the up-convolution operators in the decoder;
+\citet{dzanic2020fourier} showed the discrepancy is consistent enough across
+architectures to serve as a detection signal, and \citet{chandrasegaran2021closer}
+examined how much of it is intrinsic to the model rather than an artefact of
+the last upsampling layer. \citet{schwarz2021frequency} attributed part of the
+bias to the generator's spectral properties rather than to the objective.
+
+This literature establishes the phenomenon and, largely implicitly, a
+motivation: because the spectrum is wrong, correcting it should help. That
+implication is rarely tested directly, and it is what \S\ref{sec:worth} puts a
+number on.
+
+\subsection{Frequency-aware objectives and architectures}
+
+Two families respond to the observation. The first modifies the
+\emph{objective}. Focal Frequency Loss \citep{jiang2021focal} weights Fourier
+components by how badly they are currently reconstructed, dynamically
+emphasising the hard ones. Wavelet variants replace the Fourier basis with a
+multi-resolution one, gaining spatial localisation: WaveDM \citep{huang2024wavedm}
+applies wavelet supervision to restoration, and the objective audited here
+weights wavelet sub-bands on a schedule tied to $\sigma_t$.
+
+The second modifies the \emph{architecture} or the sampling path. WaveDiff
+\citep{phung2023wavelet} moves the diffusion process itself into the wavelet
+domain, primarily for speed; FreeU \citep{si2024freeu} rebalances the
+backbone and skip contributions inside the U-Net at inference, which changes
+the frequency content of samples without touching training.
+
+Reported gains in this family are typically small in absolute terms --- often
+under a point of FID --- and typically reported from single runs. Our results
+suggest that at that scale the question of whether an effect is present at all
+requires the seed variance to be quantified first, and that even a genuine
+spectral correction can be outweighed by what obtaining it costs.
+
+\subsection{Timestep reweighting}
+
+A parallel line reweights the loss across the noise schedule rather than across
+frequency. \citet{nichol2021improved} resample timesteps by loss magnitude;
+P2 \citep{choi2022perception} up-weights the region of the schedule where
+perceptually relevant content is formed; Min-SNR \citep{hang2023efficient}
+treats the schedule as a multi-task problem and clamps the per-timestep weight
+by signal-to-noise ratio; \citet{karras2022elucidating} recast the whole design
+space, weighting included, and \citet{kingma2021variational} derive a weighting
+from the variational bound.
+
+These two axes --- frequency and timestep --- are usually presented as
+orthogonal. \S\ref{sec:confound} shows they are not orthogonal in the
+formulation we audit: its frequency parameter simultaneously imposes a timestep
+schedule correlated with Min-SNR at $|r| = 0.92$, so a result attributed to
+frequency balance may belong to the other axis entirely. The multi-task framing
+also supplies the natural alternative to hand-designed weights --- uncertainty
+weighting \citep{kendall2018multi} and GradNorm \citep{chen2018gradnorm} --- which
+\S\ref{sec:generality} evaluates.
+
+\subsection{What the metrics can see}
+
+A separate literature questions whether these metrics register what we assume.
+\citet{barratt2018note} catalogued the Inception Score's failure modes;
+\citet{chong2020effectively} showed FID is biased at finite sample size in a way
+that depends on the model being evaluated; \citet{kynkaanniemi2023role}
+demonstrated that FID responds strongly to the ImageNet class distribution of
+the generated set, a property unrelated to image quality; and
+\citet{stein2023exposing} found that the standard metrics rank diffusion models
+against GANs in ways human raters do not reproduce.
+
+Our contribution to this line is quantitative and specific: we measure how much
+FID moves for a known spectral perturbation, and find that the answer depends
+by more than an order of magnitude on whether the calibration is performed at
+the metric's minimum or at a model's actual operating point
+(\S\ref{sec:worth}).
+
+\subsection{Replication and variance}
+
+Finally, the practice this paper follows. \citet{bouthillier2021accounting}
+showed that benchmark conclusions in machine learning frequently do not survive
+proper accounting for sources of variance, seeds among them, and recommend
+reporting comparisons with the variance made explicit. Differences of the size
+routinely reported in the frequency-aware literature fall well inside the seed
+variance we measure, which is the methodological premise of
+\S\ref{sec:protocol}.
+
+\todo{sweep 2024--2026 venues for recent frequency-aware diffusion work; this
+section was drafted without literature access and will be missing the newest
+entries}

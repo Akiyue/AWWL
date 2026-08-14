@@ -1,0 +1,19 @@
+\section{Limitations}
+\label{sec:limitations}
+
+\begin{itemize}
+  \item A single architecture and dataset until \S\ref{sec:generality} lands.
+    Absence of an effect at $32\times32$ does not establish absence at
+    resolutions where high-frequency content carries more of the signal.
+  \item Sampling is DDIM-100 throughout. The comparison is internally
+    consistent, but a sampler with fewer steps produces smoother output, which
+    is precisely where a frequency-aware objective should have its advantage.
+    \pending{DDPM-1000 check}
+  \item The spectral distance is computed by a hand-written radial FFT. Two
+    independent implementations here agree, which is reassuring and not proof
+    ---and after \S\ref{sec:replication} we are in no position to treat our own
+    implementations as authoritative.
+  \item The Fourier post-process of \S\ref{sec:worth} leaves a spatial
+    signature unlike a model's under-production, so the value it assigns to the
+    correction is an estimate rather than an exact accounting.
+\end{itemize}

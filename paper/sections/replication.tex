@@ -1,0 +1,45 @@
+\section{The metrics do not move}
+\label{sec:replication}
+
+\begin{table}[t]
+\centering
+\caption{CIFAR-10, 200 epochs, five seeds. No metric favours the
+frequency-aware objective; all three point the other way.}
+\label{tab:replication}
+\begin{tabular}{lrr}
+\toprule
+Metric & $\Delta$ vs.\ MSE & $p$ (Holm) \\
+\midrule
+FID $\downarrow$ & $+0.44$ (worse) & $0.43$ \\
+IS $\uparrow$ & $-0.059$ (worse) & $0.44$ \\
+KID $\downarrow$ & $+0.0003$ (worse) & $0.77$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Table~\ref{tab:replication} reports the audit. Two details deserve emphasis.
+
+First, the conference version reports an Inception Score gain of $+0.17$. Our
+95\% confidence interval on that difference is $[-0.171, +0.054]$, which
+\emph{excludes} the reported value. The data do not merely fail to confirm the
+gain; they are inconsistent with it.
+
+Second, convergence is \emph{slower} at every checkpoint (FID $59.9$ vs.\
+$52.4$ at epoch 39), which closes the natural fallback claim of reaching a
+given quality with less compute.
+
+\paragraph{Equation versus code.} Implementing Eq.~\ref{eq:family} exactly as
+the conference version writes it --- summing the three detail bands rather than
+averaging them --- costs $+2.63$~FID ($p = 0.0004$). The published equation and
+the released implementation are different objectives, and the equation is much
+the worse of the two. A reader reimplementing from the paper obtains something
+worse than the baseline.
+
+\paragraph{Measurement hazard: a non-standard estimator reversed the sign.}
+A hand-written polynomial-kernel KID showed the objective \emph{better}
+($p = 0.028$, uncorrected), and it was the only positive result in the study.
+The same quantity computed by an established library shows it \emph{worse}.
+Because both FID and KID measure distributional distance in the same Inception
+feature space, the disagreement was itself the signal that something was wrong.
+We report the library value throughout, and recommend that any headline claim
+resting on a bespoke estimator be cross-checked before it is believed.

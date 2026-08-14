@@ -1,0 +1,44 @@
+\section{A confound, and a protocol}
+\label{sec:confound}
+
+The weighting we audit takes the form
+\begin{equation}
+  w_{\mathrm{LL}}(\sigma) = \frac{\alpha\,\sigma^{p}}{\sigma^{p} + (1-\sigma)^{p}},
+  \qquad
+  w_{\mathrm{det}}(\sigma) = \frac{(1-\alpha)(1-\sigma)^{p}}{\sigma^{p} + (1-\sigma)^{p}} .
+  \label{eq:weights}
+\end{equation}
+
+The two share a denominator but do \emph{not} sum to a constant: the total runs
+from $\alpha$ as $\sigma \to 1$ to $1-\alpha$ as $\sigma \to 0$. So $\alpha$
+sets the frequency balance \emph{and} rescales gradient magnitude across the
+noise schedule. Measured against the Min-SNR-$\gamma$ curve
+\citep{hang2023efficient}, the correlation is $r = +0.92$ at $\alpha = 0.8$ and
+$r = -0.92$ at $\alpha = 0.2$: the two reported optima are opposite timestep
+schedules, not merely different frequency balances.
+
+\paragraph{Protocol.} To vary only the shape, hold $\sum_b w_b$ constant
+\emph{at its original mean} of $0.5$. Normalising naively to $1$ doubles the
+mean gradient magnitude and confounds the ablation with a $2\times$ learning
+rate --- a mistake we made first and caught by measuring.
+
+\begin{table}[t]
+\centering
+\caption{Isolating the frequency component makes matters worse. CIFAR-10,
+five seeds, epoch 199; $p$ is Holm-corrected across the comparison family.}
+\label{tab:confound}
+\begin{tabular}{lrr}
+\toprule
+Configuration & $\Delta$ FID vs.\ MSE & $p$ (Holm) \\
+\midrule
+Published weighting & $+0.44$ & $0.43$ \\
+Normalised to $1$ (confounded, $2\times$ LR) & $+1.15$ & $0.045$ \\
+\textbf{Budget held fixed} & $\mathbf{+1.34}$ & $\mathbf{0.003}$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Table~\ref{tab:confound} settles the question: separated from the timestep
+effect, the frequency weighting is significantly \emph{harmful}. What residual
+appeal the published form has comes from the timestep reweighting riding along
+with it.

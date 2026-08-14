@@ -1,0 +1,24 @@
+Diffusion models under-produce high spatial frequencies, and a growing family
+of training objectives sets out to correct this by weighting wavelet or Fourier
+sub-bands of the loss. We audit one such objective over five seeds and find
+that although it does exactly what it claims---closing \correction~dB of a
+\deficitHigh~dB high-frequency deficit on CIFAR-10---it is no better than plain
+MSE on FID, Inception Score or KID, and slightly worse on all three.
+
+We then quantify what that correction should have been worth. Applying the
+identical correction to the baseline's own samples as a Fourier post-process
+improves FID by $\boostValue \pm \boostCI$, so the trained objective ends
+\shortfall~FID short of what its own mechanism predicts: it buys a real
+spectral improvement and pays for it several times over elsewhere. A twenty-line
+post-process on the baseline outperforms the trained objective by that same
+margin.
+
+We further show that the published weighting conflates frequency balance with a
+Min-SNR-style timestep reweighting ($|r| = 0.92$); isolating the frequency
+component while holding the gradient budget fixed makes results significantly
+worse ($+1.34$~FID, $p = 0.003$). Finally we report two measurement hazards that
+reversed conclusions during this study: a hand-written KID estimator that
+inverted the sign of the only positive result, and the observation that
+calibrating metric sensitivity on real images measures it at a minimum where it
+is quadratically insensitive, understating operating-point sensitivity roughly
+thirtyfold.

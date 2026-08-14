@@ -1,0 +1,20 @@
+\section{Experimental protocol}
+\label{sec:protocol}
+
+Every configuration is trained with five seeds; we report mean $\pm$ standard
+deviation with a 95\% confidence interval, and compare with a paired-by-seed
+$t$-test under Holm--Bonferroni correction across the comparison family.
+Pairing removes the variance the seed itself contributes and is markedly more
+sensitive at $N=5$ than an unpaired test.
+
+We also report a Wilcoxon signed-rank test, but as a direction check only: its
+smallest attainable two-sided $p$ is $2/2^{N} = 0.0625$ at $N=5$, so it cannot
+clear $\alpha = 0.05$ and must not be read as a verdict.
+
+Sampling uses DDIM \citep{song2021denoising} with 100 steps and 10\,000 samples,
+identical across arms; FID via \texttt{clean-fid} \citep{parmar2022aliased}, IS
+and KID via \texttt{torch-fidelity}. Spectra are reported in decibels
+($20\log_{10}|F|$). Exponential moving averaging is reported as its own
+configuration rather than mixed in.
+
+\pending{DDPM-1000 sampler sensitivity check --- the one open threat to the null}

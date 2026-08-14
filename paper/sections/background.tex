@@ -1,0 +1,55 @@
+\section{Background}
+\label{sec:background}
+
+\subsection{Diffusion training objectives}
+
+A denoising diffusion model \citep{ho2020denoising} corrupts a datum $x_0$ by
+$x_t = \sqrt{\bar\alpha_t}\,x_0 + \sqrt{1-\bar\alpha_t}\,\epsilon$ with
+$\epsilon \sim \mathcal{N}(0, I)$, and trains a network
+$\hat\epsilon_\theta(x_t, t)$ to recover $\epsilon$ under
+\begin{equation}
+  \mathcal{L}_{\mathrm{simple}}
+  = \mathbb{E}_{x_0,\epsilon,t}\big[\|\hat\epsilon_\theta(x_t,t) - \epsilon\|_2^2\big].
+  \label{eq:simple}
+\end{equation}
+We write $\sigma_t = \sqrt{1-\bar\alpha_t} \in (0,1)$ for the noise magnitude,
+so $\sigma_t \to 1$ is the high-noise end of the schedule.
+
+Equation~\ref{eq:simple} is a uniformly weighted regression: every timestep and
+every spatial frequency contributes in proportion to its squared error. Both
+uniformities have been questioned, and the two lines of work are usually
+pursued separately --- a separation this paper argues is not maintained in
+practice (\S\ref{sec:confound}).
+
+\subsection{Wavelet sub-bands}
+
+A one-level 2-D discrete wavelet transform \citep{mallat1989theory} splits an
+image into an approximation band $\mathrm{LL}$ and three detail bands
+$\mathrm{LH}$, $\mathrm{HL}$, $\mathrm{HH}$ carrying horizontal, vertical and
+diagonal high-frequency content, each at half resolution. Iterating on
+$\mathrm{LL}$ gives a multi-level decomposition.
+
+Two properties matter here. The transform is \emph{linear}, so applying it to a
+prediction and a target and differencing is identical to applying it to their
+residual --- the decomposition acts on the error, not on image content. And for
+an orthonormal family (Haar, Daubechies, Symlets) it is \emph{energy
+preserving}, which is what makes Eq.~\ref{eq:parseval} exact and bounds what
+any sub-band weighting can achieve.
+
+\subsection{Evaluation}
+
+Fréchet Inception Distance \citep{heusel2017gans} fits Gaussians to Inception-V3
+features of real and generated sets and reports their Fréchet distance;
+Kernel Inception Distance \citep{binkowski2018demystifying} replaces this with
+an unbiased polynomial-kernel MMD in the same feature space; Inception Score
+\citep{salimans2016improved} uses only the generated set. Precision and recall
+\citep{kynkaanniemi2019improved,naeem2020reliable} separate fidelity from
+coverage.
+
+All of these are known to be sensitive to implementation details that are not
+part of their definition: resizing and compression
+\citep{parmar2022aliased}, finite-sample bias \citep{chong2020effectively},
+and the particular ImageNet classes the feature extractor happens to encode
+\citep{kynkaanniemi2023role}. \S\ref{sec:replication} adds one more to that
+list, and \S\ref{sec:worth} shows that the operating point at which a metric's
+sensitivity is measured changes the answer by more than an order of magnitude.

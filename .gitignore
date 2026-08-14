@@ -40,7 +40,20 @@ Cita_2025_Hanu.pdf
 # clean-fid caches its InceptionV3 weights into the CWD on first use
 inception-2015-12-05.pt
 
-# Paper drafts and analysis notes: kept local until submission
-docs/PAPER_OUTLINE.md
+# Paper drafts and analysis notes. Tracked now that the repository is
+# private; make it public again only after submission, and check what is
+# in here before you do.
 AWWL_*.md
-paper/
+
+# LaTeX build products, not sources
+paper/main.pdf
+paper/tables/
+paper/figures/
+paper/*.aux
+paper/*.bbl
+paper/*.blg
+paper/*.log
+paper/*.out
+paper/*.fls
+paper/*.fdb_latexmk
+paper/*.synctex.gz
