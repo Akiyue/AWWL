@@ -94,8 +94,9 @@ This needs no GPU and settles three things:
    simultaneously a frequency balance *and* a global timestep reweighting.
 
    The size of that second effect is what makes it a problem. Measured against
-   the Min-SNR (γ=5) curve, the script reports **r = +0.92 at α=0.8 and
-   r = −0.92 at α=0.2**: high α tracks Min-SNR (down-weighting low-noise,
+   the Min-SNR (γ=5) curve over the σ of all 1000 training timesteps, the
+   script reports **r = +0.82 at α=0.8 and
+   r = −0.82 at α=0.2**: high α tracks Min-SNR (down-weighting low-noise,
    high-SNR steps), low α is its mirror image (up-weighting them). The two
    published optima are therefore not just different frequency balances —
    they are *opposite timestep schedules*.

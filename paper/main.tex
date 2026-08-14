@@ -25,7 +25,7 @@
 % Numbers that appear in more than one place. Defining them once means a
 % re-run updates every mention, rather than leaving one stale figure in the
 % abstract to be found by a referee.
-\newcommand{\deficitHigh}{2.20}          % MSE high-band deficit, dB
+\newcommand{\deficitHigh}{2.22}          % MSE high-band deficit, dB
 \newcommand{\correction}{0.42}           % AWWL's spectral correction, dB
 \newcommand{\boostValue}{0.346}          % FID gained by applying it post hoc
 \newcommand{\boostCI}{0.015}
@@ -38,6 +38,22 @@
 % Open questions, visible in the draft and impossible to forget at submission.
 \newcommand{\todo}[1]{\textcolor{red}{\textbf{[TODO: #1]}}}
 \newcommand{\pending}[1]{\textcolor{blue}{\textbf{[PENDING: #1]}}}
+
+% A figure that degrades to a visible placeholder rather than a build failure,
+% so the manuscript compiles on a machine that has the text but not the sweep
+% output. The label is carried by both branches: a missing figure must not
+% silently turn every \ref to it into a dangling one.
+% #1 width fraction  #2 file  #3 caption  #4 label
+\newcommand{\guardedfigure}[4]{%
+  \begin{figure}[t]\centering
+  \IfFileExists{figures/#2}{\includegraphics[width=#1\linewidth]{#2}}{%
+    \fbox{\parbox{0.8\linewidth}{\centering\vspace{6mm}
+    % \detokenize so a filename containing an underscore prints as text
+    % instead of failing the build with "Missing $ inserted".
+    \textbf{\detokenize{figures/#2} not built}\\[1mm]
+    run \texttt{awwl figures}\vspace{6mm}}}}
+  \caption{#3}\label{#4}
+  \end{figure}}
 
 \title{Frequency-Aware Diffusion Losses Pay More Than They Buy}
 

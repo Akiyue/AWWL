@@ -34,7 +34,17 @@ Table~\ref{tab:worth}, and the band analysis of \S\ref{sec:mechanism} obtained
 by a different route.
 
 Applying that correction post hoc is worth $\boostValue \pm \boostCI$~FID. The
-accounting follows immediately.
+accounting follows immediately, and Fig.~\ref{fig:worth} states it in one
+picture.
+
+\guardedfigure{0.95}{correction_value.png}{%
+  What the spectral correction is worth, and what the objective gets for it.
+  Each arm is plotted at its own high-band deficit and FID; the arrow runs to
+  the same samples after the Fourier post-process, so its length \emph{is} the
+  value of the correction. The baseline's post-processed spectrum lands almost
+  exactly where the trained objective's does unaided, which makes the vertical
+  gap between them very nearly a controlled comparison --- the same spectrum,
+  \shortfall~FID apart. Lower and left are both better.}{fig:worth}
 
 \begin{table}[t]
 \centering

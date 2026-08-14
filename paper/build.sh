@@ -24,8 +24,9 @@ mkdir -p "${HERE}/figures"
 # `awwl spectrum` writes beside the sweep it read (runs/phase0/), while
 # compare-samples defaults to runs/. Search both rather than silently keeping
 # a stale copy when the newest figure lands in the other directory.
-for f in spectrum compare curriculum; do
-  for src in "${ROOT}/runs/phase0/${f}.png" "${ROOT}/runs/${f}.png"; do
+# `awwl figures` writes the rest into runs/figures/.
+for f in spectrum compare curriculum weights effect_sizes correction_value convergence; do
+  for src in "${ROOT}/runs/phase0/${f}.png" "${ROOT}/runs/figures/${f}.png" "${ROOT}/runs/${f}.png"; do
     if [ -f "${src}" ]; then
       cp "${src}" "${HERE}/figures/${f}.png"
       echo "figure: ${f}.png  <- ${src#${ROOT}/}"

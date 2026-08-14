@@ -564,6 +564,66 @@ def compare_samples_cmd(
     typer.echo(f"wrote {figure}")
 
 
+@app.command("figures")
+def figures_cmd(
+    ledger: Path = typer.Option(Path("runs/phase0/results.jsonl"), "--ledger", "-l"),
+    out: Path = typer.Option(Path("runs/phase0"), "--out", help="Where the PNGs go."),
+    epoch: int = typer.Option(199, "--epoch"),
+    baseline: str = typer.Option("mse", "--baseline"),
+    boost_dir: Path = typer.Option(Path("runs/boost"), "--boost", help="scripts/boost_test.sh output."),
+    alpha: float = typer.Option(0.2, "--alpha", help="For the weighting-schedule figure."),
+    power: float = typer.Option(1.0, "--power"),
+) -> None:
+    """Generate the paper's argument figures from the ledger.
+
+    Each figure is skipped with a message if its inputs are absent, so this is
+    safe to run part-way through a sweep.
+    """
+    setup_logging("INFO")
+    from awwl.analysis.results import load_results
+    from awwl.plotting.paper_figures import (
+        parse_boost_tables,
+        plot_convergence,
+        plot_correction_value,
+        plot_effect_sizes,
+        plot_weight_schedule,
+    )
+
+    rows = load_results(ledger, kind="eval") if ledger.exists() else []
+    at_epoch = [r for r in rows if r.get("epoch") == epoch]
+    made: list[str] = []
+
+    def _try(name: str, fn):
+        try:
+            made.append(str(fn()))
+        except Exception as exc:
+            typer.echo(f"skipped {name}: {exc}")
+
+    if at_epoch:
+        _try("effect-sizes", lambda: plot_effect_sizes(
+            at_epoch, metric="fid", baseline=baseline, out_path=out / "effect_sizes.png"))
+        _try("convergence", lambda: plot_convergence(
+            rows, metric="fid", baseline=baseline, out_path=out / "convergence.png"))
+    else:
+        typer.echo(f"no eval rows at epoch {epoch}; skipping ledger-based figures")
+
+    _try("weight-schedule", lambda: plot_weight_schedule(
+        alpha=alpha, power=power, out_path=out / "weights.png"))
+
+    if boost_dir.is_dir():
+        arms = parse_boost_tables(boost_dir)
+        if arms:
+            _try("correction-value", lambda: plot_correction_value(
+                arms, out_path=out / "correction_value.png"))
+        else:
+            typer.echo(f"no parseable boost tables in {boost_dir}")
+    else:
+        typer.echo(f"no boost output at {boost_dir}; skipping the correction figure")
+
+    for path in made:
+        typer.echo(f"wrote {path}")
+
+
 @app.command("plot-curriculum")
 def plot_curriculum_cmd(
     run_dir: Path = typer.Option(..., "--run-dir", exists=True, help="Run folder with config.json."),

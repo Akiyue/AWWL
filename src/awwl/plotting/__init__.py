@@ -23,6 +23,13 @@ from awwl.plotting.curriculum import plot_run_curriculum, plot_weight_profile
 from awwl.plotting.grids import make_image_grid
 from awwl.plotting.loss_curve import LossCurveSpec, plot_loss_curves
 from awwl.plotting.paired_grid import paired_sample_grid
+from awwl.plotting.paper_figures import (
+    parse_boost_tables,
+    plot_convergence,
+    plot_correction_value,
+    plot_effect_sizes,
+    plot_weight_schedule,
+)
 from awwl.plotting.radar import RadarPlotSpec, RadarStyle, plot_radar
 from awwl.plotting.spectrum import plot_spectrum_deviation
 
@@ -34,11 +41,16 @@ __all__ = [
     "RadarStyle",
     "make_image_grid",
     "paired_sample_grid",
+    "parse_boost_tables",
     "plot_ablation",
+    "plot_convergence",
+    "plot_correction_value",
+    "plot_effect_sizes",
     "plot_dreambooth_comparison",
     "plot_loss_curves",
     "plot_radar",
     "plot_run_curriculum",
     "plot_spectrum_deviation",
     "plot_weight_profile",
+    "plot_weight_schedule",
 ]

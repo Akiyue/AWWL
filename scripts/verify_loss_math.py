@@ -152,7 +152,15 @@ def check_detail_reduction(*, wavelet: str, size: int, alpha: float, power: floa
 
 def check_weight_totals(*, alphas: list[float], power: float) -> str:
     """Tabulate w_LL + k·w_det against σ, and correlate it with Min-SNR."""
+    # The reported table uses round sigma values for legibility, but the
+    # correlation is computed over the sigma of every training timestep.
+    # It is sensitive to that choice: uniform-in-sigma gives 0.87 and the
+    # seven round values below give 0.92, neither of which is the grid the
+    # model is trained on.
+    from diffusers import DDPMScheduler
+
     sigmas = torch.tensor([0.01, 0.1, 0.25, 0.5, 0.75, 0.9, 0.99])
+    schedule = torch.sqrt(1.0 - DDPMScheduler(num_train_timesteps=1000).alphas_cumprod)
 
     header = "| σ | " + " | ".join(f"α={a}" for a in alphas) + " |"
     divider = "|---" * (len(alphas) + 1) + "|"
@@ -168,12 +176,13 @@ def check_weight_totals(*, alphas: list[float], power: float) -> str:
     # Min-SNR (gamma=5) as a function of the same sigma, for correlation.
     # SNR = alpha_bar / (1 - alpha_bar) and sigma = sqrt(1 - alpha_bar),
     # so SNR = (1 - sigma^2) / sigma^2.
-    snr = (1.0 - sigmas.pow(2)) / sigmas.pow(2)
+    snr = (1.0 - schedule.pow(2)) / schedule.pow(2)
     min_snr = torch.clamp(snr, max=5.0) / snr
 
     corr_lines = []
     for a in alphas:
-        c = _pearson(totals_by_alpha[a], min_snr)
+        total_on_schedule = AdaptiveWaveletLoss(alpha=a, power=power).weights_at(schedule)["total"]
+        c = _pearson(total_on_schedule, min_snr)
         corr_lines.append(f"| {a} | {c:+.4f} |")
 
     return "\n".join(
@@ -190,14 +199,15 @@ def check_weight_totals(*, alphas: list[float], power: float) -> str:
             "noise. At α=0.8 early timesteps receive 4× the gradient magnitude of late "
             "ones; at α=0.2 the ordering reverses.",
             "",
-            "Correlation of that total with the Min-SNR (γ=5) timestep weight:",
+            "Correlation of that total with the Min-SNR (γ=5) timestep weight,",
+            "over the σ of all 1000 training timesteps:",
             "",
             "| α | Pearson r |",
             "|---|---|",
             *corr_lines,
             "",
             "**Consequence.** α does two things at once, and the timestep effect is "
-            "large: |r| ≈ 0.92 against Min-SNR. High α (0.8, the DreamBooth optimum) "
+            "large: |r| ≈ 0.82 against Min-SNR. High α (0.8, the DreamBooth optimum) "
             "tracks Min-SNR — down-weighting low-noise/high-SNR steps. Low α (0.2, the "
             "CIFAR-10 optimum) is its mirror image, up-weighting exactly those steps. "
             "So the two published optima are not merely different frequency balances; "

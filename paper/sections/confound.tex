@@ -13,9 +13,21 @@ The two share a denominator but do \emph{not} sum to a constant: the total runs
 from $\alpha$ as $\sigma \to 1$ to $1-\alpha$ as $\sigma \to 0$. So $\alpha$
 sets the frequency balance \emph{and} rescales gradient magnitude across the
 noise schedule. Measured against the Min-SNR-$\gamma$ curve
-\citep{hang2023efficient}, the correlation is $r = +0.92$ at $\alpha = 0.8$ and
-$r = -0.92$ at $\alpha = 0.2$: the two reported optima are opposite timestep
-schedules, not merely different frequency balances.
+\citep{hang2023efficient} over the $\sigma_t$ of all $1000$ training timesteps,
+the correlation is $r = +0.82$ at $\alpha = 0.8$ and $r = -0.82$ at
+$\alpha = 0.2$: the two reported optima are opposite timestep schedules, not
+merely different frequency balances (Fig.~\ref{fig:weights}). The figure is
+sensitive to the grid --- a
+uniform grid in $\sigma$ gives $0.87$ --- so we quote it on the distribution
+training actually samples.
+
+\guardedfigure{0.95}{weights.png}{%
+  The published weighting at $\alpha = 0.2$, $p = 1$. The two band weights
+  (blue, orange) are what the objective is described as doing; their total
+  (black) is what it also does, and it is not constant. Plotted against the
+  Min-SNR-$\gamma$ curve (violet) with both normalised to unit mean, the total
+  is visibly a timestep schedule of the same family. Sampled at the $\sigma_t$
+  of the \num{1000} training timesteps.}{fig:weights}
 
 \paragraph{Protocol.} To vary only the shape, hold $\sum_b w_b$ constant
 \emph{at its original mean} of $0.5$. Normalising naively to $1$ doubles the

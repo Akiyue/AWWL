@@ -25,8 +25,15 @@ averaged over fewer than five seeds carry a superscript.
   \caption{Paired comparison against MSE on FID.}\label{tab:compare-fid}
   \end{table}}
 
+\guardedfigure{0.92}{effect_sizes.png}{%
+  Paired-by-seed difference from the MSE baseline on FID, with \SI{95}{\percent}
+  intervals; filled markers survive Holm correction. The ordering is the
+  result: the closer a variant comes to being purely a frequency weighting, the
+  further right it sits. Nothing lands left of the line.}{fig:effects}
+
 Table~\ref{tab:full} reports every objective on every metric;
-Table~\ref{tab:compare-fid} gives the paired comparison against MSE. Three
+Table~\ref{tab:compare-fid} gives the paired comparison against MSE, and
+Fig.~\ref{fig:effects} shows the same comparison as effect sizes. Three
 readings matter.
 
 \paragraph{The published objective is not better on any metric.}
@@ -58,7 +65,16 @@ The natural fallback for an objective that does not improve final quality is
 that it reaches a given quality sooner. It does not: FID is worse at every
 evaluated checkpoint (\num{59.9} against \num{52.4} at epoch~39, \num{36.9}
 against \num{33.9} at epoch~79, and so on to epoch~199). The gap narrows as
-training proceeds but never closes or reverses.
+training proceeds but never closes or reverses
+(Fig.~\ref{fig:convergence}).
+
+\guardedfigure{1.0}{convergence.png}{%
+  FID through training. \emph{Left:} absolute values, which establish only that
+  every arm converged --- over \num{200} epochs FID falls by tens of points
+  while the arms separate by roughly one, so on this axis they are one band.
+  \emph{Right:} the same data differenced within seed, which is where the
+  effect is legible. The gap is present from the first evaluated checkpoint and
+  narrows without closing.}{fig:convergence}
 
 \subsection{Exponential moving averaging}
 

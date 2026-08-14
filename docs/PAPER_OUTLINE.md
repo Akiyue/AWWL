@@ -36,7 +36,7 @@ mechanism predicts: it buys a real spectral improvement and pays for it
 several times over elsewhere. A twenty-line Fourier post-process on the
 baseline outperforms the trained objective by the same 0.79 FID. We further
 show that the published weighting conflates frequency balance with a
-Min-SNR-style timestep reweighting (|r| = 0.92); isolating the frequency
+Min-SNR-style timestep reweighting (|r| = 0.82); isolating the frequency
 component while holding the gradient budget fixed makes results significantly
 worse (+1.34 FID, p = 0.003). Finally we report two measurement hazards that
 reversed conclusions during this study: a hand-written KID estimator that
@@ -90,7 +90,8 @@ The published weights share a denominator but do not sum to a constant: the
 total runs from α at high noise to 1−α at low noise. So α sets the
 frequency balance **and** rescales gradient magnitude across the schedule.
 
-Correlation with the Min-SNR (γ=5) curve: **r = +0.92 at α = 0.8, −0.92 at
+Correlation with the Min-SNR (γ=5) curve, over the σ of all 1000 training
+timesteps: **r = +0.82 at α = 0.8, −0.82 at
 α = 0.2.** The two published optima are opposite timestep schedules, not
 merely different frequency balances — which undercuts the original paper's
 attribution of the α split to image resolution.
