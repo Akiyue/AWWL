@@ -190,3 +190,45 @@ def test_manifest_rejects_incomplete_spec(tmp_path):
     path.write_text("name: t\nexperiments: []\n", encoding="utf-8")
     with pytest.raises(ConfigError):
         load_manifest(path)
+
+
+def test_manifest_edits_reach_unfinished_jobs(store):
+    """A job's command is otherwise frozen at the moment it was first queued.
+
+    25 DreamBooth evaluations failed against a dataset path that did not
+    exist; correcting the manifest and re-running changed nothing, because the
+    wrong argv was already in the database.
+    """
+    store.add_jobs([_job("a")])
+    store.claim("w")
+    store.finish("a", error="wrong path")
+
+    fixed = _job("a")
+    fixed.payload = {"argv": ["echo", "corrected"]}
+    store.add_jobs([fixed])
+
+    store.reset()
+    assert store.claim("w").argv == ["echo", "corrected"]
+
+
+def test_refresh_never_touches_a_finished_job(store):
+    """Rewriting a completed job's command would invalidate its result."""
+    store.add_jobs([_job("a")])
+    store.claim("w")
+    store.finish("a")
+
+    changed = _job("a")
+    changed.payload = {"argv": ["echo", "different"]}
+    store.add_jobs([changed])
+
+    (job,) = [j for j in store.list_jobs() if j.job_id == "a"]
+    assert job.status == DONE
+    assert job.argv == ["echo", "a"], "a done job must keep the command that produced it"
+
+
+def test_refresh_can_be_disabled(store):
+    store.add_jobs([_job("a")])
+    changed = _job("a")
+    changed.payload = {"argv": ["echo", "no"]}
+    store.add_jobs([changed], refresh=False)
+    assert store.claim("w").argv == ["echo", "a"]

@@ -119,13 +119,24 @@ class JobStore:
 
     # ----------------------------------------------------------- population
 
-    def add_jobs(self, jobs: list[Job]) -> int:
+    def add_jobs(self, jobs: list[Job], *, refresh: bool = True) -> int:
         """Insert jobs, ignoring any whose ``job_id`` is already present.
 
         Re-running the same manifest is therefore safe and additive: new
         experiments appear, existing progress is untouched.
+
+        Args:
+            refresh: Also update the stored command of jobs that have **not**
+                succeeded. Without this, a job's argv is frozen at the moment
+                it was first queued, so correcting a wrong path in the
+                manifest and re-running changes nothing and the job fails
+                again with the identical error — which is exactly what
+                happened to 25 DreamBooth evaluations pointed at a dataset
+                directory that did not exist. Finished jobs are never touched,
+                so refreshing cannot silently invalidate a completed result.
         """
         inserted = 0
+        refreshed = 0
         with self._connect() as conn:
             conn.execute("BEGIN IMMEDIATE")
             for order, job in enumerate(jobs):
@@ -149,7 +160,25 @@ class JobStore:
                     ),
                 )
                 inserted += cur.rowcount
+                if refresh and cur.rowcount == 0:
+                    updated = conn.execute(
+                        """
+                        UPDATE jobs SET payload = ?, tier = ?, depends_on = ?
+                         WHERE job_id = ? AND status != ? AND payload != ?
+                        """,
+                        (
+                            json.dumps(job.payload),
+                            job.tier,
+                            job.depends_on,
+                            job.job_id,
+                            DONE,
+                            json.dumps(job.payload),
+                        ),
+                    )
+                    refreshed += updated.rowcount
             conn.execute("COMMIT")
+        if refreshed:
+            logger.info("refreshed %d unfinished job(s) from the manifest", refreshed)
         return inserted
 
     # ---------------------------------------------------------------- claim
