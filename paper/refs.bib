@@ -1,10 +1,7 @@
 % ---------------------------------------------------------------------------
-% VERIFY EVERY ENTRY BEFORE SUBMISSION.
-%
-% These were written without literature access, from memory of the field.
-% Author lists, venues, years and page numbers are all plausible rather than
-% checked, and the set is certainly missing 2024-2026 work. Treat this file as
-% a scaffold naming the right papers, not as a bibliography.
+% Entries marked [checked] were verified against the publisher or arXiv record
+% in August 2026. The rest were written from memory and still need confirming:
+% author lists, venues, years and pages are plausible rather than checked.
 % ---------------------------------------------------------------------------
 
 % --- diffusion foundations -------------------------------------------------
@@ -56,6 +53,7 @@
   year      = {2022}
 }
 
+% [checked] arXiv:2303.09556
 @inproceedings{hang2023efficient,
   title     = {Efficient Diffusion Training via Min-{SNR} Weighting Strategy},
   author    = {Hang, Tiankai and Gu, Shuyang and Li, Chen and Bao, Jianmin and
@@ -64,11 +62,13 @@
   year      = {2023}
 }
 
+% [checked]
 @inproceedings{choi2022perception,
   title     = {Perception Prioritized Training of Diffusion Models},
   author    = {Choi, Jooyoung and Lee, Jungbeom and Shin, Chaehun and
                Kim, Sungwon and Kim, Hyunwoo and Yoon, Sungroh},
   booktitle = {IEEE/CVF Conference on Computer Vision and Pattern Recognition},
+  pages     = {11472--11481},
   year      = {2022}
 }
 
@@ -123,11 +123,13 @@
   year      = {2021}
 }
 
+% [checked] CVPR 2021 oral, arXiv:2103.17195
 @inproceedings{chandrasegaran2021closer,
   title     = {A Closer Look at Fourier Spectrum Discrepancies for {CNN}-Generated
                Images Detection},
   author    = {Chandrasegaran, Keshigeyan and Tran, Ngoc-Trung and Cheung, Ngai-Man},
   booktitle = {IEEE/CVF Conference on Computer Vision and Pattern Recognition},
+  pages     = {7200--7209},
   year      = {2021}
 }
 
@@ -147,18 +149,23 @@
   year      = {2023}
 }
 
+% [checked] arXiv:2305.13819
 @article{huang2024wavedm,
   title   = {{WaveDM}: Wavelet-Based Diffusion Models for Image Restoration},
-  author  = {Huang, Yi and others},
+  author  = {Huang, Yi and Huang, Jiancheng and Liu, Jianzhuang and Yan, Mingfu and
+             Dong, Yu and Lv, Jiaxi and Chen, Shifeng},
   journal = {IEEE Transactions on Multimedia},
   volume  = {26},
+  pages   = {7058--7073},
   year    = {2024}
 }
 
+% [checked] CVPR 2024 oral
 @inproceedings{si2024freeu,
   title     = {{FreeU}: Free Lunch in Diffusion {U-Net}},
   author    = {Si, Chenyang and Huang, Ziqi and Jiang, Yuming and Liu, Ziwei},
   booktitle = {IEEE/CVF Conference on Computer Vision and Pattern Recognition},
+  pages     = {4733--4743},
   year      = {2024}
 }
 
@@ -217,6 +224,7 @@
   year    = {2018}
 }
 
+% [checked] arXiv:1911.07023
 @inproceedings{chong2020effectively,
   title     = {Effectively Unbiased {FID} and Inception Score and Where to Find Them},
   author    = {Chong, Min Jin and Forsyth, David},
@@ -239,10 +247,14 @@
   year      = {2023}
 }
 
+% [checked] arXiv:2306.04675
 @inproceedings{stein2023exposing,
   title     = {Exposing Flaws of Generative Model Evaluation Metrics and Their
                Unfair Treatment of Diffusion Models},
-  author    = {Stein, George and others},
+  author    = {Stein, George and Cresswell, Jesse C. and Hosseinzadeh, Rasa and
+               Sui, Yi and Ross, Brendan Leigh and Villecroze, Valentin and
+               Liu, Zhaoyan and Caterini, Anthony L. and Taylor, J. Eric T. and
+               Loaiza-Ganem, Gabriel},
   booktitle = {Advances in Neural Information Processing Systems},
   year      = {2023}
 }
@@ -265,13 +277,45 @@
 
 % --- replication practice --------------------------------------------------
 
+% [checked] arXiv:2103.03098
 @inproceedings{bouthillier2021accounting,
   title     = {Accounting for Variance in Machine Learning Benchmarks},
   author    = {Bouthillier, Xavier and Delaunay, Pierre and Bronzi, Mirko and
                Trofimov, Assya and Nichyporuk, Brennan and Szeto, Justin and
                others},
-  booktitle = {Proceedings of Machine Learning and Systems},
+  booktitle = {Proceedings of Machine Learning and Systems (MLSys)},
   year      = {2021}
+}
+
+% --- recent work found in the August 2026 sweep ----------------------------
+
+% [checked] arXiv:2507.10072. Closest prior work to our post-processing
+% control: training-free wavelet sub-band regulation, but applied during
+% sampling and framed as a method for exposure bias, not as a baseline.
+@inproceedings{yu2025frequency,
+  title     = {Frequency Regulation for Exposure Bias Mitigation in Diffusion Models},
+  author    = {Yu, Meng and Zhan, Kun},
+  booktitle = {ACM International Conference on Multimedia},
+  year      = {2025}
+}
+
+% [checked] arXiv:2507.01516
+@inproceedings{kumar2025loss,
+  title     = {Loss Functions in Diffusion Models: A Comparative Study},
+  author    = {Kumar, Dibyanshu and Vaeth, Philipp and Gregorov{'a}, Magda},
+  booktitle = {European Conference on Machine Learning and Principles and
+               Practice of Knowledge Discovery in Databases (ECML PKDD)},
+  year      = {2025}
+}
+
+% [checked] arXiv:2502.10236, ICLR 2025 workshop (DeLTa / FPI)
+@inproceedings{jiralerspong2025shaping,
+  title     = {Shaping Inductive Bias in Diffusion Models through Frequency-Based
+               Noise Control},
+  author    = {Jiralerspong, Thomas and Earnshaw, Berton and Hartford, Jason and
+               Bengio, Yoshua and Scimeca, Luca},
+  booktitle = {ICLR Workshop},
+  year      = {2025}
 }
 
 @inproceedings{thao2026awwl,

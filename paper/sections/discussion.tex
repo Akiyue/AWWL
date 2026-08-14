@@ -26,8 +26,18 @@ optimising.
 
 That the same spectral correction can be obtained by a Fourier operation on
 finished samples --- outperforming the trained objective --- is not offered as
-a method. It is offered as a control that this literature does not use and, we
-think, should.
+a method. Training-free frequency manipulation is itself an active line:
+\citet{si2024freeu} rebalance backbone and skip contributions inside the
+U-Net at inference, and \citet{yu2025frequency} regulate wavelet sub-bands
+during sampling to mitigate exposure bias. Our operation is cruder than
+either, applying to finished images rather than to intermediate states.
+
+The contribution is the \emph{use} rather than the operation. Those works
+present frequency manipulation as a method and report what it gains; we use it
+as a \emph{ruler}, to price what a trained objective's own stated mechanism is
+worth before asking whether the objective delivers it. That reading does not
+appear to be standard, and it is what turns ``the metrics did not move'' into a
+quantity.
 
 Any objective whose stated mechanism is a change to an image statistic admits
 the same test: apply that change to the baseline's outputs directly and see

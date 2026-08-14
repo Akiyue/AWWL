@@ -33,8 +33,19 @@ weights wavelet sub-bands on a schedule tied to $\sigma_t$.
 The second modifies the \emph{architecture} or the sampling path. WaveDiff
 \citep{phung2023wavelet} moves the diffusion process itself into the wavelet
 domain, primarily for speed; FreeU \citep{si2024freeu} rebalances the
-backbone and skip contributions inside the U-Net at inference, which changes
-the frequency content of samples without touching training.
+backbone and skip contributions inside the U-Net at inference, and
+\citet{yu2025frequency} rescale wavelet sub-bands during sampling to mitigate
+exposure bias. Both of the latter change the frequency content of samples
+without touching training, which makes them the closest relatives of the
+measurement in \S\ref{sec:worth} --- though there the operation is used to
+price a mechanism rather than to improve one.
+\citet{jiralerspong2025shaping} take a third route, shaping the frequency
+content through the noising operator itself.
+
+A recent comparative study of diffusion objectives \citep{kumar2025loss}
+unifies several losses under the variational bound; frequency-weighted
+objectives sit outside that unification, since their weights are not derived
+from the bound but chosen to target a statistic of the output.
 
 Reported gains in this family are typically small in absolute terms --- often
 under a point of FID --- and typically reported from single runs. Our results
@@ -89,6 +100,5 @@ routinely reported in the frequency-aware literature fall well inside the seed
 variance we measure, which is the methodological premise of
 \S\ref{sec:protocol}.
 
-\todo{sweep 2024--2026 venues for recent frequency-aware diffusion work; this
-section was drafted without literature access and will be missing the newest
-entries}
+\todo{a further sweep of 2026 venues; the last pass covered work up to and
+including mid-2025}
