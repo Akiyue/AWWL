@@ -45,10 +45,11 @@ inception-2015-12-05.pt
 # in here before you do.
 AWWL_*.md
 
-# LaTeX build products, not sources
+# LaTeX build products. tables/ and figures/ are tracked despite being
+# generated: they are produced on the machine with the data and consumed on
+# the machine with TeX, and those are not the same machine here. Regenerate
+# rather than edit -- scripts/make_tables.py and `awwl spectrum`.
 paper/main.pdf
-paper/tables/
-paper/figures/
 paper/*.aux
 paper/*.bbl
 paper/*.blg

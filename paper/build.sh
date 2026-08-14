@@ -31,6 +31,27 @@ done
 
 cd "${HERE}" || exit 1
 
+# Check the toolchain before invoking it. The build redirects LaTeX's output to
+# /dev/null, so a missing binary would otherwise surface as an empty failure
+# with no log to read -- which is exactly how this script behaved on a machine
+# without TeX installed.
+need=$([ "${QUICK}" = "1" ] && echo pdflatex || echo latexmk)
+if ! command -v "${need}" >/dev/null 2>&1; then
+  echo "no ${need} on this machine." >&2
+  echo >&2
+  echo "The tables and figures are generated where the data is; the PDF is" >&2
+  echo "built where TeX is. They need not be the same machine:" >&2
+  echo >&2
+  echo "  on the server:  python scripts/make_tables.py" >&2
+  echo "                  awwl spectrum --root runs/phase0 ..." >&2
+  echo "                  git add -A paper/tables paper/figures && git push" >&2
+  echo "  where TeX is:   git pull && bash paper/build.sh" >&2
+  echo >&2
+  echo "Or install TeX here: apt-get install texlive-latex-recommended \\" >&2
+  echo "  texlive-latex-extra texlive-fonts-recommended latexmk" >&2
+  exit 2
+fi
+
 if [ "${QUICK}" = "1" ]; then
   pdflatex -interaction=nonstopmode -halt-on-error main.tex >/dev/null 2>&1
   status=$?
