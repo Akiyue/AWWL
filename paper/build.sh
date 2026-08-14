@@ -14,6 +14,11 @@ set -uo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(dirname "${HERE}")"
 QUICK=${QUICK:-0}
+# Collecting figures does not need TeX, and the machine that produces them is
+# not the machine that typesets them. Gathering them was previously trapped
+# behind the toolchain check, so the box with the data could never populate
+# paper/figures at all.
+FIGURES_ONLY=${FIGURES_ONLY:-0}
 
 mkdir -p "${HERE}/figures"
 # `awwl spectrum` writes beside the sweep it read (runs/phase0/), while
@@ -28,6 +33,14 @@ for f in spectrum compare curriculum; do
     fi
   done
 done
+
+if [ "${FIGURES_ONLY}" = "1" ]; then
+  echo
+  echo "figures collected into paper/figures; skipping the build"
+  echo "commit them so the machine with TeX can use them:"
+  echo "  git add -A paper/tables paper/figures && git commit -m 'regen' && git push"
+  exit 0
+fi
 
 cd "${HERE}" || exit 1
 
