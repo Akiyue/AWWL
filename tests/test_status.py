@@ -51,7 +51,7 @@ def test_seed_totals_count_seeds_not_checkpoints(manifest):
     """Eval jobs carry an epoch suffix; counting them would inflate the total."""
     path, _ = manifest
 
-    _, _, statuses, _, _ = collect_status(path)
+    _, _, statuses, *_ = collect_status(path)
 
     # Three seeds and two eval epochs: the plan is three, not six.
     assert {s.group: len(s.planned_seeds) for s in statuses} == {"mse": 3, "awwl": 3}
@@ -63,7 +63,7 @@ def test_complete_group_is_reported_complete(manifest):
         eval_row("mse", s, fid=18.0, is_mean=7.9, kid_tf=0.01) for s in (1, 2, 3)
     ])
 
-    _, method, statuses, counts, _ = collect_status(path)
+    _, method, statuses, counts, *_ = collect_status(path)
     report = format_status("toy", method, statuses, counts)
 
     mse = next(s for s in statuses if s.group == "mse")
@@ -77,7 +77,7 @@ def test_a_missing_metric_is_named(manifest):
     path, root = manifest
     write_ledger(root, [eval_row("mse", s, fid=18.0, is_mean=7.9) for s in (1, 2, 3)])
 
-    _, method, statuses, counts, _ = collect_status(path)
+    _, method, statuses, counts, *_ = collect_status(path)
     report = format_status("toy", method, statuses, counts)
 
     assert "missing kid_tf" in report
@@ -89,7 +89,7 @@ def test_partial_seeds_are_not_complete(manifest):
         eval_row("mse", s, fid=18.0, is_mean=7.9, kid_tf=0.01) for s in (1, 2)
     ])
 
-    _, method, statuses, counts, _ = collect_status(path)
+    _, method, statuses, counts, *_ = collect_status(path)
     report = format_status("toy", method, statuses, counts)
 
     mse = next(s for s in statuses if s.group == "mse")
@@ -113,7 +113,7 @@ def test_queue_done_without_ledger_rows_is_flagged(manifest):
         if claimed:
             store.finish(claimed.job_id)
 
-    _, method, statuses, counts, _ = collect_status(path)
+    _, method, statuses, counts, *_ = collect_status(path)
     report = format_status("toy", method, statuses, counts)
 
     assert counts.get("done")
@@ -131,7 +131,7 @@ def test_failed_jobs_surface_in_the_status_column(manifest):
     claimed = store.claim("w")
     store.finish(claimed.job_id, error="boom")
 
-    _, method, statuses, counts, _ = collect_status(path)
+    _, method, statuses, counts, *_ = collect_status(path)
     report = format_status("toy", method, statuses, counts)
 
     assert counts.get("failed") == 1
@@ -185,7 +185,7 @@ def test_failures_are_reported_with_their_reason(manifest):
                   "torch.OutOfMemoryError: CUDA out of memory.",
         )
 
-    _, method, statuses, counts, _ = collect_status(path)
+    _, method, statuses, counts, *_ = collect_status(path)
     report = format_status("toy", method, statuses, counts)
 
     assert "failures, by reason:" in report
@@ -262,7 +262,7 @@ def test_show_errors_dumps_the_full_stderr(manifest):
     claimed = store.claim("w")
     store.finish(claimed.job_id, error="line one\nRuntimeError: the real cause")
 
-    _, method, statuses, counts, _ = collect_status(path)
+    _, method, statuses, counts, *_ = collect_status(path)
 
     assert "line one" not in format_status("toy", method, statuses, counts)
     assert "line one" in format_status("toy", method, statuses, counts, show_errors=True)
@@ -305,7 +305,7 @@ def test_identical_failures_group_despite_differing_progress_bars(manifest):
             ),
         )
 
-    _, method, statuses, counts, _ = collect_status(path)
+    _, method, statuses, counts, *_ = collect_status(path)
     report = format_status("toy", method, statuses, counts)
 
     assert "3x  OSError: [Errno 28] No space left on device" in report
@@ -333,7 +333,7 @@ def test_jobs_of_a_deleted_experiment_are_visible_and_retirable(manifest, tmp_pa
             status="pending", attempts=0)
     ])
 
-    _, method, statuses, counts, orphans = collect_status(path)
+    _, method, statuses, counts, orphans, _ = collect_status(path)
     report = format_status("toy", method, statuses, counts, orphans=orphans)
 
     assert orphans == {"gone": 1}
@@ -363,3 +363,57 @@ def test_retiring_never_discards_a_finished_result(manifest):
 
     finished = [j for j in store.list_jobs() if j.job_id == claimed.job_id]
     assert [j.status for j in finished] == [DONE]
+
+
+def test_time_remaining_is_measured_from_finished_jobs(manifest):
+    """Estimate from what this machine actually did, not from step counts."""
+    import time
+
+    from awwl.pipeline.manifest import build_jobs, load_manifest
+    from awwl.pipeline.store import JobStore, store_path
+
+    path, root = manifest
+    store = JobStore(store_path(root))
+    store.add_jobs(build_jobs(load_manifest(path)))
+    for _ in range(2):
+        claimed = store.claim("w")
+        time.sleep(0.01)
+        store.finish(claimed.job_id)
+
+    _, method, statuses, counts, orphans, timing = collect_status(path)
+    report = format_status("toy", method, statuses, counts, timing=timing, workers=2)
+
+    pending, durations = timing
+    assert durations["train"], "finished jobs must supply the measurement"
+    assert pending, "there is work left to estimate"
+    assert "time remaining, from measured job durations" in report
+    assert "on 2 worker(s)" in report
+
+
+def test_a_kind_never_run_is_named_rather_than_guessed():
+    from awwl.pipeline.eta import estimate, format_estimate
+
+    est = estimate({"train": 4, "sample": 4}, {"train": [600.0, 620.0]}, workers=2)
+    lines = "\n".join(format_estimate(est))
+
+    assert est.unmeasured == ["sample"]
+    assert "never run yet, cannot estimate" in lines
+    assert "excludes sample" in lines
+
+
+def test_estimate_uses_the_median_not_the_mean():
+    """A reclaimed or contended job is an outlier and there are always some."""
+    from awwl.pipeline.eta import estimate
+
+    est = estimate({"train": 1}, {"train": [600.0, 610.0, 620.0, 36000.0]}, workers=1)
+
+    assert est.per_kind["train"][1] == 615.0
+
+
+def test_humanise_switches_units_where_a_reader_would():
+    from awwl.pipeline.eta import humanise
+
+    assert humanise(45) == "45s"
+    assert humanise(600) == "10 min"
+    assert humanise(3600 * 5) == "5.0 h"
+    assert "days" in humanise(3600 * 60)

@@ -839,6 +839,8 @@ def status_cmd(
         False, "--show-errors",
         help="Print the full captured stderr for one job per distinct failure reason.",
     ),
+    workers: int = typer.Option(1, "--workers", help="GPUs the sweep runs on, for the time estimate."),
+    max_tier: int | None = typer.Option(None, "--max-tier", help="Estimate only up to this tier."),
 ) -> None:
     """What has been measured, and what is still missing.
 
@@ -854,7 +856,7 @@ def status_cmd(
         typer.echo("no manifests found under configs/pipeline/", err=True)
         raise typer.Exit(2)
 
-    report = status_report(paths, show_errors=show_errors)
+    report = status_report(paths, show_errors=show_errors, workers=workers, max_tier=max_tier)
     typer.echo(report)
     if out:
         out.parent.mkdir(parents=True, exist_ok=True)

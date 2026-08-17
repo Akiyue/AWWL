@@ -209,6 +209,40 @@ class JobStore:
             logger.info("refreshed %d unfinished job(s) from the manifest", refreshed)
         return inserted
 
+    def durations_by_kind(self) -> dict[str, list[float]]:
+        """Wall-clock seconds of every finished job, grouped by kind.
+
+        Measured rather than assumed: the only honest source for "how long
+        will the rest take" is how long the same work took on this machine.
+        """
+        with self._connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT kind, finished_at - started_at AS seconds FROM jobs
+                 WHERE status = ? AND started_at IS NOT NULL AND finished_at IS NOT NULL
+                """,
+                (DONE,),
+            ).fetchall()
+        out: dict[str, list[float]] = {}
+        for row in rows:
+            seconds = float(row["seconds"])
+            if seconds > 0:  # a clock adjustment mid-run would poison the median
+                out.setdefault(row["kind"], []).append(seconds)
+        return out
+
+    def pending_by_kind(self, *, max_tier: int | None = None) -> dict[str, int]:
+        """How many jobs remain, by kind, within ``max_tier``."""
+        with self._connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT kind, COUNT(*) AS n FROM jobs
+                 WHERE status IN (?, ?) AND (? IS NULL OR tier <= ?)
+                 GROUP BY kind
+                """,
+                (PENDING, RUNNING, max_tier, max_tier),
+            ).fetchall()
+        return {r["kind"]: int(r["n"]) for r in rows}
+
     def retire_missing(self, pipeline: str, keep: set[str]) -> int:
         """Retire queued jobs of ``pipeline`` that the manifest no longer lists.
 

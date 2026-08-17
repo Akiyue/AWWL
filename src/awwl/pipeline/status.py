@@ -129,7 +129,9 @@ def collect_status(
     manifest_path: str | Path,
     *,
     ledger_override: Path | None = None,
-) -> tuple[str, str, list[GroupStatus], dict[str, int], dict[str, int]]:
+    max_tier: int | None = None,
+) -> tuple[str, str, list[GroupStatus], dict[str, int], dict[str, int],
+           tuple[dict[str, int], dict[str, list[float]]]]:
     """Cross-reference a manifest's plan against the ledger and the job queue.
 
     Returns:
@@ -176,12 +178,14 @@ def collect_status(
     # Queue: the explanation for anything the ledger is missing.
     counts: dict[str, int] = {}
     orphans: dict[str, int] = {}
+    timing: tuple[dict[str, int], dict[str, list[float]]] = ({}, {})
     from awwl.pipeline.store import JobStore, store_path
 
     db = store_path(output_root)
     if db.exists():
         store = JobStore(db)
         counts = store.counts()
+        timing = (store.pending_by_kind(max_tier=max_tier), store.durations_by_kind())
         for job in store.list_jobs():
             st = statuses.get(job.group_id)
             if st is None:
@@ -196,7 +200,7 @@ def collect_status(
                 st.errors.append(job.error)
 
     ordered = sorted(statuses.values(), key=lambda s: (s.tier, s.group))
-    return name, method, ordered, counts, orphans
+    return name, method, ordered, counts, orphans, timing
 
 
 def format_status(
@@ -206,6 +210,8 @@ def format_status(
     counts: dict[str, int],
     *,
     orphans: dict[str, int] | None = None,
+    timing: tuple[dict[str, int], dict[str, list[float]]] | None = None,
+    workers: int = 1,
     show_errors: bool = False,
 ) -> str:
     """Render one manifest's coverage as a table plus a verdict."""
@@ -269,6 +275,12 @@ def format_status(
                 lines.append("         ---- end ----")
         lines.append("")
 
+    if timing and timing[0]:
+        from awwl.pipeline.eta import estimate, format_estimate
+
+        lines += format_estimate(estimate(timing[0], timing[1], workers=workers))
+        lines.append("")
+
     if counts:
         lines.append("  queue: " + "  ".join(f"{k}={v}" for k, v in sorted(counts.items())))
 
@@ -296,17 +308,25 @@ def format_status(
     return "\n".join(lines)
 
 
-def status_report(manifests: list[Path], *, show_errors: bool = False) -> str:
+def status_report(
+    manifests: list[Path],
+    *,
+    show_errors: bool = False,
+    workers: int = 1,
+    max_tier: int | None = None,
+) -> str:
     """Full report across every manifest handed in."""
     out = ["# Experiment coverage", ""]
     for path in manifests:
         try:
-            name, method, statuses, counts, orphans = collect_status(path)
+            name, method, statuses, counts, orphans, timing = collect_status(
+                path, max_tier=max_tier
+            )
         except Exception as exc:  # a broken manifest must not hide the others
             out += [f"## {path}", "", f"  could not read: {exc}", ""]
             continue
         out.append(
-            format_status(name, method, statuses, counts,
-                          orphans=orphans, show_errors=show_errors)
+            format_status(name, method, statuses, counts, orphans=orphans,
+                          timing=timing, workers=workers, show_errors=show_errors)
         )
     return "\n".join(out)
