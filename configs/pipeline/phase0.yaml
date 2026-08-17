@@ -181,12 +181,29 @@ experiments:
   # comparing them to the un-normalised published objective would confound the
   # extension with the gradient-magnitude schedule that normalisation removes.
   #
-  # ~35 runs, roughly 2 days on 2 GPUs. Only worth spending once tiers 1-2
+  # 31 runs, roughly 2 days on 2 GPUs. Only worth spending once tiers 1-2
   # have said whether there is an effect here to extend at all.
+  #
+  # Split across two tiers by what they answer, not by what they cost:
+  #
+  #   tier 4 (10 runs) -- awwl_learned and awwl_gradnorm. These decide whether
+  #     a learned weighting removes the need to choose alpha and p at all,
+  #     which is the question the section exists to answer. Run these first:
+  #     `--max-tier 4` finishes them in a third of the time, so a schedule that
+  #     runs out still has the result the paper needs.
+  #
+  #   tier 5 (21 runs) -- per-direction powers, depth, spatial adaptivity, a
+  #     learned basis, and all of it at once. These broaden the finding rather
+  #     than establish it, and awwl_full is only interpretable once its
+  #     components have reported.
+  #
+  # Nothing about the runs themselves changed; epochs, sample count and
+  # sampler stay identical to tiers 1-3, because a table that mixes those is
+  # not a comparison.
 
   # A1 -- does the diagonal band need a steeper schedule than LH/HL?
   - group: awwl_subband
-    tier: 4
+    tier: 5
     overrides:
       loss.name: wavelet_subband
       loss.alpha: 0.2
@@ -197,7 +214,7 @@ experiments:
   # but the method never used. share_detail_budget keeps the detail mass fixed
   # so this measures depth, not a larger detail term.
   - group: awwl_multilevel
-    tier: 4
+    tier: 5
     overrides:
       loss.name: wavelet_subband
       loss.levels: 3
@@ -207,7 +224,7 @@ experiments:
 
   # A2 -- weights vary over image position, strongest in the detail phase.
   - group: awwl_spatial
-    tier: 4
+    tier: 5
     overrides:
       loss.name: wavelet_spatial
       loss.alpha: 0.2
@@ -233,7 +250,7 @@ experiments:
 
   # A4 -- learnable basis. Starts at Haar, so any gain is from the learning.
   - group: awwl_lifting
-    tier: 4
+    tier: 5
     seeds: [1, 2, 3]
     overrides:
       loss.name: wavelet_lifting
@@ -243,7 +260,7 @@ experiments:
 
   # Everything at once: learned weights, spatially adaptive, learned basis.
   - group: awwl_full
-    tier: 4
+    tier: 5
     seeds: [1, 2, 3]
     overrides:
       loss.name: wavelet_learned
