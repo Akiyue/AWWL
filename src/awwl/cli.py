@@ -364,7 +364,14 @@ def eval_dreambooth_cmd(
     similarities: list[float] = []
     for index, prompt in enumerate(prompts):
         out_dir = run_dir / "samples" / f"prompt{index}"
-        generate_images(
+        # Score exactly what this call produced. Images are named by seed, so a
+        # rerun at a smaller --num-images overwrites the first few and leaves
+        # the rest of an earlier run in place; globbing the folder then averages
+        # over a mix of runs and silently reports more images than were asked
+        # for. (The finetune path is safe from this: it counts what is on disk
+        # and tops up to a fixed num_samples, so its folder is always exactly
+        # the requested set.)
+        images = generate_images(
             pipeline=pipe,
             prompt=prompt,
             seeds=list(range(1, num_images + 1)),
@@ -372,7 +379,14 @@ def eval_dreambooth_cmd(
             num_inference_steps=steps,
             guidance_scale=guidance,
         )
-        images = sorted(p for p in out_dir.glob("*") if p.suffix.lower() in (".png", ".jpg"))
+        stale = sum(1 for p in out_dir.glob("*") if p.suffix.lower() in (".png", ".jpg"))
+        if stale > len(images):
+            logger.warning(
+                "%s holds %d images but this run generated %d; scoring only the %d "
+                "just generated. The extras are from an earlier run at a different "
+                "--num-images and are ignored.",
+                out_dir, stale, len(images), len(images),
+            )
         clip_scores += text_image_similarity(
             clip_model=clip_model, clip_processor=clip_processor,
             prompt=prompt, image_paths=images, device=clip_device,

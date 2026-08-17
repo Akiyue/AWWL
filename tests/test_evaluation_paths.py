@@ -191,3 +191,47 @@ def test_paired_grid_start_offset_selects_later_samples(tmp_path):
     assert paired_sample_grid(
         folders, output_path=tmp_path / "cmp.png", count=3, start=5
     ).exists()
+
+
+class _StubImage:
+    def __init__(self, image):
+        self.images = [image]
+
+
+class _StubPipeline:
+    """Enough of a diffusers pipeline for generate_images to run on CPU."""
+
+    def __init__(self):
+        import torch
+
+        self.device = torch.device("cpu")
+
+    def __call__(self, prompt, **kwargs):
+        array = np.random.default_rng(0).integers(0, 255, (16, 16, 3), dtype=np.uint8)
+        return _StubImage(Image.fromarray(array))
+
+    def set_progress_bar_config(self, **kwargs):
+        pass
+
+
+def test_generated_paths_exclude_an_earlier_runs_leftovers(tmp_path):
+    """DreamBooth names samples by seed, so a smaller rerun leaves stragglers.
+
+    `eval-dreambooth` used to glob the folder rather than score what it had
+    just generated, so a rerun at --num-images 2 over a folder holding 8
+    averaged CLIP across a mix of runs and reported n_images=8. With three
+    prompts that is the observed n_images=24 against a requested 6.
+    """
+    from awwl.methods.dreambooth import generate_images
+
+    folder = tmp_path / "prompt0"
+    generate_images(pipeline=_StubPipeline(), prompt="p", seeds=list(range(1, 9)),
+                    output_dir=folder)
+
+    generated = generate_images(pipeline=_StubPipeline(), prompt="p", seeds=[1, 2],
+                                output_dir=folder)
+
+    on_disk = list(folder.glob("*.png"))
+    assert len(generated) == 2, "only the images this call produced may be scored"
+    assert len(on_disk) == 8, "the earlier run's images are still there, and must be ignored"
+    assert {p.name for p in generated} == {"seed_1.png", "seed_2.png"}
