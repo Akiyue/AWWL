@@ -272,7 +272,10 @@ def eval_samples_cmd(
 @app.command("eval-dreambooth")
 def eval_dreambooth_cmd(
     run_dir: Path = typer.Option(..., "--run-dir", help="DreamBooth run folder (holds unet/ and config.json)."),
-    real: Path = typer.Option(..., "--real", exists=True, help="Folder of real subject images."),
+    real: Path | None = typer.Option(
+        None, "--real",
+        help="Real subject images. Defaults to the instance images this run was trained on.",
+    ),
     ledger: Path = typer.Option(..., "--ledger", help="results.jsonl to append to."),
     prompts_file: Path = typer.Option(Path("assets/prompts/awwl_dreambooth.txt"), "--prompts", help="One prompt per line."),
     num_images: int = typer.Option(20, "--num-images", help="Images generated per prompt."),
@@ -300,6 +303,32 @@ def eval_dreambooth_cmd(
         typer.echo(f"no config.json in {run_dir}; was this produced by `awwl train`?", err=True)
         raise typer.Exit(2)
     cfg = json.loads(cfg_path.read_text(encoding="utf-8"))
+
+    # Subject similarity compares generated images against the subject the run
+    # was trained on, so the reference set is not a free parameter: it is this
+    # run's own instance images. Taking it from the run's config rather than
+    # from a separately-configured path removes a whole class of mismatch --
+    # including the one where a stale manifest path silently fails every eval
+    # in a sweep whose training had already succeeded.
+    if real is None:
+        recorded = cfg.get("data", {}).get("instance_data_dir")
+        if not recorded:
+            typer.echo(
+                f"{cfg_path} records no data.instance_data_dir, so the reference images "
+                "cannot be inferred. Pass --real explicitly.",
+                err=True,
+            )
+            raise typer.Exit(2)
+        real = Path(recorded)
+    if not real.is_dir():
+        typer.echo(
+            f"reference image folder does not exist: {real}\n"
+            "  This is the folder of real subject images that subject similarity is "
+            "measured against. If it moved, pass --real, or fix data.instance_data_dir "
+            "in the run's config.",
+            err=True,
+        )
+        raise typer.Exit(2)
 
     prompts = [p.strip() for p in prompts_file.read_text(encoding="utf-8").splitlines() if p.strip()]
     if not prompts:

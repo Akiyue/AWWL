@@ -232,3 +232,49 @@ def test_refresh_can_be_disabled(store):
     changed.payload = {"argv": ["echo", "no"]}
     store.add_jobs([changed], refresh=False)
     assert store.claim("w").argv == ["echo", "a"]
+
+
+_DREAMBOOTH_MANIFEST = """
+name: db
+method: dreambooth
+base_config: configs/dreambooth.yaml
+output_root: ./runs/db
+defaults:
+  seeds: [1]
+  sample: {num_samples: 4, steps: 10, prompts: assets/prompts/robot_toy.txt}
+experiments:
+  - group: mse
+    overrides: {loss.name: mse}
+"""
+
+
+def test_dreambooth_eval_is_scheduled_without_real_images(tmp_path):
+    """The eval must exist even when the manifest names no reference folder.
+
+    It previously did not: omitting `real_images` silently dropped every eval
+    job, and naming a path that had stopped existing failed all of them at
+    argument validation while training carried its own copy and succeeded.
+    The reference set is now taken from each run's own config.
+    """
+    path = tmp_path / "db.yaml"
+    path.write_text(_DREAMBOOTH_MANIFEST, encoding="utf-8")
+
+    jobs = build_jobs(load_manifest(path))
+
+    evals = [j for j in jobs if j.kind == "eval"]
+    assert len(evals) == 1
+    assert "--real" not in evals[0].argv
+    assert "--prompts" in evals[0].argv
+
+
+def test_dreambooth_real_images_still_overrides_when_given(tmp_path):
+    path = tmp_path / "db.yaml"
+    path.write_text(
+        _DREAMBOOTH_MANIFEST.replace("output_root: ./runs/db",
+                                     "output_root: ./runs/db\nreal_images: ./data/ref"),
+        encoding="utf-8",
+    )
+
+    argv = [j for j in build_jobs(load_manifest(path)) if j.kind == "eval"][0].argv
+
+    assert argv[argv.index("--real") + 1] == "./data/ref"

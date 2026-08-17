@@ -19,7 +19,8 @@
 #   data.instance_data_dir  -> dataset/<subject>
 #   data.instance_prompt    -> 'a photo of sks <subject>'
 #   sample.prompts          -> assets/prompts/<subject>.txt
-# `awwl eval-dreambooth` warns when they do not.
+# The first is now taken from the run itself rather than restated here, and
+# `awwl eval-dreambooth` warns when the prompts do not name that subject.
 #
 #   awwl pipeline run -m configs/pipeline/dreambooth_seeds.yaml --gpus 0,1
 #
@@ -33,8 +34,17 @@ base_config: configs/dreambooth.yaml
 output_root: ./runs/dreambooth_seeds
 ledger: ./runs/dreambooth_seeds/results.jsonl
 
-# Real subject images, used as the reference for image-image similarity.
-real_images: ../AWWL/dataset
+# Real subject images, the reference for image-image similarity.
+#
+# Left unset on purpose. `awwl eval-dreambooth` then reads
+# data.instance_data_dir from each run's own config.json, which is the folder
+# that run was actually trained on -- the only correct reference for subject
+# similarity, and one that cannot go stale. Setting it here overrides that for
+# every run in the sweep, so set it only if you mean exactly that.
+#
+# This entry previously held a path that had stopped existing. Training carried
+# its own copy and kept working; all 25 evals failed on argument validation.
+# real_images: /path/to/dataset/<subject>
 
 defaults:
   seeds: [1, 2, 3, 4, 5]

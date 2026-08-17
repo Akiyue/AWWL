@@ -138,36 +138,38 @@ def build_jobs(manifest: dict[str, Any], *, manifest_dir: Path | None = None) ->
             )
 
             if method == "dreambooth":
-                if real_images:
-                    jobs.append(
-                        Job(
-                            job_id=f"{name}:eval:{exp}",
-                            pipeline=name,
-                            kind="eval",
-                            group_id=group,
-                            tier=tier,
-                            depends_on=train_id,
-                            payload={
-                                "argv": _cli(
-                                    "eval-dreambooth",
-                                    "--run-dir", str(run_dir),
-                                    "--real", str(real_images),
-                                    "--ledger", ledger,
-                                    "--num-images", str(sample_cfg.get("num_samples", 20)),
-                                    "--steps", str(sample_cfg.get("steps", 50)),
-                                    *(
-                                        ["--prompts", str(sample_cfg["prompts"])]
-                                        if sample_cfg.get("prompts")
-                                        else []
-                                    ),
+                jobs.append(
+                    Job(
+                        job_id=f"{name}:eval:{exp}",
+                        pipeline=name,
+                        kind="eval",
+                        group_id=group,
+                        tier=tier,
+                        depends_on=train_id,
+                        payload={
+                            "argv": _cli(
+                                "eval-dreambooth",
+                                "--run-dir", str(run_dir),
+                                # Omitted by default: eval-dreambooth then uses the
+                                # instance images the run was trained on, which is
+                                # what subject similarity must compare against.
+                                *(["--real", str(real_images)] if real_images else []),
+                                "--ledger", ledger,
+                                "--num-images", str(sample_cfg.get("num_samples", 20)),
+                                "--steps", str(sample_cfg.get("steps", 50)),
+                                *(
+                                    ["--prompts", str(sample_cfg["prompts"])]
+                                    if sample_cfg.get("prompts")
+                                    else []
                                 ),
-                                "run_dir": str(run_dir),
-                                "exp": exp,
-                            },
-                            status="pending",
-                            attempts=0,
-                        )
+                            ),
+                            "run_dir": str(run_dir),
+                            "exp": exp,
+                        },
+                        status="pending",
+                        attempts=0,
                     )
+                )
                 continue
 
             for epoch in eval_epochs:
