@@ -266,3 +266,47 @@ def test_show_errors_dumps_the_full_stderr(manifest):
 
     assert "line one" not in format_status("toy", method, statuses, counts)
     assert "line one" in format_status("toy", method, statuses, counts, show_errors=True)
+
+
+def test_the_exception_is_found_inside_a_rich_traceback_box():
+    """rich draws tracebacks in a box and tqdm keeps writing after the failure.
+
+    Taking the last line then yields a progress bar carrying a per-run loss
+    value, which is both wrong and unique per job, so identical failures never
+    group. This is the shape the DreamBooth saves actually failed in.
+    """
+    from awwl.pipeline.status import _last_meaningful_line
+
+    error = (
+        "│ /a/trainer.py:168 in train_dreambooth                    │\n"
+        "│ ❱ 168 │   unet_unwrapped.save_pretrained(save_path) │\n"
+        "│ OSError: [Errno 28] No space left on device               │\n"
+        "╰────────────╯\n"
+        "100%|█████| 400/400 [02:19<00:00,  2.87it/s, loss=0.0419]\n"
+    )
+
+    assert _last_meaningful_line(error) == "OSError: [Errno 28] No space left on device"
+
+
+def test_identical_failures_group_despite_differing_progress_bars(manifest):
+    from awwl.pipeline.manifest import build_jobs, load_manifest
+    from awwl.pipeline.store import JobStore, store_path
+
+    path, root = manifest
+    store = JobStore(store_path(root), max_attempts=1)
+    store.add_jobs(build_jobs(load_manifest(path)))
+    for loss in (0.0419, 0.133, 0.0878):
+        claimed = store.claim("w")
+        store.finish(
+            claimed.job_id,
+            error=(
+                "OSError: [Errno 28] No space left on device\n"
+                f"100%|██| 400/400 [02:19<00:00, 2.87it/s, loss={loss}]\n"
+            ),
+        )
+
+    _, method, statuses, counts = collect_status(path)
+    report = format_status("toy", method, statuses, counts)
+
+    assert "3x  OSError: [Errno 28] No space left on device" in report
+    assert "loss=" not in report, "a per-run loss value must not become the reason"

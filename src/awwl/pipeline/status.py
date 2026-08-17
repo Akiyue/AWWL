@@ -86,19 +86,42 @@ def _strip_shutdown_noise(error: str) -> str:
     return error
 
 
-def _last_meaningful_line(error: str, *, width: int = 160) -> str:
-    """The line of a captured stderr that says what went wrong.
+# `OSError: [Errno 28] No space left on device`, `torch.OutOfMemoryError: ...`
+_EXCEPTION_RE = re.compile(r"^([A-Za-z_][\w.]*(?:Error|Exception|Exit|Interrupt))\s*:\s*(.+)$")
+# A tqdm bar, which carries a per-run loss value and so never groups with
+# another job's copy of the same failure.
+_PROGRESS_RE = re.compile(r"\d+%\|.*\|\s*\d+/\d+")
 
-    Python puts the exception type and message last, so the final non-empty
-    line of the real output is almost always the useful one; source echoes and
-    frame headers above it are not. Truncated, because these are printed one
-    per distinct failure and a wrapped traceback defeats the purpose.
+
+def _clean(line: str) -> str:
+    """One stderr line with rich's box drawing and tqdm's cursor tricks removed."""
+    return line.replace("\r", "").strip().strip("│╭╮╰╯─ ").replace("❱ ", "").strip()
+
+
+def _last_meaningful_line(error: str, *, width: int = 160) -> str:
+    """What the captured stderr says went wrong.
+
+    Prefers an actual exception line -- ``SomeError: message`` -- searching
+    from the end. Falling back to "the last non-empty line" is not enough here:
+    rich draws tracebacks inside a box and tqdm keeps writing its bar to stderr
+    after the failure, so the final line is usually a progress meter carrying a
+    loss value, which also stops identical failures from grouping.
     """
-    for line in reversed(_strip_shutdown_noise(error).strip().splitlines()):
-        stripped = line.strip()
-        if not stripped or stripped.startswith(("File \"", "^", "~")) or stripped in _NOISE:
+    body = _strip_shutdown_noise(error)
+    lines = [_clean(line) for line in body.splitlines()]
+
+    for line in reversed(lines):
+        if _PROGRESS_RE.search(line):
             continue
-        return stripped[:width]
+        if _EXCEPTION_RE.match(line):
+            return line[:width]
+
+    for line in reversed(lines):
+        if not line or line in _NOISE or _PROGRESS_RE.search(line):
+            continue
+        if line.startswith(("File \"", "^", "~")) or line.isdigit():
+            continue
+        return line[:width]
     return "(process died without a traceback -- killed, or output truncated)"
 
 
