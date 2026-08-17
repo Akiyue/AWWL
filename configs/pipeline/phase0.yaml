@@ -167,16 +167,26 @@ experiments:
     overrides:
       loss.name: snr_weighted
 
-  # Tier 5, not 3, despite belonging with the other comparison losses: at
-  # resize=True this upsamples 32x32 batches 49-fold through VGG-16 twice per
-  # step, which costs a few hundred times the UNet it is training. Left at
-  # tier 3 it blocks every tier-4 run behind a loss whose own docstring says
-  # its number is a control rather than a perceptual result -- the epsilon
-  # target is white noise. Run it last, or not at all.
-  - group: perceptual
-    tier: 5
-    overrides:
-      loss.name: perceptual
+  # Dropped, and the reasons are worth keeping written down.
+  #
+  # Cost: at resize=True it upsamples a 32x32 batch 49-fold and pushes it
+  # through VGG-16 twice per step. Measured on the GPU that ran it, the loss
+  # held ~21 GB against the ~0.24 GB of the UNet it was training -- roughly a
+  # hundred times the memory of the model, and a few hundred times its compute.
+  # Five seeds of that is days of GPU time.
+  #
+  # Meaning: the trainer calls the loss on (predicted_noise, noise). The
+  # epsilon target is white Gaussian noise and has no perceptual content, so
+  # VGG activations of it measure nothing the name suggests. Whatever number
+  # came back would have to be captioned in the paper as a control rather than
+  # a perceptual result, which is a poor trade for days of compute.
+  #
+  # The row is simply absent from the table. That is more honest than a number
+  # nobody can interpret, and the reasoning above is the paper's to state.
+  # - group: perceptual
+  #   tier: 5
+  #   overrides:
+  #     loss.name: perceptual
 
   # ---------------------------------------------------------------- tier 4
   # The method extensions (A1-A4). Each turns on exactly ONE axis so its

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import time
+from dataclasses import replace
 
 import pytest
 
@@ -278,3 +279,29 @@ def test_dreambooth_real_images_still_overrides_when_given(tmp_path):
     argv = [j for j in build_jobs(load_manifest(path)) if j.kind == "eval"][0].argv
 
     assert argv[argv.index("--real") + 1] == "./data/ref"
+
+
+def test_refresh_propagates_a_tier_change_with_an_unchanged_command(tmp_path):
+    """Demoting an experiment must actually demote it.
+
+    The refresh guard compared payloads only, so a manifest edit that changed
+    a job's tier and nothing else matched no rows. `perceptual` was moved from
+    tier 3 to tier 5 to stop it blocking tier 4; the stored tier stayed at 3,
+    `--max-tier 4` kept selecting it, and it ran for hours on two GPUs.
+    """
+    from awwl.pipeline.store import PENDING, JobStore
+
+    store = JobStore(tmp_path / "state.db")
+    job = Job(
+        job_id="p:train:x", pipeline="p", kind="train", group_id="x", tier=3,
+        depends_on=None, payload={"argv": ["awwl", "train"]}, status=PENDING, attempts=0,
+    )
+    store.add_jobs([job])
+
+    demoted = replace(job, tier=5)          # same command, later tier
+    store.add_jobs([demoted])
+
+    stored = {j.job_id: j for j in store.list_jobs()}["p:train:x"]
+    assert stored.tier == 5
+    assert store.claim("w", max_tier=4) is None, "a tier-5 job must not be claimed at max_tier 4"
+    assert store.claim("w", max_tier=5) is not None

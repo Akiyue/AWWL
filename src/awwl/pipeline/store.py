@@ -175,18 +175,28 @@ class JobStore:
                 )
                 inserted += cur.rowcount
                 if refresh and cur.rowcount == 0:
+                    # The guard must cover every column being written, not just
+                    # the payload. Gating on `payload != ?` alone meant a
+                    # manifest edit that changed only a job's tier never
+                    # propagated: moving `perceptual` from tier 3 to tier 5 left
+                    # the stored tier at 3, so `--max-tier 4` kept selecting it
+                    # and the demotion silently did nothing.
+                    payload = json.dumps(job.payload)
                     updated = conn.execute(
                         """
                         UPDATE jobs SET payload = ?, tier = ?, depends_on = ?
-                         WHERE job_id = ? AND status != ? AND payload != ?
+                         WHERE job_id = ? AND status != ?
+                           AND (payload != ? OR tier != ? OR depends_on IS NOT ?)
                         """,
                         (
-                            json.dumps(job.payload),
+                            payload,
                             job.tier,
                             job.depends_on,
                             job.job_id,
                             DONE,
-                            json.dumps(job.payload),
+                            payload,
+                            job.tier,
+                            job.depends_on,
                         ),
                     )
                     refreshed += updated.rowcount

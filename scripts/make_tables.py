@@ -35,7 +35,6 @@ ROWS: list[tuple[str, str]] = [
     ("huber", r"Huber"),
     ("charbonnier", r"Charbonnier"),
     ("snr_weighted", r"SNR-weighted"),
-    ("perceptual", r"Perceptual (VGG)"),
     ("static_wavelet", r"Static wavelet ($p{=}0$)"),
     ("awwl", r"Frequency-aware \emph{(published)}"),
     ("awwl_eq7", r"\quad as Eq.~(1) is written"),
