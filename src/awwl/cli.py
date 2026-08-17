@@ -856,6 +856,40 @@ def status_cmd(
         typer.echo(f"written to {out}")
 
 
+@app.command("prune")
+def prune_cmd(
+    manifests: list[Path] = typer.Argument(None, help="Manifests to survey (default: all)."),
+    apply: bool = typer.Option(False, "--apply", help="Actually delete. Off by default."),
+) -> None:
+    """Free disk by deleting weights of runs that have already been evaluated.
+
+    A run's weights are only needed to score it again; the numbers themselves
+    live in the ledger. Runs with no ledger row are never touched -- deleting
+    those would lose the run.
+    """
+    setup_logging("WARNING")
+    from awwl.pipeline.prune import format_survey, prune, survey
+
+    paths = list(manifests or sorted(Path("configs/pipeline").glob("*.yaml")))
+    total_freed = 0
+    for path in paths:
+        try:
+            name, items = survey(path)
+        except Exception as exc:
+            typer.echo(f"{path}: could not read: {exc}", err=True)
+            continue
+        typer.echo(format_survey(name, items))
+        if apply:
+            runs, freed = prune(items)
+            total_freed += freed
+            typer.echo(f"  deleted weights for {runs} run(s), freed {freed / 1e9:.1f} G\n")
+
+    if not apply:
+        typer.echo("Nothing was deleted. Re-run with --apply to free the space above.")
+    else:
+        typer.echo(f"Total freed: {total_freed / 1e9:.1f} G")
+
+
 def main() -> None:
     """Module entry-point used both by ``python -m awwl.cli`` and the script alias."""
     use_utf8_output()
