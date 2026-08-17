@@ -12,8 +12,11 @@ deficit in GAN samples to the up-convolution operators in the decoder;
 \citet{dzanic2020fourier} showed the discrepancy is consistent enough across
 architectures to serve as a detection signal, and \citet{chandrasegaran2021closer}
 examined how much of it is intrinsic to the model rather than an artefact of
-the last upsampling layer. \citet{schwarz2021frequency} attributed part of the
-bias to the generator's spectral properties rather than to the objective.
+the last upsampling layer. \citet{schwarz2021frequency} isolated generator and
+discriminator separately and found the bias is not one effect: upsampling
+operators bias the generator's spectrum, but checkerboard artefacts alone do
+not explain the discrepancy, and the discriminator's difficulty is with
+frequencies of \emph{low magnitude} rather than with high frequencies as such.
 
 This literature establishes the phenomenon and, largely implicitly, a
 motivation: because the spectrum is wrong, correcting it should help. That
@@ -101,4 +104,5 @@ variance we measure, which is the methodological premise of
 \S\ref{sec:protocol}.
 
 \todo{a further sweep of 2026 venues; the last pass covered work up to and
-including mid-2025}
+including mid-2025. Every cited entry has been verified against the
+publisher or arXiv record.}
