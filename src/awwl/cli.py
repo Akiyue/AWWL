@@ -782,6 +782,33 @@ def list_checkpoints(
             typer.echo(f"  {name:<24} {path}")
 
 
+@app.command("status")
+def status_cmd(
+    manifests: list[Path] = typer.Argument(None, help="Manifests to report on (default: all)."),
+    out: Path | None = typer.Option(None, "--out", help="Also write the report here."),
+) -> None:
+    """What has been measured, and what is still missing.
+
+    Cross-references each manifest's plan against the results ledger and the
+    job queue. The ledger decides what the paper may claim; the queue explains
+    what is missing and why.
+    """
+    setup_logging("WARNING")
+    from awwl.pipeline.status import status_report
+
+    paths = list(manifests or sorted(Path("configs/pipeline").glob("*.yaml")))
+    if not paths:
+        typer.echo("no manifests found under configs/pipeline/", err=True)
+        raise typer.Exit(2)
+
+    report = status_report(paths)
+    typer.echo(report)
+    if out:
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(report, encoding="utf-8")
+        typer.echo(f"written to {out}")
+
+
 def main() -> None:
     """Module entry-point used both by ``python -m awwl.cli`` and the script alias."""
     use_utf8_output()
