@@ -37,6 +37,7 @@ from awwl.training.accelerator import build_accelerator
 from awwl.training.checkpointing import CheckpointManager
 from awwl.training.ema import build_ema
 from awwl.training.loss_history import LossHistoryLogger
+from awwl.training.optimizer_state import align_optimizer_state
 from awwl.utils.io import ensure_dir
 
 logger = logging.getLogger(__name__)
@@ -139,6 +140,20 @@ def train_finetune(cfg: dict[str, Any]) -> Path:
     loss_core_pre = loss_module(loss_fn)
     ckpt_extras = {"loss": loss_core_pre} if loss_params else {}
 
+    if loss_core_pre is not None:
+        # Before the resume, not after. `Optimizer.load_state_dict` casts each
+        # parameter's state onto that parameter's *current* device, so loading
+        # while the loss still sat on the CPU put its `exp_avg` there while
+        # `accelerator.prepare` moved the model's. Moving the loss afterwards
+        # then moved its parameters and left the state behind, and the first
+        # optimiser step of a resumed run died inside `_multi_tensor_adam`
+        # with cuda gradients against a CPU moment. Only the learned
+        # objectives carry loss parameters, and only a resume has state to
+        # load, which is why this waited until tier 4 to appear.
+        #
+        # Moves parameter .data in place, so the optimiser's references stay valid.
+        loss_core_pre.to(accelerator.device)
+
     resumed = None
     if bool(train_cfg.get("resume", True)):
         resumed = ckpt.load(
@@ -154,9 +169,9 @@ def train_finetune(cfg: dict[str, Any]) -> Path:
     )
     if ema is not None:
         ema.to(accelerator.device)
-    if loss_core_pre is not None:
-        # Moves parameter .data in place, so the optimiser's references stay valid.
-        loss_core_pre.to(accelerator.device)
+    # Belt and braces: whatever the ordering above, no optimiser state may sit
+    # on a different device from the parameter it belongs to.
+    align_optimizer_state(optimizer)
 
     start_epoch = resumed.epoch + 1 if resumed else 0
     global_step = resumed.global_step if resumed else 0
