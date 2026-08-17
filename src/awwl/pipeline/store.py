@@ -47,6 +47,10 @@ PENDING = "pending"
 RUNNING = "running"
 DONE = "done"
 FAILED = "failed"
+# An experiment that the manifest no longer describes. Distinct from `failed`
+# so a retired job is never retried by `reset`, and distinct from deletion so
+# the record of what was once queued survives.
+RETIRED = "retired"
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS jobs (
@@ -204,6 +208,37 @@ class JobStore:
         if refreshed:
             logger.info("refreshed %d unfinished job(s) from the manifest", refreshed)
         return inserted
+
+    def retire_missing(self, pipeline: str, keep: set[str]) -> int:
+        """Retire queued jobs of ``pipeline`` that the manifest no longer lists.
+
+        Deleting an experiment from a manifest previously left its jobs in the
+        queue: ``build_jobs`` stopped producing them, so ``add_jobs`` could
+        neither update nor remove them, and the runner went on claiming them at
+        whatever tier they were first queued with. Removing ``perceptual``
+        therefore did not stop it running -- it only stopped it being visible,
+        since the status report is built from the manifest.
+
+        Only unfinished jobs are retired. A ``done`` job is the record of a
+        result that exists on disk and in the ledger, and must survive its
+        experiment being dropped from the plan.
+        """
+        with self._connect() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            rows = conn.execute(
+                "SELECT job_id FROM jobs WHERE pipeline = ? AND status IN (?, ?, ?)",
+                (pipeline, PENDING, RUNNING, FAILED),
+            ).fetchall()
+            stale = [r["job_id"] for r in rows if r["job_id"] not in keep]
+            for job_id in stale:
+                conn.execute(
+                    "UPDATE jobs SET status = ?, error = ? WHERE job_id = ?",
+                    (RETIRED, "no longer in the manifest", job_id),
+                )
+            conn.execute("COMMIT")
+        if stale:
+            logger.info("retired %d job(s) no longer in the manifest", len(stale))
+        return len(stale)
 
     # ---------------------------------------------------------------- claim
 

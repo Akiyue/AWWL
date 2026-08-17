@@ -51,7 +51,7 @@ def test_seed_totals_count_seeds_not_checkpoints(manifest):
     """Eval jobs carry an epoch suffix; counting them would inflate the total."""
     path, _ = manifest
 
-    _, _, statuses, _ = collect_status(path)
+    _, _, statuses, _, _ = collect_status(path)
 
     # Three seeds and two eval epochs: the plan is three, not six.
     assert {s.group: len(s.planned_seeds) for s in statuses} == {"mse": 3, "awwl": 3}
@@ -63,7 +63,7 @@ def test_complete_group_is_reported_complete(manifest):
         eval_row("mse", s, fid=18.0, is_mean=7.9, kid_tf=0.01) for s in (1, 2, 3)
     ])
 
-    _, method, statuses, counts = collect_status(path)
+    _, method, statuses, counts, _ = collect_status(path)
     report = format_status("toy", method, statuses, counts)
 
     mse = next(s for s in statuses if s.group == "mse")
@@ -77,7 +77,7 @@ def test_a_missing_metric_is_named(manifest):
     path, root = manifest
     write_ledger(root, [eval_row("mse", s, fid=18.0, is_mean=7.9) for s in (1, 2, 3)])
 
-    _, method, statuses, counts = collect_status(path)
+    _, method, statuses, counts, _ = collect_status(path)
     report = format_status("toy", method, statuses, counts)
 
     assert "missing kid_tf" in report
@@ -89,7 +89,7 @@ def test_partial_seeds_are_not_complete(manifest):
         eval_row("mse", s, fid=18.0, is_mean=7.9, kid_tf=0.01) for s in (1, 2)
     ])
 
-    _, method, statuses, counts = collect_status(path)
+    _, method, statuses, counts, _ = collect_status(path)
     report = format_status("toy", method, statuses, counts)
 
     mse = next(s for s in statuses if s.group == "mse")
@@ -113,7 +113,7 @@ def test_queue_done_without_ledger_rows_is_flagged(manifest):
         if claimed:
             store.finish(claimed.job_id)
 
-    _, method, statuses, counts = collect_status(path)
+    _, method, statuses, counts, _ = collect_status(path)
     report = format_status("toy", method, statuses, counts)
 
     assert counts.get("done")
@@ -131,7 +131,7 @@ def test_failed_jobs_surface_in_the_status_column(manifest):
     claimed = store.claim("w")
     store.finish(claimed.job_id, error="boom")
 
-    _, method, statuses, counts = collect_status(path)
+    _, method, statuses, counts, _ = collect_status(path)
     report = format_status("toy", method, statuses, counts)
 
     assert counts.get("failed") == 1
@@ -185,7 +185,7 @@ def test_failures_are_reported_with_their_reason(manifest):
                   "torch.OutOfMemoryError: CUDA out of memory.",
         )
 
-    _, method, statuses, counts = collect_status(path)
+    _, method, statuses, counts, _ = collect_status(path)
     report = format_status("toy", method, statuses, counts)
 
     assert "failures, by reason:" in report
@@ -262,7 +262,7 @@ def test_show_errors_dumps_the_full_stderr(manifest):
     claimed = store.claim("w")
     store.finish(claimed.job_id, error="line one\nRuntimeError: the real cause")
 
-    _, method, statuses, counts = collect_status(path)
+    _, method, statuses, counts, _ = collect_status(path)
 
     assert "line one" not in format_status("toy", method, statuses, counts)
     assert "line one" in format_status("toy", method, statuses, counts, show_errors=True)
@@ -305,8 +305,61 @@ def test_identical_failures_group_despite_differing_progress_bars(manifest):
             ),
         )
 
-    _, method, statuses, counts = collect_status(path)
+    _, method, statuses, counts, _ = collect_status(path)
     report = format_status("toy", method, statuses, counts)
 
     assert "3x  OSError: [Errno 28] No space left on device" in report
     assert "loss=" not in report, "a per-run loss value must not become the reason"
+
+
+def test_jobs_of_a_deleted_experiment_are_visible_and_retirable(manifest, tmp_path):
+    """Deleting an experiment must stop it running, not just stop listing it.
+
+    `perceptual` was removed from the manifest. build_jobs stopped producing
+    its jobs, so add_jobs could neither update nor remove the ones already
+    queued; the runner kept claiming them, while the status report -- built
+    from the manifest -- showed a clean sweep. It ran on both GPUs for hours.
+    """
+    from awwl.pipeline.manifest import build_jobs, load_manifest
+    from awwl.pipeline.store import RETIRED, Job, JobStore, store_path
+
+    path, root = manifest
+    store = JobStore(store_path(root))
+    jobs = build_jobs(load_manifest(path))
+    store.add_jobs(jobs)
+    store.add_jobs([
+        Job(job_id="toy:train:gone_s1", pipeline="toy", kind="train", group_id="gone",
+            tier=3, depends_on=None, payload={"argv": ["echo", "gone"]},
+            status="pending", attempts=0)
+    ])
+
+    _, method, statuses, counts, orphans = collect_status(path)
+    report = format_status("toy", method, statuses, counts, orphans=orphans)
+
+    assert orphans == {"gone": 1}
+    assert "QUEUED BUT NOT IN THE MANIFEST" in report
+    assert "gone" in report
+
+    retired = store.retire_missing("toy", {j.job_id for j in jobs})
+
+    assert retired == 1
+    assert store.claim("w", max_tier=99).group_id != "gone"
+    assert {j.status for j in store.list_jobs() if j.group_id == "gone"} == {RETIRED}
+
+
+def test_retiring_never_discards_a_finished_result(manifest):
+    """A done job is the record of a result on disk; dropping the plan keeps it."""
+    from awwl.pipeline.manifest import build_jobs, load_manifest
+    from awwl.pipeline.store import DONE, JobStore, store_path
+
+    path, root = manifest
+    store = JobStore(store_path(root))
+    jobs = build_jobs(load_manifest(path))
+    store.add_jobs(jobs)
+    claimed = store.claim("w")
+    store.finish(claimed.job_id)
+
+    store.retire_missing("toy", set())
+
+    finished = [j for j in store.list_jobs() if j.job_id == claimed.job_id]
+    assert [j.status for j in finished] == [DONE]

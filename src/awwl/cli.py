@@ -710,7 +710,13 @@ def pipeline_run_cmd(
     root = Path(spec["output_root"])
     store = JobStore(store_path(root), stale_after=stale_after, max_attempts=max_attempts)
     added = store.add_jobs(jobs)
+    # An experiment deleted from the manifest must stop running, not merely
+    # stop being listed: its jobs are already in the queue and the runner will
+    # go on claiming them at the tier they were first queued with.
+    retired = store.retire_missing(str(spec["name"]), {j.job_id for j in jobs})
     typer.echo(f"manifest '{spec['name']}': {len(jobs)} job(s), {added} newly queued")
+    if retired:
+        typer.echo(f"  retired {retired} job(s) no longer in the manifest")
 
     if dry_run:
         for job in store.list_jobs():

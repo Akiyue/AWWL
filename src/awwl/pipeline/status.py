@@ -129,12 +129,14 @@ def collect_status(
     manifest_path: str | Path,
     *,
     ledger_override: Path | None = None,
-) -> tuple[str, str, list[GroupStatus], dict[str, int]]:
+) -> tuple[str, str, list[GroupStatus], dict[str, int], dict[str, int]]:
     """Cross-reference a manifest's plan against the ledger and the job queue.
 
     Returns:
-        ``(name, method, per-group statuses, queue counts)``. Queue counts are
-        empty when the pipeline has never been started.
+        ``(name, method, per-group statuses, queue counts, orphans)``. Queue
+        counts are empty when the pipeline has never been started; orphans
+        maps a group the manifest no longer lists to how many of its jobs
+        are still queued.
     """
     from awwl.analysis.results import load_results
 
@@ -173,6 +175,7 @@ def collect_status(
 
     # Queue: the explanation for anything the ledger is missing.
     counts: dict[str, int] = {}
+    orphans: dict[str, int] = {}
     from awwl.pipeline.store import JobStore, store_path
 
     db = store_path(output_root)
@@ -181,13 +184,19 @@ def collect_status(
         counts = store.counts()
         for job in store.list_jobs():
             st = statuses.get(job.group_id)
-            if st is not None:
-                st.queue[job.status] += 1
-                if job.error:
-                    st.errors.append(job.error)
+            if st is None:
+                # A group the manifest no longer describes. Silently skipping
+                # these is how a deleted experiment kept running while the
+                # report showed a clean sweep.
+                if job.status in ("pending", "running", "failed"):
+                    orphans[job.group_id] = orphans.get(job.group_id, 0) + 1
+                continue
+            st.queue[job.status] += 1
+            if job.error:
+                st.errors.append(job.error)
 
     ordered = sorted(statuses.values(), key=lambda s: (s.tier, s.group))
-    return name, method, ordered, counts
+    return name, method, ordered, counts, orphans
 
 
 def format_status(
@@ -196,6 +205,7 @@ def format_status(
     statuses: list[GroupStatus],
     counts: dict[str, int],
     *,
+    orphans: dict[str, int] | None = None,
     show_errors: bool = False,
 ) -> str:
     """Render one manifest's coverage as a table plus a verdict."""
@@ -262,6 +272,14 @@ def format_status(
     if counts:
         lines.append("  queue: " + "  ".join(f"{k}={v}" for k, v in sorted(counts.items())))
 
+    if orphans:
+        lines += [
+            "  QUEUED BUT NOT IN THE MANIFEST -- these will still run:",
+            *(f"    {group}: {n} job(s)" for group, n in sorted(orphans.items())),
+            "  Re-run `awwl pipeline run` to retire them.",
+            "",
+        ]
+
     done = sum(1 for s in statuses if s.complete)
     lines.append(f"  usable for the paper: {done}/{len(statuses)} configurations")
 
@@ -283,9 +301,12 @@ def status_report(manifests: list[Path], *, show_errors: bool = False) -> str:
     out = ["# Experiment coverage", ""]
     for path in manifests:
         try:
-            name, method, statuses, counts = collect_status(path)
+            name, method, statuses, counts, orphans = collect_status(path)
         except Exception as exc:  # a broken manifest must not hide the others
             out += [f"## {path}", "", f"  could not read: {exc}", ""]
             continue
-        out.append(format_status(name, method, statuses, counts, show_errors=show_errors))
+        out.append(
+            format_status(name, method, statuses, counts,
+                          orphans=orphans, show_errors=show_errors)
+        )
     return "\n".join(out)
