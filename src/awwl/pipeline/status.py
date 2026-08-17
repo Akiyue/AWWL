@@ -33,6 +33,7 @@ class GroupStatus:
     evaluated_seeds: set[Any] = field(default_factory=set)
     metrics: set[str] = field(default_factory=set)
     queue: dict[str, int] = field(default_factory=lambda: defaultdict(int))
+    errors: list[str] = field(default_factory=list)
 
     @property
     def complete(self) -> bool:
@@ -59,6 +60,26 @@ def _seed_in(job_id: str) -> str | None:
     """The seed encoded in an experiment name, e.g. ``mse_s3`` -> ``\"3\"``."""
     found = _SEED_RE.findall(job_id)
     return found[-1] if found else None
+
+
+# Lines that appear at the tail of every traceback and identify nothing.
+_NOISE = ("Traceback (most recent call last)", "During handling of", "The above exception")
+
+
+def _last_meaningful_line(error: str, *, width: int = 160) -> str:
+    """The line of a captured stderr that says what went wrong.
+
+    Python puts the exception type and message last, so the final non-empty
+    line is almost always the useful one; source echoes and frame headers above
+    it are not. Truncated, because these are printed one per distinct failure
+    and a wrapped traceback defeats the purpose.
+    """
+    for line in reversed(error.strip().splitlines()):
+        stripped = line.strip()
+        if not stripped or stripped.startswith(("File \"", "^", "~")) or stripped in _NOISE:
+            continue
+        return stripped[:width]
+    return "(no error text recorded)"
 
 
 def collect_status(
@@ -119,6 +140,8 @@ def collect_status(
             st = statuses.get(job.group_id)
             if st is not None:
                 st.queue[job.status] += 1
+                if job.error:
+                    st.errors.append(job.error)
 
     ordered = sorted(statuses.values(), key=lambda s: (s.tier, s.group))
     return name, method, ordered, counts
@@ -167,6 +190,23 @@ def format_status(
         )
 
     lines.append("")
+
+    # Why things failed, deduplicated. A sweep fails the same way 5 or 25 times
+    # over, so the distinct reasons are short even when the failure count is
+    # not -- and printing them here is the difference between "some jobs
+    # failed" and knowing what to fix.
+    reasons: dict[str, list[str]] = {}
+    for st in statuses:
+        for err in st.errors:
+            reasons.setdefault(_last_meaningful_line(err), []).append(st.group)
+    if reasons:
+        lines.append("  failures, by reason:")
+        for reason, groups in sorted(reasons.items(), key=lambda kv: -len(kv[1])):
+            unique = sorted(set(groups))
+            lines.append(f"    {len(groups):>3}x  {reason}")
+            lines.append(f"         in: {', '.join(unique)}")
+        lines.append("")
+
     if counts:
         lines.append("  queue: " + "  ".join(f"{k}={v}" for k, v in sorted(counts.items())))
 

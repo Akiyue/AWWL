@@ -83,6 +83,9 @@ class Job:
     payload: dict[str, Any]
     status: str
     attempts: int
+    # Why the job failed, as recorded by `finish`. Carried on the Job so a
+    # reader does not have to open the database to find out.
+    error: str | None = None
 
     @property
     def argv(self) -> list[str]:
@@ -345,4 +348,5 @@ def _to_job(row: sqlite3.Row, *, status: str | None = None, attempts: int | None
         payload=json.loads(row["payload"]),
         status=status if status is not None else row["status"],
         attempts=attempts if attempts is not None else int(row["attempts"]),
+        error=row["error"],
     )

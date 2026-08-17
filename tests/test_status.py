@@ -163,3 +163,54 @@ def test_a_broken_manifest_does_not_hide_the_others(tmp_path, manifest):
 
     assert "could not read" in report
     assert "## toy" in report
+
+
+def test_failures_are_reported_with_their_reason(manifest):
+    """Knowing that jobs failed is not the point; knowing why is.
+
+    Sweeps fail the same way many times over, so the report groups identical
+    reasons rather than printing one line per job.
+    """
+    from awwl.pipeline.manifest import build_jobs, load_manifest
+    from awwl.pipeline.store import JobStore, store_path
+
+    path, root = manifest
+    store = JobStore(store_path(root), max_attempts=1)
+    store.add_jobs(build_jobs(load_manifest(path)))
+    for _ in range(3):
+        claimed = store.claim("w")
+        store.finish(
+            claimed.job_id,
+            error='Traceback (most recent call last):\n  File "x.py", line 1\n'
+                  "torch.OutOfMemoryError: CUDA out of memory.",
+        )
+
+    _, method, statuses, counts = collect_status(path)
+    report = format_status("toy", method, statuses, counts)
+
+    assert "failures, by reason:" in report
+    assert "torch.OutOfMemoryError: CUDA out of memory." in report
+    assert "3x" in report, "identical reasons are counted, not repeated"
+    assert 'File "x.py"' not in report, "frame headers identify nothing"
+
+
+def test_last_meaningful_line_skips_traceback_furniture():
+    from awwl.pipeline.status import _last_meaningful_line
+
+    error = (
+        "Traceback (most recent call last):\n"
+        '  File "/a/b.py", line 42, in main\n'
+        "    loss = fn(x)\n"
+        "           ^^^^^\n"
+        "ValueError: perceptual loss needs 1 or 3 channels, got 4\n"
+    )
+
+    assert _last_meaningful_line(error) == (
+        "ValueError: perceptual loss needs 1 or 3 channels, got 4"
+    )
+
+
+def test_a_job_with_no_recorded_error_does_not_crash_the_report():
+    from awwl.pipeline.status import _last_meaningful_line
+
+    assert _last_meaningful_line("   \n\n  ") == "(no error text recorded)"
