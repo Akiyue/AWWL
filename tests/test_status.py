@@ -213,4 +213,56 @@ def test_last_meaningful_line_skips_traceback_furniture():
 def test_a_job_with_no_recorded_error_does_not_crash_the_report():
     from awwl.pipeline.status import _last_meaningful_line
 
-    assert _last_meaningful_line("   \n\n  ") == "(no error text recorded)"
+    assert "killed, or output truncated" in _last_meaningful_line("   \n\n  ")
+
+
+def test_interpreter_shutdown_noise_is_not_read_as_the_failure():
+    """The reason 19 DreamBooth failures all reported the same wrong cause.
+
+    `multiprocess` raises this on every exit under Python 3.12, successful runs
+    included. It is printed after the real traceback, so taking the last line
+    of stderr reports teardown as the cause and hides what actually happened.
+    """
+    from awwl.pipeline.status import _last_meaningful_line
+
+    error = (
+        "Traceback (most recent call last):\n"
+        '  File "/a/train.py", line 10, in main\n'
+        "torch.OutOfMemoryError: CUDA out of memory. Tried to allocate 2.00 GiB\n"
+        "Exception ignored in: <function ResourceTracker.__del__ at 0x7f>\n"
+        "Traceback (most recent call last):\n"
+        '  File "/x/resource_tracker.py", line 80, in __del__\n'
+        "AttributeError: '_thread.RLock' object has no attribute '_recursion_count'\n"
+    )
+
+    assert _last_meaningful_line(error) == (
+        "torch.OutOfMemoryError: CUDA out of memory. Tried to allocate 2.00 GiB"
+    )
+
+
+def test_shutdown_noise_alone_is_reported_as_no_traceback():
+    """A killed process leaves only teardown output; say so rather than guess."""
+    from awwl.pipeline.status import _last_meaningful_line
+
+    error = (
+        "Exception ignored in: <function ResourceTracker.__del__ at 0x7f>\n"
+        "AttributeError: '_thread.RLock' object has no attribute '_recursion_count'\n"
+    )
+
+    assert "killed, or output truncated" in _last_meaningful_line(error)
+
+
+def test_show_errors_dumps_the_full_stderr(manifest):
+    from awwl.pipeline.manifest import build_jobs, load_manifest
+    from awwl.pipeline.store import JobStore, store_path
+
+    path, root = manifest
+    store = JobStore(store_path(root), max_attempts=1)
+    store.add_jobs(build_jobs(load_manifest(path)))
+    claimed = store.claim("w")
+    store.finish(claimed.job_id, error="line one\nRuntimeError: the real cause")
+
+    _, method, statuses, counts = collect_status(path)
+
+    assert "line one" not in format_status("toy", method, statuses, counts)
+    assert "line one" in format_status("toy", method, statuses, counts, show_errors=True)

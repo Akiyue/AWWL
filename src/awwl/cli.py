@@ -829,6 +829,10 @@ def list_checkpoints(
 def status_cmd(
     manifests: list[Path] = typer.Argument(None, help="Manifests to report on (default: all)."),
     out: Path | None = typer.Option(None, "--out", help="Also write the report here."),
+    show_errors: bool = typer.Option(
+        False, "--show-errors",
+        help="Print the full captured stderr for one job per distinct failure reason.",
+    ),
 ) -> None:
     """What has been measured, and what is still missing.
 
@@ -844,7 +848,7 @@ def status_cmd(
         typer.echo("no manifests found under configs/pipeline/", err=True)
         raise typer.Exit(2)
 
-    report = status_report(paths)
+    report = status_report(paths, show_errors=show_errors)
     typer.echo(report)
     if out:
         out.parent.mkdir(parents=True, exist_ok=True)

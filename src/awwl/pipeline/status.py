@@ -62,24 +62,44 @@ def _seed_in(job_id: str) -> str | None:
     return found[-1] if found else None
 
 
-# Lines that appear at the tail of every traceback and identify nothing.
+# Lines that appear inside every traceback and identify nothing.
 _NOISE = ("Traceback (most recent call last)", "During handling of", "The above exception")
+
+
+def _strip_shutdown_noise(error: str) -> str:
+    """Drop ``Exception ignored in:`` blocks, which are teardown, not failure.
+
+    Python prints these while finalising the interpreter, *after* whatever
+    actually went wrong. On this project the ``multiprocess`` package emits
+    ``AttributeError: '_thread.RLock' object has no attribute
+    '_recursion_count'`` on every exit under Python 3.12 -- successful runs
+    included -- so reading the last line of stderr reports it as the cause of
+    19 failures and buries the real one.
+
+    Everything from the first such block onward is dropped: they only occur at
+    shutdown, so nothing that matters follows.
+    """
+    lines = error.splitlines()
+    for i, line in enumerate(lines):
+        if line.lstrip().startswith("Exception ignored"):
+            return "\n".join(lines[:i])
+    return error
 
 
 def _last_meaningful_line(error: str, *, width: int = 160) -> str:
     """The line of a captured stderr that says what went wrong.
 
     Python puts the exception type and message last, so the final non-empty
-    line is almost always the useful one; source echoes and frame headers above
-    it are not. Truncated, because these are printed one per distinct failure
-    and a wrapped traceback defeats the purpose.
+    line of the real output is almost always the useful one; source echoes and
+    frame headers above it are not. Truncated, because these are printed one
+    per distinct failure and a wrapped traceback defeats the purpose.
     """
-    for line in reversed(error.strip().splitlines()):
+    for line in reversed(_strip_shutdown_noise(error).strip().splitlines()):
         stripped = line.strip()
         if not stripped or stripped.startswith(("File \"", "^", "~")) or stripped in _NOISE:
             continue
         return stripped[:width]
-    return "(no error text recorded)"
+    return "(process died without a traceback -- killed, or output truncated)"
 
 
 def collect_status(
@@ -152,6 +172,8 @@ def format_status(
     method: str,
     statuses: list[GroupStatus],
     counts: dict[str, int],
+    *,
+    show_errors: bool = False,
 ) -> str:
     """Render one manifest's coverage as a table plus a verdict."""
     expected = EXPECTED_METRICS.get(method, ())
@@ -196,15 +218,22 @@ def format_status(
     # not -- and printing them here is the difference between "some jobs
     # failed" and knowing what to fix.
     reasons: dict[str, list[str]] = {}
+    samples: dict[str, str] = {}
     for st in statuses:
         for err in st.errors:
-            reasons.setdefault(_last_meaningful_line(err), []).append(st.group)
+            reason = _last_meaningful_line(err)
+            reasons.setdefault(reason, []).append(st.group)
+            samples.setdefault(reason, err)
     if reasons:
         lines.append("  failures, by reason:")
         for reason, groups in sorted(reasons.items(), key=lambda kv: -len(kv[1])):
             unique = sorted(set(groups))
             lines.append(f"    {len(groups):>3}x  {reason}")
             lines.append(f"         in: {', '.join(unique)}")
+            if show_errors:
+                lines.append("         ---- full stderr of one such job ----")
+                lines += [f"         {ln}" for ln in samples[reason].splitlines()]
+                lines.append("         ---- end ----")
         lines.append("")
 
     if counts:
@@ -226,7 +255,7 @@ def format_status(
     return "\n".join(lines)
 
 
-def status_report(manifests: list[Path]) -> str:
+def status_report(manifests: list[Path], *, show_errors: bool = False) -> str:
     """Full report across every manifest handed in."""
     out = ["# Experiment coverage", ""]
     for path in manifests:
@@ -235,5 +264,5 @@ def status_report(manifests: list[Path]) -> str:
         except Exception as exc:  # a broken manifest must not hide the others
             out += [f"## {path}", "", f"  could not read: {exc}", ""]
             continue
-        out.append(format_status(name, method, statuses, counts))
+        out.append(format_status(name, method, statuses, counts, show_errors=show_errors))
     return "\n".join(out)
