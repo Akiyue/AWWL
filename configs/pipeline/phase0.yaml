@@ -167,8 +167,14 @@ experiments:
     overrides:
       loss.name: snr_weighted
 
+  # Tier 5, not 3, despite belonging with the other comparison losses: at
+  # resize=True this upsamples 32x32 batches 49-fold through VGG-16 twice per
+  # step, which costs a few hundred times the UNet it is training. Left at
+  # tier 3 it blocks every tier-4 run behind a loss whose own docstring says
+  # its number is a control rather than a perceptual result -- the epsilon
+  # target is white noise. Run it last, or not at all.
   - group: perceptual
-    tier: 3
+    tier: 5
     overrides:
       loss.name: perceptual
 

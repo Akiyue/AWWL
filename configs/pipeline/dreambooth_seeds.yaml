@@ -112,9 +112,14 @@ experiments:
     tier: 2
     overrides: {loss.name: huber}
 
-  - group: perceptual
-    tier: 2
-    overrides: {loss.name: perceptual}
+  # Removed, not deferred. DreamBooth trains in Stable Diffusion's latent
+  # space, where the loss sees 4-channel latents; VGG features are defined on
+  # RGB and a latent channel is not a colour. There is no correct mapping, so
+  # the row cannot be computed here at all. It stays in the CIFAR-10 sweep,
+  # which is in pixel space.
+  # - group: perceptual
+  #   tier: 2
+  #   overrides: {loss.name: perceptual}
 
   # --- tier 3: does a learned weighting transfer to fine-tuning? ----------
   # On CIFAR-10 the learned objective removes the need to pick alpha. If it
