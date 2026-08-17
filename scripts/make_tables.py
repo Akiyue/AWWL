@@ -145,6 +145,70 @@ def build_comparison_table(rows, baseline: str, metric: str, label: str) -> str:
     return "\n".join(lines)
 
 
+def build_dreambooth_table(rows, baseline: str) -> str:
+    """Both DreamBooth metrics in one table, ordered by the published claim.
+
+    The published table's claim is about *rank on both metrics at once*, so the
+    two are shown side by side with each objective's rank: that is the form in
+    which the claim can be checked, and a per-metric comparison table hides it.
+    """
+    summaries = {
+        metric: {s.group: s for s in summarize_groups(rows, metric=metric)}
+        for metric in ("clip_score", "similarity")
+    }
+    ranks = {
+        metric: {
+            s.group: i + 1
+            for i, s in enumerate(sorted(by_group.values(), key=lambda s: -s.mean))
+        }
+        for metric, by_group in summaries.items()
+    }
+    deltas = {
+        metric: {r.group: r for r in compare_to_baseline(rows, metric=metric, baseline=baseline)}
+        for metric in ("clip_score", "similarity")
+    }
+
+    lines = [
+        PREAMBLE,
+        r"\begin{table}[t]",
+        r"\centering",
+        r"\small",
+        r"\caption{DreamBooth, five seeds per objective, \num{60} images per run. "
+        r"Rank is over the nine objectives on that metric. $\Delta$ is the "
+        r"paired-by-seed difference from MSE; $p$ is Holm-corrected within each "
+        r"metric. The published claim is that the frequency-aware objective is the "
+        r"only method in the top two on both metrics.}",
+        r"\label{tab:dreambooth}",
+        r"\begin{tabular}{lrrrrrr}",
+        r"\toprule",
+        r" & \multicolumn{3}{c}{CLIP score $\uparrow$} & "
+        r"\multicolumn{3}{c}{Subject similarity $\uparrow$} \\",
+        r"\cmidrule(lr){2-4}\cmidrule(lr){5-7}",
+        r"Objective & Mean & Rank & $p$ & Mean & Rank & $p$ \\",
+        r"\midrule",
+    ]
+    names = dict(ROWS)
+    order = sorted(
+        summaries["clip_score"],
+        key=lambda g: ranks["clip_score"].get(g, 99),
+    )
+    for group in order:
+        cells = []
+        for metric in ("clip_score", "similarity"):
+            summary = summaries[metric].get(group)
+            if summary is None:
+                cells += ["---", "---", "---"]
+                continue
+            comparison = deltas[metric].get(group)
+            p_cell = "---" if comparison is None else f"${comparison.p_holm:.3f}$"
+            if comparison is not None and comparison.significant:
+                p_cell = r"$\mathbf{" + f"{comparison.p_holm:.3f}" + r"}$"
+            cells += [f"${summary.mean:.4f}$", str(ranks[metric].get(group, "---")), p_cell]
+        lines.append(f"{names.get(group, group)} & " + " & ".join(cells) + r" \\")
+    lines += [r"\bottomrule", r"\end{tabular}", r"\end{table}", ""]
+    return "\n".join(lines)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--ledger", type=Path, default=Path("runs/phase0/results.jsonl"))
@@ -152,35 +216,62 @@ def main() -> int:
     parser.add_argument("--baseline", default="mse")
     parser.add_argument("--seeds", type=int, default=5, help="Expected seeds per arm.")
     parser.add_argument("--out", type=Path, default=Path("paper/tables"))
+    parser.add_argument(
+        "--dreambooth", type=Path, default=None,
+        help="DreamBooth ledger; builds tables/dreambooth.tex from it as well.",
+    )
     args = parser.parse_args()
 
+    args.out.mkdir(parents=True, exist_ok=True)
+    written: dict[str, str] = {}
+
+    # The two sweeps are independent. A CIFAR-10 ledger that is not ready must
+    # not stop the DreamBooth table being built, which is what happened while
+    # tier 4 was still running and the DreamBooth sweep had already finished.
+    rows: list[dict] = []
     if not args.ledger.exists():
         print(f"no ledger at {args.ledger}")
+    else:
+        rows = [r for r in load_results(args.ledger, kind="eval") if r.get("epoch") == args.epoch]
+        if rows:
+            written["full.tex"] = build_main_table(rows, args.epoch, args.seeds)
+            written["compare_fid.tex"] = build_comparison_table(rows, args.baseline, "fid", "FID")
+            written["compare_is.tex"] = build_comparison_table(
+                rows, args.baseline, "is_mean", "Inception Score"
+            )
+        else:
+            print(f"no eval rows at epoch {args.epoch} in {args.ledger}")
+
+    if args.dreambooth and args.dreambooth.exists():
+        # DreamBooth rows carry no epoch: a fine-tune has one final model.
+        db_rows = list(load_results(args.dreambooth, kind="eval"))
+        if db_rows:
+            written["dreambooth.tex"] = build_dreambooth_table(db_rows, args.baseline)
+        else:
+            print(f"no eval rows in {args.dreambooth}")
+    elif args.dreambooth:
+        print(f"no DreamBooth ledger at {args.dreambooth}")
+
+    if not written:
+        print("nothing to write")
         return 1
 
-    rows = [r for r in load_results(args.ledger, kind="eval") if r.get("epoch") == args.epoch]
-    if not rows:
-        print(f"no eval rows at epoch {args.epoch} in {args.ledger}")
-        return 1
-
-    args.out.mkdir(parents=True, exist_ok=True)
-    written = {
-        "full.tex": build_main_table(rows, args.epoch, args.seeds),
-        "compare_fid.tex": build_comparison_table(rows, args.baseline, "fid", "FID"),
-        "compare_is.tex": build_comparison_table(rows, args.baseline, "is_mean", "Inception Score"),
-    }
     for name, body in written.items():
         (args.out / name).write_text(body, encoding="utf-8")
         print(f"wrote {args.out / name}")
 
-    groups = sorted({str(r.get("group")) for r in rows})
-    unknown = [g for g in groups if g not in dict(ROWS)]
-    if unknown:
-        print(f"\nnot in the display order, so omitted from the table: {', '.join(unknown)}")
-        print("add them to ROWS in this script to include them")
-    missing = [k for k, _ in ROWS if k not in groups]
-    if missing:
-        print(f"\nstill unrun: {', '.join(missing)}")
+    # Only meaningful for the CIFAR-10 sweep, whose ROWS this is. Reporting it
+    # when that ledger was absent lists every arm as unrun, which is alarming
+    # and false.
+    if rows:
+        groups = sorted({str(r.get("group")) for r in rows})
+        unknown = [g for g in groups if g not in dict(ROWS)]
+        if unknown:
+            print(f"\nnot in the display order, so omitted from the table: {', '.join(unknown)}")
+            print("add them to ROWS in this script to include them")
+        missing = [k for k, _ in ROWS if k not in groups]
+        if missing:
+            print(f"\nstill unrun: {', '.join(missing)}")
     return 0
 
 

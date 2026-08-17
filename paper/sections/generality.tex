@@ -1,17 +1,80 @@
 \section{Generality}
 \label{sec:generality}
 
-\pending{DreamBooth, five seeds --- 25/25 trained, evaluation rerunning}
-\pending{tier-4 learned weightings: uncertainty-conditioned, GradNorm,
-per-subband, spatial, learned basis}
+\pending{tier-4 learned weightings on CIFAR-10: uncertainty-conditioned and
+GradNorm}
 \pending{second resolution (CelebA-64) --- required for a top-tier claim}
 \pending{second architecture (latent diffusion or DiT) --- required likewise}
 
-A learned weighting is the natural objection to \S\ref{sec:confound}: perhaps
-the hand-designed schedule is simply the wrong one. We therefore also train
-objectives whose weights are learned rather than specified---an
-uncertainty-weighted variant conditioned on $\sigma$, which removes $\alpha$
-and $p$ entirely, and a GradNorm balancer over the sub-bands. Either outcome is
-informative. A learned weighting that improves the spectrum further while FID
-stays flat confirms the accounting of \S\ref{sec:worth} on an independent
-mechanism; one that succeeds would be this paper's positive result.
+Everything so far concerns one task: unconditional generation trained from
+scratch at $32\times32$. The objective's published optimum on a second task ---
+subject-driven fine-tuning with DreamBooth \citep{ruiz2023dreambooth} --- is
+$\alpha = 0.8$, the mirror image of the $\alpha = 0.2$ used above, and that
+inversion is the evidence offered for a resolution-dependent law. It is also
+the setting where \S\ref{sec:confound} predicts something specific: if
+$\alpha$'s effect runs through the timestep axis rather than the frequency
+one, then a pure timestep method should do at least as well as the
+frequency-aware objective here, and the frequency-aware objective's advantage
+should not survive replication.
+
+\subsection{The published table, replicated}
+
+We fine-tune Stable Diffusion~1.5 on one subject for \num{400} steps, five
+seeds per objective, and score \num{60} generated images per run against three
+prompts: CLIP text-image agreement, and CLIP image-image similarity to the
+instance set the run was trained on.
+
+\IfFileExists{tables/dreambooth.tex}{\input{tables/dreambooth}}{%
+  \begin{table}[t]\centering
+  \fbox{\parbox{0.8\linewidth}{\centering\vspace{4mm}
+  \textbf{tables/dreambooth.tex not built}\\[1mm]
+  run \texttt{python scripts/make\_tables.py}\vspace{4mm}}}
+  \caption{DreamBooth, five seeds per objective.}\label{tab:dreambooth}
+  \end{table}}
+
+The published claim is that the audited objective is the only method in the
+top two on \emph{both} metrics. Over five seeds it is not: it ranks first of
+nine on subject similarity (\num{0.8721}) and seventh on prompt agreement
+(\num{0.3003}), below the MSE baseline. Neither of its differences from MSE
+survives correction --- $-0.0108$ on CLIP score and $+0.0292$ on similarity,
+the latter at $p = 0.050$ uncorrected and $p = 0.35$ after Holm. As on
+CIFAR-10, the reported ordering is a reading of differences smaller than the
+seed variance that produces them.
+
+\subsection{The timestep axis is the one that moves}
+
+One row does clear correction, and it is the row that carries no frequency
+component at all. Min-SNR-$\gamma$ weighting \citep{hang2023efficient}
+improves CLIP score by $+0.0411$ ($p = 0.005$, Holm), four times the largest
+effect any wavelet variant produces and in the opposite direction to most of
+them.
+
+This is the prediction of \S\ref{sec:confound} confirmed on an independent
+task. There, the published $\alpha$ was shown to impose a timestep schedule
+correlated with Min-SNR at $|r| = 0.82$, so that a result credited to
+frequency balance might belong to the other axis. Here the two axes are
+separated by construction --- one objective reweights only frequency, another
+only timesteps --- and only the timestep one produces an effect the data can
+distinguish from noise.
+
+The effect is a trade rather than an improvement. Min-SNR is simultaneously
+the best objective on prompt agreement and the worst on subject similarity
+($-0.0441$ against MSE), which is what a shift in where gradient mass falls
+along the schedule should look like: prompt-following and subject fidelity are
+formed at different noise levels, and emphasising one costs the other. We
+report it as a relocation of the trade-off, not as a better objective.
+
+\subsection{What five seeds can and cannot establish}
+
+The paired $t$-test reports $p = 0.0006$ for the Min-SNR effect on CLIP score.
+The Wilcoxon signed-rank test on the same five pairs reports $p = 0.0625$,
+which is its \emph{smallest attainable value} at $n = 5$: the statistic is
+bounded below by $2/2^{n}$, so no rank-based test on five seeds can reach
+\num{0.05} however large the effect. The two numbers do not disagree; the
+second is at its floor.
+
+We report both throughout for that reason. A rank test is the natural
+robustness check against the $t$-test's normality assumption, and at the seed
+counts common in this literature it cannot supply one. Reading its $p$-value
+as evidence of absence --- rather than as the floor it sits on --- would
+reverse this section's only positive finding.
