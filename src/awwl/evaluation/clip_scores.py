@@ -30,6 +30,27 @@ def _list_images(folder: Path) -> list[Path]:
     return sorted(p for p in folder.glob("*") if p.suffix.lower() in _VALID_EXTS)
 
 
+def _features(output: object) -> torch.Tensor:
+    """The projected embedding, whichever way CLIP hands it back.
+
+    ``get_text_features`` / ``get_image_features`` returned a bare tensor
+    through transformers 4.x. In 5.x they return a ``BaseModelOutputWithPooling``
+    whose ``pooler_output`` holds the projected embedding. Both are in the wild,
+    and reading the wrong one fails loudly rather than quietly -- but only once
+    an image has already been generated, which in a sweep means after the
+    expensive part.
+    """
+    if isinstance(output, torch.Tensor):
+        return output
+    pooled = getattr(output, "pooler_output", None)
+    if isinstance(pooled, torch.Tensor):
+        return pooled
+    raise TypeError(
+        f"CLIP returned {type(output).__name__}, which carries no embedding tensor "
+        "on `.pooler_output`. This is a transformers API change; see _features()."
+    )
+
+
 @torch.no_grad()
 def _embed_images(
     image_paths: Iterable[Path],
@@ -45,7 +66,7 @@ def _embed_images(
     for i in tqdm(range(0, len(paths), batch_size), desc="clip-embed", leave=False):
         batch = [Image.open(p).convert("RGB") for p in paths[i : i + batch_size]]
         inputs = clip_processor(images=batch, return_tensors="pt").to(device)
-        emb = clip_model.get_image_features(**inputs)
+        emb = _features(clip_model.get_image_features(**inputs))
         embs.append(F.normalize(emb, p=2, dim=-1).cpu())
     return torch.cat(embs, dim=0)
 
@@ -62,7 +83,7 @@ def text_image_similarity(
 ) -> list[float]:
     """Cosine similarity between ``prompt`` and each image in ``image_paths``."""
     text_inputs = clip_processor(text=[prompt], return_tensors="pt", padding=True).to(device)
-    text_emb = clip_model.get_text_features(**text_inputs)
+    text_emb = _features(clip_model.get_text_features(**text_inputs))
     text_emb = F.normalize(text_emb, p=2, dim=-1)
 
     scores: list[float] = []
@@ -70,7 +91,7 @@ def text_image_similarity(
         batch_paths = image_paths[i : i + batch_size]
         images = [Image.open(p).convert("RGB") for p in batch_paths]
         inputs = clip_processor(images=images, return_tensors="pt").to(device)
-        image_emb = clip_model.get_image_features(**inputs)
+        image_emb = _features(clip_model.get_image_features(**inputs))
         image_emb = F.normalize(image_emb, p=2, dim=-1)
         sims = (image_emb @ text_emb.T).squeeze(-1).cpu().tolist()
         if isinstance(sims, float):
@@ -111,7 +132,7 @@ def image_image_similarity(
         batch_paths = generated_image_paths[i : i + batch_size]
         images = [Image.open(p).convert("RGB") for p in batch_paths]
         inputs = clip_processor(images=images, return_tensors="pt").to(device)
-        gen_emb = clip_model.get_image_features(**inputs)
+        gen_emb = _features(clip_model.get_image_features(**inputs))
         gen_emb = F.normalize(gen_emb, p=2, dim=-1)
         sim = (gen_emb @ avg.T).squeeze().cpu().tolist()
         if isinstance(sim, float):
