@@ -98,7 +98,7 @@ def _clean(line: str) -> str:
     return line.replace("\r", "").strip().strip("│╭╮╰╯─ ").replace("❱ ", "").strip()
 
 
-def _last_meaningful_line(error: str, *, width: int = 160) -> str:
+def _last_meaningful_line(error: str, *, width: int = 300) -> str:
     """What the captured stderr says went wrong.
 
     Prefers an actual exception line -- ``SomeError: message`` -- searching
