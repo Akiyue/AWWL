@@ -109,10 +109,10 @@ def collect_status(
 
     # Queue: the explanation for anything the ledger is missing.
     counts: dict[str, int] = {}
-    db = output_root / "pipeline" / "jobs.db"
-    if db.exists():
-        from awwl.pipeline.store import JobStore
+    from awwl.pipeline.store import JobStore, store_path
 
+    db = store_path(output_root)
+    if db.exists():
         store = JobStore(db)
         counts = store.counts()
         for job in store.list_jobs():

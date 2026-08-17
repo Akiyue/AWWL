@@ -660,12 +660,12 @@ def pipeline_run_cmd(
     """
     setup_logging("INFO")
     from awwl.pipeline import build_jobs, default_gpus, format_status, load_manifest, run_pipeline
-    from awwl.pipeline.store import JobStore
+    from awwl.pipeline.store import JobStore, store_path
 
     spec = load_manifest(manifest)
     jobs = build_jobs(spec, manifest_dir=manifest.parent)
     root = Path(spec["output_root"])
-    store = JobStore(root / "pipeline" / "state.db", stale_after=stale_after, max_attempts=max_attempts)
+    store = JobStore(store_path(root), stale_after=stale_after, max_attempts=max_attempts)
     added = store.add_jobs(jobs)
     typer.echo(f"manifest '{spec['name']}': {len(jobs)} job(s), {added} newly queued")
 
@@ -708,10 +708,10 @@ def pipeline_status_cmd(
     setup_logging("WARNING")
     from awwl.pipeline import load_manifest
     from awwl.pipeline.runner import format_status
-    from awwl.pipeline.store import JobStore
+    from awwl.pipeline.store import JobStore, store_path
 
     spec = load_manifest(manifest)
-    store = JobStore(Path(spec["output_root"]) / "pipeline" / "state.db")
+    store = JobStore(store_path(spec["output_root"]))
     typer.echo(format_status(store))
 
 
@@ -723,10 +723,10 @@ def pipeline_reset_cmd(
     """Requeue failed jobs so the next ``pipeline run`` retries them."""
     setup_logging("WARNING")
     from awwl.pipeline import load_manifest
-    from awwl.pipeline.store import FAILED, RUNNING, JobStore
+    from awwl.pipeline.store import FAILED, RUNNING, JobStore, store_path
 
     spec = load_manifest(manifest)
-    store = JobStore(Path(spec["output_root"]) / "pipeline" / "state.db")
+    store = JobStore(store_path(spec["output_root"]))
     statuses = (FAILED, RUNNING) if running else (FAILED,)
     typer.echo(f"requeued {store.reset(statuses=statuses)} job(s)")
 

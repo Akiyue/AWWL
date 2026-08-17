@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from awwl.pipeline.manifest import build_jobs, load_manifest
 from awwl.pipeline.runner import RunReport, default_gpus, format_status, run_pipeline
-from awwl.pipeline.store import Job, JobStore
+from awwl.pipeline.store import Job, JobStore, store_path
 
 __all__ = [
     "Job",
@@ -15,4 +15,5 @@ __all__ = [
     "format_status",
     "load_manifest",
     "run_pipeline",
+    "store_path",
 ]

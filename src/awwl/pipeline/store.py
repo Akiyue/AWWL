@@ -32,6 +32,17 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
+
+def store_path(output_root: str | Path) -> Path:
+    """Where a pipeline's job database lives, given its ``output_root``.
+
+    One definition, because the name was previously written out at each call
+    site and a reader that guessed it wrong found no database and silently
+    reported no queue state at all -- the failure mode of a path that is a
+    convention rather than a function.
+    """
+    return Path(output_root) / "pipeline" / "state.db"
+
 PENDING = "pending"
 RUNNING = "running"
 DONE = "done"

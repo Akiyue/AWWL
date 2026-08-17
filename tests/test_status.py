@@ -100,12 +100,12 @@ def test_partial_seeds_are_not_complete(manifest):
 def test_queue_done_without_ledger_rows_is_flagged(manifest):
     """The dangerous disagreement: the queue is satisfied, the paper has nothing."""
     from awwl.pipeline.manifest import build_jobs, load_manifest
-    from awwl.pipeline.store import JobStore
+    from awwl.pipeline.store import JobStore, store_path
 
     path, root = manifest
     write_ledger(root, [])
 
-    store = JobStore(root / "pipeline" / "jobs.db")
+    store = JobStore(store_path(root))
     jobs = build_jobs(load_manifest(path))
     store.add_jobs(jobs)
     for _ in jobs:
@@ -123,10 +123,10 @@ def test_queue_done_without_ledger_rows_is_flagged(manifest):
 
 def test_failed_jobs_surface_in_the_status_column(manifest):
     from awwl.pipeline.manifest import build_jobs, load_manifest
-    from awwl.pipeline.store import JobStore
+    from awwl.pipeline.store import JobStore, store_path
 
     path, root = manifest
-    store = JobStore(root / "pipeline" / "jobs.db", max_attempts=1)
+    store = JobStore(store_path(root), max_attempts=1)
     store.add_jobs(build_jobs(load_manifest(path)))
     claimed = store.claim("w")
     store.finish(claimed.job_id, error="boom")
@@ -136,6 +136,20 @@ def test_failed_jobs_surface_in_the_status_column(manifest):
 
     assert counts.get("failed") == 1
     assert "FAILED" in report
+
+
+def test_the_queue_reader_looks_where_the_runner_writes(tmp_path):
+    """Regression: the reader guessed ``jobs.db`` and the runner writes ``state.db``.
+
+    Nothing failed. ``collect_status`` found no database, reported no queue
+    state, and 25 failed jobs appeared as an unexplained gap in the ledger --
+    the worst kind of bug in a tool whose job is to tell you what went wrong.
+    Both sides now call ``store_path``; this pins the name so a rename has to
+    be deliberate.
+    """
+    from awwl.pipeline.store import store_path
+
+    assert store_path(tmp_path) == tmp_path / "pipeline" / "state.db"
 
 
 def test_a_broken_manifest_does_not_hide_the_others(tmp_path, manifest):
