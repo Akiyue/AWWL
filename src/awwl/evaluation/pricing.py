@@ -62,19 +62,44 @@ def _prompt_dirs(run_dir: Path) -> list[Path]:
     return sorted(p for p in (run_dir / "samples").glob("prompt*") if p.is_dir())
 
 
-def high_band_deficit(sample_dirs: list[Path], real_dir: Path, *, max_images: int) -> float:
+def _sample_size(dirs: list[Path]) -> int:
+    """The square size the generated samples already share."""
+    from PIL import Image
+
+    for d in dirs:
+        for f in sorted(d.iterdir()):
+            if f.suffix.lower() in (".png", ".jpg", ".jpeg"):
+                with Image.open(f) as im:
+                    return min(im.size)
+    raise ValueError("no sample images to size from")
+
+
+def high_band_deficit(
+    sample_dirs: list[Path],
+    real_dir: Path,
+    *,
+    max_images: int,
+    size: int,
+) -> float:
     """Signed high-band deviation of these samples from the real subject images.
 
     Negative means the samples carry too little high-frequency energy, which is
     the failure the objective under audit sets out to correct. Returned as a
     positive deficit in dB for readability, matching how the CIFAR-10 side
     reports it.
+
+    Args:
+        size: Both sides are resized to this before profiling. Not optional:
+            FFT magnitude scales with pixel count, so generated samples and
+            reference photographs at different resolutions differ by tens of
+            dB from size alone. A first run of this function without it
+            reported a 26 dB deficit that was almost entirely that offset.
     """
-    real = radial_profile(real_dir, max_images=max_images)
+    real = radial_profile(real_dir, max_images=max_images, size=size)
     if real is None:
         raise ValueError(f"no images to profile in {real_dir}")
 
-    profiles = [radial_profile(d, max_images=max_images) for d in sample_dirs]
+    profiles = [radial_profile(d, max_images=max_images, size=size) for d in sample_dirs]
     usable = [p for p in profiles if p is not None]
     if not usable:
         raise ValueError("no sample images to profile")
@@ -96,6 +121,7 @@ def price_run(
     boost_db: float | None = None,
     work: str | Path = "runs/db_pricing",
     max_images: int = 10000,
+    size: int | None = None,
 ) -> PricedRun:
     """Measure this run's correction, then buy it back on its own samples.
 
@@ -105,6 +131,9 @@ def price_run(
             caller across many runs, and so this is testable without weights.
         boost_db: Correction to apply. Defaults to the deficit this run
             actually shows, which is the quantity the question is about.
+        size: Resolution both sides are compared at. Defaults to the
+            generated samples' own size, which is the resolution the model
+            was asked to produce and so the one its spectrum is about.
 
     Returns:
         The run's spectrum and both metrics, before and after.
@@ -124,7 +153,9 @@ def price_run(
             "each prompt directory must have the prompt that produced it"
         )
 
-    deficit = high_band_deficit(dirs, real, max_images=max_images)
+    if size is None:
+        size = _sample_size(dirs)
+    deficit = high_band_deficit(dirs, real, max_images=max_images, size=size)
     boost = float(boost_db) if boost_db is not None else deficit
     logger.info("%s: high-band deficit %.3f dB, boosting by %.3f dB", run_dir.name, deficit, boost)
 
@@ -153,7 +184,7 @@ def price_run(
     return PricedRun(
         exp=run_dir.name,
         deficit_db=deficit,
-        boosted_deficit_db=high_band_deficit(boosted_dirs, real, max_images=max_images),
+        boosted_deficit_db=high_band_deficit(boosted_dirs, real, max_images=max_images, size=size),
         clip_score=mean(clip_plain),
         clip_score_boosted=mean(clip_boost),
         similarity=mean(sim_plain),

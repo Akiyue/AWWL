@@ -53,7 +53,7 @@ def test_smoothed_samples_show_a_positive_high_band_deficit(run):
     run_dir, real = run
     dirs = sorted((run_dir / "samples").glob("prompt*"))
 
-    deficit = high_band_deficit(dirs, real, max_images=100)
+    deficit = high_band_deficit(dirs, real, max_images=100, size=32)
 
     assert deficit > 0, "blurred samples must read as missing high-frequency energy"
 
@@ -74,7 +74,7 @@ def test_the_boost_defaults_to_the_run_s_own_measured_deficit(run):
     """Each arm is priced at the correction it achieves, not a shared constant."""
     run_dir, real = run
     dirs = sorted((run_dir / "samples").glob("prompt*"))
-    expected = high_band_deficit(dirs, real, max_images=100)
+    expected = high_band_deficit(dirs, real, max_images=100, size=32)
 
     priced = price_run(run_dir, prompts=["a", "b"], score_folder=constant_scorer,
                        work=run_dir.parent / "work")
@@ -128,3 +128,36 @@ def test_the_table_shows_the_change_in_both_metrics(run):
 
     assert "dCLIP" in table and "dsim" in table
     assert "mse_s1" in table
+
+
+def test_a_resolution_difference_is_not_read_as_a_spectral_deficit(tmp_path):
+    """The bug that made the first DreamBooth pricing run meaningless.
+
+    FFT magnitude scales with pixel count, so the same content at two
+    resolutions differs by tens of dB from size alone. Without a common size
+    the measurement reported a 26 dB deficit for DreamBooth samples against
+    their instance photographs -- an artefact, which then set a 26 dB boost
+    that saturated the images to no purpose.
+
+    Both folders here hold the *same* content, downscaled from one source, so
+    an honest measurement finds almost nothing between them.
+    """
+    from PIL import Image
+
+    source = Image.fromarray(
+        np.random.default_rng(0).integers(0, 255, (256, 256, 3), dtype=np.uint8)
+    )
+    small, large = tmp_path / "small", tmp_path / "large"
+    for folder, side in ((small, 64), (large, 256)):
+        folder.mkdir()
+        for i in range(4):
+            source.resize((side, side), Image.BICUBIC).save(folder / f"{i}.png")
+
+    honest = high_band_deficit([small], large, max_images=10, size=64)
+    naive = high_band_deficit([small], large, max_images=10, size=None)
+
+    assert abs(honest) < 3.0, f"same content, common size: got {honest:.1f} dB"
+    assert abs(naive) > 10.0, (
+        f"without a common size the size offset should dominate, got {naive:.1f} dB "
+        "-- if this no longer holds the regression it guards has changed shape"
+    )

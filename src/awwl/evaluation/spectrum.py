@@ -34,8 +34,22 @@ logger = logging.getLogger(__name__)
 _VALID_EXTS = (".png", ".jpg", ".jpeg")
 
 
-def radial_profile(folder: str | Path, *, max_images: int = 10000) -> np.ndarray | None:
+def radial_profile(
+    folder: str | Path,
+    *,
+    max_images: int = 10000,
+    size: int | None = None,
+) -> np.ndarray | None:
     """Average radially-binned FFT log-magnitude across images in ``folder``.
+
+    Args:
+        size: Resize every image to ``size x size`` first. **Required whenever
+            two folders being compared do not already share a resolution.**
+            The magnitude of a 2-D FFT scales with the number of pixels, so a
+            folder of 512x512 samples and a folder of 2048x2048 photographs
+            differ by roughly 24 dB from image size alone -- which reads as a
+            colossal spectral deficit and is nothing of the kind. CIFAR-10
+            never showed this because samples and reference are both 32x32.
 
     Returns:
         A 1-D NumPy array in **decibels** (``20·log10|F|``) of length
@@ -50,7 +64,10 @@ def radial_profile(folder: str | Path, *, max_images: int = 10000) -> np.ndarray
     profiles: list[np.ndarray] = []
     for f in tqdm(files, desc=f"fft {folder.name}", leave=False):
         try:
-            data = np.array(Image.open(f).convert("L"))
+            image = Image.open(f).convert("L")
+            if size is not None:
+                image = image.resize((size, size), Image.BICUBIC)
+            data = np.array(image)
         except Exception as exc:
             logger.warning("could not read %s: %s", f, exc)
             continue
