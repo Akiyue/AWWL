@@ -1,19 +1,58 @@
 \section{Limitations}
 \label{sec:limitations}
 
-\begin{itemize}
-  \item A single architecture and dataset until \S\ref{sec:generality} lands.
-    Absence of an effect at $32\times32$ does not establish absence at
-    resolutions where high-frequency content carries more of the signal.
-  \item Sampling is DDIM-100 throughout. The comparison is internally
-    consistent, but a sampler with fewer steps produces smoother output, which
-    is precisely where a frequency-aware objective should have its advantage.
-    \pending{DDPM-1000 check}
-  \item The spectral distance is computed by a hand-written radial FFT. Two
-    independent implementations here agree, which is reassuring and not proof
-    ---and after \S\ref{sec:replication} we are in no position to treat our own
-    implementations as authoritative.
-  \item The Fourier post-process of \S\ref{sec:worth} leaves a spatial
-    signature unlike a model's under-production, so the value it assigns to the
-    correction is an estimate rather than an exact accounting.
-\end{itemize}
+A paper reporting that a method does not work owes the reader a clear account
+of the conditions under which it was tested, since every one of them is a way
+the result could fail to generalise.
+
+\paragraph{The pricing argument rests on two tasks, the rest on more.}
+The replication and the confound are measured on CIFAR-10 at $32\times32$ with
+a pixel-space U-Net and on DreamBooth at $512\times512$ with a latent-space
+U-Net --- two architectures, two resolutions, two tasks. The \emph{pricing}
+argument of \S\ref{sec:worth}, which is this paper's central move, is measured
+on both, but its FID form only on the first. Absence of an effect at
+$32\times32$ does not establish absence at resolutions where high-frequency
+content carries more of the signal Inception features encode. We expect the
+trade a frequency-aware objective makes to look different there, and we have
+not measured it.
+
+\paragraph{One objective.}
+We audit a single published objective in detail. The title's claim is about a
+family, and one member is not a family. What transfers beyond this instance is
+argued rather than measured: Eq.~\ref{eq:parseval} constrains any sub-band
+weighting on an orthonormal basis, the confound of \S\ref{sec:confound} arises
+whenever a weighting depends on $\sigma_t$ without its total held fixed, and
+the post-processing control applies to any method that names the statistic it
+intends to change. Whether other members clear those bars is an empirical
+question we have not answered.
+
+\paragraph{Sampling is DDIM-100 throughout.}
+The comparison is internally consistent and the sampling seed is fixed across
+arms, but it is one operating point. Few-step samplers produce smoother output,
+which is precisely where a frequency-aware objective should have its advantage,
+so the choice is not neutral with respect to the hypothesis.
+\pending{DDPM-1000 check on the tier-1 arms}
+
+\paragraph{The post-process is not the model's own failure mode.}
+The Fourier correction of \S\ref{sec:worth} raises a band; a model
+under-produces that band through its architecture and objective, and the two
+leave different spatial signatures. The value the post-process assigns to the
+correction is therefore an estimate of what the spectral change is worth, not
+an exact accounting of what the objective did. We take the direction of the
+result to be robust and the magnitude to carry that caveat.
+
+\paragraph{Our own implementations are not authoritative.}
+The spectral distance is a hand-written radial FFT. Two independent
+implementations here agree, which is reassuring and is not proof --- and after
+\S\ref{sec:replication}, where a hand-written KID estimator inverted the sign
+of the study's only positive result, we are in no position to treat agreement
+between our own tools as settling anything. Where a standard implementation
+exists we use it and say so.
+
+\paragraph{Metric scope.}
+FID, IS and KID are Inception-feature statistics and inherit that network's
+priorities \citep{kynkaanniemi2023role, stein2023exposing}. An objective could
+improve images in ways these metrics do not register. Our claim is bounded
+accordingly: the objective does not improve the metrics the literature it
+belongs to reports, and the spectral change it makes is not worth enough in
+those metrics to cover what it costs.

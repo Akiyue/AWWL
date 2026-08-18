@@ -1,20 +1,67 @@
 \section{Experimental protocol}
 \label{sec:protocol}
 
-Every configuration is trained with five seeds; we report mean $\pm$ standard
-deviation with a 95\% confidence interval, and compare with a paired-by-seed
-$t$-test under Holm--Bonferroni correction across the comparison family.
-Pairing removes the variance the seed itself contributes and is markedly more
-sensitive at $N=5$ than an unpaired test.
+The protocol is stated in full because the study's conclusions are negative,
+and a negative result is only as good as the reader's ability to see what would
+have shown a positive one.
 
-We also report a Wilcoxon signed-rank test, but as a direction check only: its
-smallest attainable two-sided $p$ is $2/2^{N} = 0.0625$ at $N=5$, so it cannot
-clear $\alpha = 0.05$ and must not be read as a verdict.
+\subsection{Replication and variance}
 
-Sampling uses DDIM \citep{song2021denoising} with 100 steps and 10\,000 samples,
-identical across arms; FID via \texttt{clean-fid} \citep{parmar2022aliased}, IS
-and KID via \texttt{torch-fidelity}. Spectra are reported in decibels
-($20\log_{10}|F|$). Exponential moving averaging is reported as its own
-configuration rather than mixed in.
+Every configuration is trained with five seeds. We report mean $\pm$ standard
+deviation with a \SI{95}{\percent} confidence interval, and compare with a
+paired-by-seed $t$-test under Holm--Bonferroni correction across the comparison
+family. The seed controls initialisation, data order and sampling noise
+together, so a pair of runs differs in everything a practitioner would leave to
+chance.
 
-\pending{DDPM-1000 sampler sensitivity check --- the one open threat to the null}
+Pairing matters more than the test. The standard deviation of FID across five
+seeds of an identical configuration is \num{0.21}; most differences this
+literature reports are smaller than that. An unpaired comparison at $N=5$ has
+almost no power against effects of that size, while pairing removes the seed's
+own contribution and leaves the difference under test.
+
+We also report a Wilcoxon signed-rank test, but as a direction check only. Its
+smallest attainable two-sided $p$ is $2/2^{N} = \num{0.0625}$ at $N=5$: no
+rank-based test on five pairs can clear $\alpha = \num{0.05}$ however large the
+effect. Where the two disagree in \S\ref{sec:generality} they are not in
+conflict --- the second is at its floor. Reporting it without that caveat would
+invite the reader to treat a floor as evidence of absence.
+
+\subsection{Training}
+
+CIFAR-10 at $32\times32$, \num{200} epochs, batch size \num{128}, AdamW with a
+cosine schedule and \num{500} warm-up steps: \num{78200} optimiser steps per
+run. The recipe is the published one and is held identical across arms; only
+the objective changes. Exponential moving averaging is reported as its own
+configuration rather than mixed in, because the published runs omit it and
+mixing the two would confound the comparison with a second change.
+
+Objectives carrying learnable parameters --- the uncertainty-conditioned
+weighting and the GradNorm balancer --- place them in their own optimiser group
+with their own learning rate. Without this they stay frozen at initialisation
+and the run silently degenerates into a fixed-weight objective, which looks
+like a working experiment and tests nothing.
+
+\subsection{Sampling and metrics}
+
+Sampling uses DDIM \citep{song2021denoising} with \num{100} steps and
+\num{10000} samples per checkpoint, with the sampling seed fixed across arms so
+a comparison differs by the trained model alone. FID is computed with
+\texttt{clean-fid} \citep{parmar2022aliased}, which fixes the resizing and
+quantisation discrepancies that make FID values incomparable between codebases;
+Inception Score and KID come from \texttt{torch-fidelity}. \S\ref{sec:replication}
+explains why we do not report a bespoke KID estimator.
+
+Spectra are radial FFT profiles in decibels ($20\log_{10}|F|$), averaged over
+images, with both sides resized to a common resolution before profiling. The
+resize is not cosmetic: FFT magnitude scales with pixel count, so profiles
+taken at different resolutions differ by tens of dB from image size alone. We
+report this because a first attempt at the DreamBooth comparison omitted it and
+produced a \SI{26}{\decibel} deficit that was almost entirely that offset.
+
+\subsection{What is released}
+
+Tables and figures are generated from the results ledger by scripts in the
+repository; no number in this paper is transcribed by hand. The ledger records
+one row per evaluated checkpoint with the configuration that produced it, so a
+reader can recompute every comparison, including the ones we do not make.

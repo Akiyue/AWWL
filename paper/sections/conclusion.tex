@@ -2,16 +2,42 @@
 \label{sec:conclusion}
 
 A frequency-aware diffusion objective can do exactly what it was designed to
-do---measurably correcting a real spectral deficiency, through the component
-its design credits---and still lose to the baseline it was meant to improve
-on. The correction is worth something, and we measure what: $\boostValue$~FID.
-The objective delivers it and gives back three times as much elsewhere, so that
-a post-process obtaining the same correction for free outperforms it.
+do --- measurably correcting a real spectral deficiency, through the component
+its design credits --- and still lose to the baseline it was meant to improve
+on. That is the result, and the interesting part is not the loss but the
+distance: the correction is worth $\boostValue \pm \boostCI$~FID, the objective
+delivers it, and it ends \shortfall~FID short of its own prediction. A
+twenty-line post-process obtaining the same correction for free outperforms it.
 
-The broader lesson is about attribution. It is not enough to show that a method
-changes the quantity it targets; the change must be priced against what the
-evaluation metric can register, and against what the method costs to obtain it.
-Both of the measurement hazards we report were caught only because we asked
-what a result \emph{should} have been before accepting what it was.
+Getting to that number required treating the mechanism as a quantity rather
+than a story. It is not enough to show that a method changes what it targets;
+the change has to be priced against what the evaluation metric can register,
+and against what the method gave up to obtain it. On an orthonormal basis
+Eq.~\ref{eq:parseval} makes that trade explicit --- sub-band weighting
+redistributes a fixed error budget, so every gain is someone else's loss --- and
+the question is never whether the mechanism is real but whether the trade is
+favourable.
 
-\todo{revisit once the learned-weighting arms report}
+The pricing test is what we would most like to see used elsewhere. Any
+objective whose stated mechanism is a change to an image statistic admits it:
+apply that change to the baseline's outputs directly and see what it is worth.
+If the trained method does not clear the post-processed baseline, the
+training-time machinery is not paying for itself, whatever the ablations show.
+It requires no additional training, and it would have flagged the objective
+audited here before any of the sweeps in \S\ref{sec:results} were run.
+
+Two results temper how much any of this should be trusted on its own. The
+weighting we audit turns out not to isolate the axis it names: its frequency
+parameter simultaneously imposes a timestep schedule correlated with Min-SNR at
+$|r| = 0.82$, and on DreamBooth the only objective whose effect survives
+correction is a pure timestep method with no frequency component at all. And
+both measurement hazards we report --- a bespoke KID estimator that inverted the
+sign of the study's only positive result, and a calibration performed at the
+metric's minimum that understated its operating-point sensitivity roughly
+thirtyfold --- were caught only because we asked what a result \emph{should}
+have been before accepting what it was. Neither would have announced itself.
+
+We do not conclude that frequency-aware objectives cannot work. We conclude
+that one of them does not, that the reason is legible once the mechanism is
+priced, and that the pricing is cheap enough there is no good reason not to do
+it.
