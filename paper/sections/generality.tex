@@ -1,16 +1,21 @@
 \section{Generality}
 \label{sec:generality}
 
-\pending{tier-4 learned weightings on CIFAR-10: uncertainty-conditioned and
-GradNorm}
-\pending{second resolution (CelebA-64) --- required for a top-tier claim}
-\pending{second architecture (latent diffusion or DiT) --- required likewise}
+\pending{tier-4 GradNorm arm on CIFAR-10; the uncertainty-conditioned one has
+reported}
+\pending{a third resolution (CelebA-64), to separate resolution from task}
 
-Everything so far concerns one task: unconditional generation trained from
-scratch at $32\times32$. The objective's published optimum on a second task ---
-subject-driven fine-tuning with DreamBooth \citep{ruiz2023dreambooth} --- is
-$\alpha = 0.8$, the mirror image of the $\alpha = 0.2$ used above, and that
-inversion is the evidence offered for a resolution-dependent law. It is also
+Everything to this point concerns one task: unconditional generation trained
+from scratch at $32\times32$ with a pixel-space U-Net. This section adds a
+second --- subject-driven fine-tuning of Stable Diffusion~1.5, a latent-space
+U-Net at $512\times512$ --- which changes the architecture, the resolution and
+the task at once. That the three move together is a limitation we return to in
+\S\ref{sec:limitations}; what it buys is that no conclusion below rests on a
+single training setup.
+
+The objective's published optimum here is $\alpha = 0.8$, the mirror image
+of the $\alpha = 0.2$ used above, and that inversion is the evidence offered
+for a resolution-dependent law. It is also
 the setting where \S\ref{sec:confound} predicts something specific: if
 $\alpha$'s effect runs through the timestep axis rather than the frequency
 one, then a pure timestep method should do at least as well as the
@@ -78,3 +83,46 @@ robustness check against the $t$-test's normality assumption, and at the seed
 counts common in this literature it cannot supply one. Reading its $p$-value
 as evidence of absence --- rather than as the floor it sits on --- would
 reverse this section's only positive finding.
+
+\subsection{What the correction is worth here: nothing the metrics can see}
+
+The pricing argument of \S\ref{sec:worth} transfers to this task directly, and
+gives a sharper answer than it did on CIFAR-10. We measure each run's
+high-frequency deficit against the instance images it was trained on, apply a
+Fourier post-process that removes that deficit, and re-score. No training is
+involved; the samples already exist.
+
+Both halves of the measurement behave. The baseline's samples sit
+\dbDeficitMSE~\si{\decibel} below the instance images in the high band and the
+audited objective's sit \dbDeficitAWWL~\si{\decibel} below, so the objective
+corrects \dbCorrection~\si{\decibel} here --- three times what it corrects on
+CIFAR-10, and evidence that the mechanism is not merely present but stronger on
+this task. The post-process drives the residual deficit to
+\dbResidual~\si{\decibel}: a near-complete correction, larger than any objective
+in the table achieves by training.
+
+It buys nothing. Pooled over ten runs, CLIP score moves by
+$+0.00000 \pm 0.00011$ and subject similarity by $+0.00001 \pm 0.00009$. The
+seed-to-seed spread of those metrics is \num{0.0091} and \num{0.0206}
+respectively --- two orders of magnitude larger than the effect of removing the
+spectral deficit entirely.
+
+The reason is not mysterious. CLIP's image tower resizes its input to
+$224\times224$; these samples are generated at $512\times512$. Everything above
+the Nyquist frequency of that resize is discarded before the network sees it,
+and the high band under discussion is largely above it. The metric is not
+insensitive to the correction so much as blind to it by construction.
+
+\paragraph{What follows from a price of zero.} Two things, and it is worth
+separating them. For this task, the practical conclusion is unusually clean:
+an objective cannot be credited with an improvement by a metric that cannot
+register its mechanism, so a frequency-aware loss has no headroom on
+CLIP-scored subject fine-tuning whatever it does to the spectrum. That is not a
+statement about this objective; it holds for the family.
+
+For the method, it is a precondition made visible. The pricing test asks what a
+statistic is worth \emph{in the metric the field reports}, and a price of zero
+has two readings --- the change does not matter, or the metric cannot see it ---
+which the test alone does not separate. Reporting the residual deficit
+alongside the price is what makes the second reading checkable: a correction
+that demonstrably landed and moved nothing is a fact about the metric.

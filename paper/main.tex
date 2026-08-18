@@ -35,6 +35,13 @@
 \newcommand{\fidMSEboost}{18.114}
 \newcommand{\fidAWWLboost}{18.568}
 
+% DreamBooth pricing (\S\ref{sec:generality}). The correction is three times
+% larger here than on CIFAR-10 and worth nothing the metrics can register.
+\newcommand{\dbDeficitMSE}{2.75}         % MSE high-band deficit, dB
+\newcommand{\dbDeficitAWWL}{1.50}        % the audited objective's, dB
+\newcommand{\dbCorrection}{1.25}         % what the objective corrects, dB
+\newcommand{\dbResidual}{0.25}           % deficit left after the post-process
+
 % Open questions, visible in the draft and impossible to forget at submission.
 \newcommand{\todo}[1]{\textcolor{red}{\textbf{[TODO: #1]}}}
 \newcommand{\pending}[1]{\textcolor{blue}{\textbf{[PENDING: #1]}}}

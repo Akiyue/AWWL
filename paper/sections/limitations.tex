@@ -49,6 +49,23 @@ of the study's only positive result, we are in no position to treat agreement
 between our own tools as settling anything. Where a standard implementation
 exists we use it and say so.
 
+\paragraph{The pricing test needs a metric that can see the statistic.}
+\S\ref{sec:generality} prices a near-complete spectral correction on DreamBooth
+at zero: removing the deficit entirely moves CLIP score and subject similarity
+by two orders of magnitude less than the seed variance. That is a real result
+about the task, but it also exposes a precondition. A price of zero has two
+readings --- the change does not matter, or the metric cannot register it ---
+and the test does not separate them on its own. Reporting the residual deficit
+alongside the price is what makes the second reading checkable, and anyone
+applying the test elsewhere should report both.
+
+\paragraph{Three things change at once between our two tasks.}
+Moving from CIFAR-10 to DreamBooth changes the architecture, the resolution and
+the task simultaneously. That is enough to show no conclusion rests on a single
+training setup, and not enough to attribute any difference between the two to
+any one of the three. Separating them needs a third setting that varies one
+axis alone, which we have not run.
+
 \paragraph{Metric scope.}
 FID, IS and KID are Inception-feature statistics and inherit that network's
 priorities \citep{kynkaanniemi2023role, stein2023exposing}. An objective could

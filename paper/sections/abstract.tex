@@ -13,6 +13,13 @@ spectral improvement and pays for it several times over elsewhere. A twenty-line
 post-process on the baseline outperforms the trained objective by that same
 margin.
 
+On a second task---subject-driven fine-tuning of a latent diffusion model---the
+same accounting is starker still: the objective corrects
+\dbCorrection~\si{\decibel}, three times what it corrects on CIFAR-10, and a
+post-process removing the deficit entirely changes the CLIP metrics by two
+orders of magnitude less than the seed variance. The correction is real,
+larger, and worth nothing those metrics can register.
+
 We further show that the published weighting conflates frequency balance with a
 Min-SNR-style timestep reweighting ($|r| = 0.82$); isolating the frequency
 component while holding the gradient budget fixed makes results significantly
