@@ -898,6 +898,74 @@ def prune_cmd(
         typer.echo(f"Total freed: {total_freed / 1e9:.1f} G")
 
 
+@app.command("price-dreambooth")
+def price_dreambooth_cmd(
+    run_dirs: list[Path] = typer.Argument(..., help="DreamBooth run folders to price."),
+    prompts_file: Path = typer.Option(Path("assets/prompts/robot_toy.txt"), "--prompts"),
+    real: Path | None = typer.Option(None, "--real", help="Defaults to each run's instance images."),
+    boost: float | None = typer.Option(None, "--boost", help="dB to boost; default is each run's own deficit."),
+    work: Path = typer.Option(Path("runs/db_pricing"), "--work"),
+    ledger: Path | None = typer.Option(None, "--ledger", help="Append one row per run."),
+    out: Path | None = typer.Option(None, "--out", help="Also write the table here."),
+    device: str = typer.Option("cuda", "--device"),
+) -> None:
+    """What is the spectral correction worth on DreamBooth?
+
+    The CIFAR-10 analysis prices the correction in FID by applying it to the
+    baseline's own samples. This asks the same question where the metrics are
+    CLIP-based, so the paper's central claim rests on two tasks rather than one.
+    No training: it post-processes samples that already exist.
+    """
+    setup_logging("INFO")
+    import torch
+    from transformers import CLIPModel, CLIPProcessor
+
+    from awwl.analysis.results import append_result
+    from awwl.evaluation import image_image_similarity, text_image_similarity
+    from awwl.evaluation.pricing import format_pricing_table, price_run
+
+    prompts = [p.strip() for p in prompts_file.read_text(encoding="utf-8").splitlines() if p.strip()]
+    if not prompts:
+        typer.echo(f"no prompts in {prompts_file}", err=True)
+        raise typer.Exit(2)
+
+    dev = device if device.startswith("cuda") and torch.cuda.is_available() else "cpu"
+    model = CLIPModel.from_pretrained("openai/clip-vit-base-patch32").to(dev).eval()
+    processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
+
+    priced = []
+    for run_dir in run_dirs:
+        reference = real or Path(
+            json.loads((run_dir / "config.json").read_text(encoding="utf-8"))["data"]["instance_data_dir"]
+        )
+
+        def score(folder: Path, prompt: str, _ref=reference):
+            images = sorted(p for p in folder.glob("*") if p.suffix.lower() in (".png", ".jpg"))
+            return (
+                text_image_similarity(clip_model=model, clip_processor=processor,
+                                      prompt=prompt, image_paths=images, device=dev),
+                image_image_similarity(clip_model=model, clip_processor=processor,
+                                       real_images_dir=_ref, generated_image_paths=images, device=dev),
+            )
+
+        try:
+            result = price_run(run_dir, prompts=prompts, score_folder=score,
+                               real_dir=real, boost_db=boost, work=work)
+        except Exception as exc:
+            typer.echo(f"skipped {run_dir}: {exc}", err=True)
+            continue
+        priced.append(result)
+        if ledger:
+            append_result(ledger, result.as_row())
+
+    table = format_pricing_table(priced)
+    typer.echo(table)
+    if out:
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(table, encoding="utf-8")
+        typer.echo(f"written to {out}")
+
+
 def main() -> None:
     """Module entry-point used both by ``python -m awwl.cli`` and the script alias."""
     use_utf8_output()
