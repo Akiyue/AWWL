@@ -1,29 +1,35 @@
-"""Evaluation: CLIP scores, FID/IS, KID/PR/spectral, timestep error analysis."""
+"""Evaluation: CLIP scores, FID/IS, KID/PR/spectral, timestep error analysis.
+
+The heavy metric backends (transformers for CLIP, clean-fid / torch-fidelity for
+FID/IS/KID) are imported lazily on attribute access, so importing this package
+does not pull them in until a metric is actually requested.
+"""
 
 from __future__ import annotations
 
-from awwl.evaluation.advanced_metrics import compute_advanced_metrics
-from awwl.evaluation.clip_scores import (
-    evaluate_clip_over_models,
-    image_image_similarity,
-    text_image_similarity,
-)
-from awwl.evaluation.cost import format_cost_table, measure_costs
-from awwl.evaluation.fid_is import compute_fid_is
-from awwl.evaluation.sensitivity import measure_sensitivity
-from awwl.evaluation.spectrum import radial_profile
-from awwl.evaluation.timestep_analysis import TimestepProfile, evaluate_timestep_errors
+import importlib
 
-__all__ = [
-    "TimestepProfile",
-    "compute_advanced_metrics",
-    "format_cost_table",
-    "measure_costs",
-    "compute_fid_is",
-    "evaluate_clip_over_models",
-    "evaluate_timestep_errors",
-    "image_image_similarity",
-    "measure_sensitivity",
-    "radial_profile",
-    "text_image_similarity",
-]
+_SUBMODULE_ATTRS: dict[str, tuple[str, ...]] = {
+    "advanced_metrics": ("compute_advanced_metrics",),
+    "clip_scores": (
+        "evaluate_clip_over_models",
+        "image_image_similarity",
+        "text_image_similarity",
+    ),
+    "cost": ("format_cost_table", "measure_costs"),
+    "fid_is": ("compute_fid_is",),
+    "restoration": ("evaluate_restoration", "psnr", "ssim"),
+    "sensitivity": ("measure_sensitivity",),
+    "spectrum": ("radial_profile",),
+    "timestep_analysis": ("TimestepProfile", "evaluate_timestep_errors"),
+}
+
+__all__ = [name for names in _SUBMODULE_ATTRS.values() for name in names]
+
+
+def __getattr__(name: str):
+    for module_name, names in _SUBMODULE_ATTRS.items():
+        if name in names:
+            module = importlib.import_module(f"{__name__}.{module_name}")
+            return getattr(module, name)
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

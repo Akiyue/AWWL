@@ -1,0 +1,79 @@
+# AWWL as a supervised image-restoration loss (denoising with variable sigma).
+#
+# The reframing: instead of a diffusion trainer whose loss decomposes *noise*
+# (which has no structure for a frequency objective to exploit), train a
+# regression UNet that maps a degraded image back to its clean counterpart.
+# The wavelet loss then decomposes the prediction residual against a *real
+# image*, where high-frequency detail is what PSNR / SSIM / LPIPS measure
+# directly.
+#
+# Degradation: additive Gaussian noise of per-sample sigma ~ U[sigma_min,
+# sigma_max], applied on the fly. The same sigma drives (a) the noise added,
+# (b) the model's time embedding (so the network knows how badly each sample
+# is corrupted) and (c) the AdaptiveWaveletLoss band weights — high sigma
+# -> LL (structure), low sigma -> HF (detail).
+
+_base_: base.yaml
+
+method: restoration
+
+model:
+  image_size: 32
+  in_channels: 3
+  out_channels: 3
+  layers_per_block: 2
+  block_out_channels: [128, 256, 256, 256]
+  down_block_types: [DownBlock2D, DownBlock2D, DownBlock2D, DownBlock2D]
+  up_block_types: [UpBlock2D, UpBlock2D, UpBlock2D, UpBlock2D]
+  # Resolution of the time embedding the degradation sigma is mapped onto.
+  num_train_timesteps: 1000
+  model_weights_path: null
+
+data:
+  dataset_name: cifar10
+  split: train
+  image_size: 32
+  batch_size: 128
+  num_workers: 4
+  source: auto
+  root: ./data
+
+degradation:
+  sigma_min: 0.05
+  sigma_max: 0.5
+
+train:
+  num_epochs: 100
+  learning_rate: 2.0e-4
+  lr_warmup_steps: 500
+  save_model_epochs: 25
+  grad_clip_norm: 1.0
+
+  resume: true
+  save_state_epochs: 5
+  keep_last_states: 2
+
+  use_ema: false
+  ema_decay: 0.9999
+
+loss:
+  # Neutral starting point: alpha=0.5 gives equal total weight to the two
+  # bands, and with p=1.0 the weights are simply w_LL = sigma, w_det = 1-sigma
+  # — the adaptive schedule in its most interpretable form.
+  name: adaptive_wavelet
+  alpha: 0.5
+  power: 1.0
+  wavelet_type: db1
+  levels: 1
+  weighting: normalized
+  normalize_weights: false
+  detail_reduction: mean
+  level_reduction: sum
+
+eval:
+  num_val_images: 500
+  batch_size: 64
+  seed: 777
+
+output:
+  dir: ./runs/restoration

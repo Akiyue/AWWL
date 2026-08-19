@@ -87,8 +87,13 @@ def build_jobs(manifest: dict[str, Any], *, manifest_dir: Path | None = None) ->
     output_root = Path(manifest["output_root"])
     ledger = str(manifest.get("ledger", output_root / "results.jsonl"))
     real_images = manifest.get("real_images")
-    if method not in ("finetune", "dreambooth"):
+    if method not in ("finetune", "dreambooth", "restoration"):
         raise ConfigError(f"manifest {name}: unsupported method {method!r}")
+    if method == "restoration" and not real_images:
+        raise ConfigError(
+            f"manifest {name}: method 'restoration' requires 'real_images' "
+            "(the folder of clean images the restoration quality is measured against)"
+        )
 
     defaults = manifest.get("defaults", {}) or {}
     default_seeds = list(defaults.get("seeds", [42]))
@@ -127,7 +132,9 @@ def build_jobs(manifest: dict[str, Any], *, manifest_dir: Path | None = None) ->
                     tier=tier,
                     depends_on=None,
                     payload={
-                        "argv": _cli("train", "--config", base_config, *_override_args(train_overrides)),
+                        "argv": _cli(
+                            "train", "--config", base_config, *_override_args(train_overrides)
+                        ),
                         "run_dir": str(run_dir),
                         "exp": exp,
                         "seed": seed,
@@ -149,14 +156,18 @@ def build_jobs(manifest: dict[str, Any], *, manifest_dir: Path | None = None) ->
                         payload={
                             "argv": _cli(
                                 "eval-dreambooth",
-                                "--run-dir", str(run_dir),
+                                "--run-dir",
+                                str(run_dir),
                                 # Omitted by default: eval-dreambooth then uses the
                                 # instance images the run was trained on, which is
                                 # what subject similarity must compare against.
                                 *(["--real", str(real_images)] if real_images else []),
-                                "--ledger", ledger,
-                                "--num-images", str(sample_cfg.get("num_samples", 20)),
-                                "--steps", str(sample_cfg.get("steps", 50)),
+                                "--ledger",
+                                ledger,
+                                "--num-images",
+                                str(sample_cfg.get("num_samples", 20)),
+                                "--steps",
+                                str(sample_cfg.get("steps", 50)),
                                 *(
                                     ["--prompts", str(sample_cfg["prompts"])]
                                     if sample_cfg.get("prompts")
@@ -170,6 +181,40 @@ def build_jobs(manifest: dict[str, Any], *, manifest_dir: Path | None = None) ->
                         attempts=0,
                     )
                 )
+                continue
+
+            if method == "restoration":
+                for epoch in eval_epochs:
+                    jobs.append(
+                        Job(
+                            job_id=f"{name}:eval:{exp}:{epoch}",
+                            pipeline=name,
+                            kind="eval",
+                            group_id=group,
+                            tier=tier,
+                            depends_on=train_id,
+                            payload={
+                                "argv": _cli(
+                                    "eval-restoration",
+                                    "--run-dir",
+                                    str(run_dir),
+                                    "--real",
+                                    str(real_images),
+                                    "--ledger",
+                                    ledger,
+                                    "--epoch",
+                                    str(epoch),
+                                    "--num-images",
+                                    str(sample_cfg.get("num_samples", 500)),
+                                ),
+                                "run_dir": str(run_dir),
+                                "exp": exp,
+                                "epoch": epoch,
+                            },
+                            status="pending",
+                            attempts=0,
+                        )
+                    )
                 continue
 
             for epoch in eval_epochs:
@@ -187,14 +232,22 @@ def build_jobs(manifest: dict[str, Any], *, manifest_dir: Path | None = None) ->
                         payload={
                             "argv": _cli(
                                 "infer",
-                                "--method", "finetune",
-                                "--weights", str(checkpoint),
-                                "--output-dir", str(samples_dir),
-                                "--num-samples", str(sample_cfg.get("num_samples", 10000)),
-                                "--sampler", str(sample_cfg.get("sampler", "ddim")),
-                                "--steps", str(sample_cfg.get("steps", 100)),
-                                "--batch-size", str(sample_cfg.get("batch_size", 256)),
-                                "--sample-seed", str(sample_cfg.get("seed", 12345)),
+                                "--method",
+                                "finetune",
+                                "--weights",
+                                str(checkpoint),
+                                "--output-dir",
+                                str(samples_dir),
+                                "--num-samples",
+                                str(sample_cfg.get("num_samples", 10000)),
+                                "--sampler",
+                                str(sample_cfg.get("sampler", "ddim")),
+                                "--steps",
+                                str(sample_cfg.get("steps", 100)),
+                                "--batch-size",
+                                str(sample_cfg.get("batch_size", 256)),
+                                "--sample-seed",
+                                str(sample_cfg.get("seed", 12345)),
                             ),
                             "run_dir": str(run_dir),
                             "exp": exp,
@@ -218,11 +271,16 @@ def build_jobs(manifest: dict[str, Any], *, manifest_dir: Path | None = None) ->
                         payload={
                             "argv": _cli(
                                 "eval-samples",
-                                "--run-dir", str(run_dir),
-                                "--samples", str(samples_dir),
-                                "--real", str(real_images),
-                                "--epoch", str(epoch),
-                                "--ledger", ledger,
+                                "--run-dir",
+                                str(run_dir),
+                                "--samples",
+                                str(samples_dir),
+                                "--real",
+                                str(real_images),
+                                "--epoch",
+                                str(epoch),
+                                "--ledger",
+                                ledger,
                             ),
                             "run_dir": str(run_dir),
                             "exp": exp,

@@ -37,7 +37,9 @@ from awwl.utils import (
 logger = logging.getLogger("awwl.cli")
 
 app = typer.Typer(add_completion=False, no_args_is_help=True, help="AWWL command-line interface.")
-pipeline_app = typer.Typer(add_completion=False, no_args_is_help=True, help="Resumable experiment sweeps.")
+pipeline_app = typer.Typer(
+    add_completion=False, no_args_is_help=True, help="Resumable experiment sweeps."
+)
 app.add_typer(pipeline_app, name="pipeline")
 
 
@@ -53,14 +55,20 @@ def _load_cfg(config: Path, overrides: list[str]) -> dict:
 
 @app.command("train")
 def train_cmd(
-    config: Path = typer.Option(..., "--config", "-c", exists=True, help="Path to a method YAML config."),
-    override: list[str] = typer.Option([], "--override", "-o", help="key.path=value override (repeatable)."),
+    config: Path = typer.Option(
+        ..., "--config", "-c", exists=True, help="Path to a method YAML config."
+    ),
+    override: list[str] = typer.Option(
+        [], "--override", "-o", help="key.path=value override (repeatable)."
+    ),
 ) -> None:
     """Train a model defined by ``config``."""
     cfg = _load_cfg(config, override)
     method = cfg.get("method")
     if method not in KNOWN_METHODS:
-        typer.echo(f"unknown or missing method in config; expected one of {KNOWN_METHODS}", err=True)
+        typer.echo(
+            f"unknown or missing method in config; expected one of {KNOWN_METHODS}", err=True
+        )
         raise typer.Exit(2)
     trainer = get_trainer(method)
     saved = trainer(cfg)
@@ -70,17 +78,31 @@ def train_cmd(
 @app.command("infer")
 def infer_cmd(
     method: str = typer.Option(..., "--method", help="dreambooth | finetune"),
-    weights: Path | None = typer.Option(None, "--weights", help="Direct path to a UNet/checkpoint folder."),
-    registry_name: str | None = typer.Option(None, "--registry", help="Logical name in registry.yaml."),
+    weights: Path | None = typer.Option(
+        None, "--weights", help="Direct path to a UNet/checkpoint folder."
+    ),
+    registry_name: str | None = typer.Option(
+        None, "--registry", help="Logical name in registry.yaml."
+    ),
     output_dir: Path = typer.Option(..., "--output-dir", "-o"),
     prompt: str = typer.Option("a photo of sks robot toy on the beach at sunset", "--prompt"),
     num_samples: int = typer.Option(100, "--num-samples", "-n"),
-    base_model: str = typer.Option("runwayml/stable-diffusion-v1-5", "--base-model", help="DreamBooth only."),
+    base_model: str = typer.Option(
+        "runwayml/stable-diffusion-v1-5", "--base-model", help="DreamBooth only."
+    ),
     sampler: str = typer.Option("ddpm", "--sampler", help="finetune only: ddpm | ddim."),
-    steps: int | None = typer.Option(None, "--steps", help="Denoising steps (default 1000 ddpm / 100 ddim)."),
-    batch_size: int = typer.Option(128, "--batch-size", help="finetune only: samples per forward pass."),
-    sample_seed: int | None = typer.Option(None, "--sample-seed", help="finetune only: seeds the sampling noise."),
-    project_root: Path | None = typer.Option(None, "--project-root", help="Defaults to the parent of this CLI."),
+    steps: int | None = typer.Option(
+        None, "--steps", help="Denoising steps (default 1000 ddpm / 100 ddim)."
+    ),
+    batch_size: int = typer.Option(
+        128, "--batch-size", help="finetune only: samples per forward pass."
+    ),
+    sample_seed: int | None = typer.Option(
+        None, "--sample-seed", help="finetune only: seeds the sampling noise."
+    ),
+    project_root: Path | None = typer.Option(
+        None, "--project-root", help="Defaults to the parent of this CLI."
+    ),
     device: str = typer.Option("cuda", "--device"),
 ) -> None:
     """Run inference. Either ``--weights`` or ``--registry`` is required."""
@@ -106,7 +128,8 @@ def infer_cmd(
             torch_dtype=torch.float16 if device.startswith("cuda") else torch.float32,
         )
         generate_images(
-            pipeline=pipe, prompt=prompt,
+            pipeline=pipe,
+            prompt=prompt,
             seeds=list(range(1, num_samples + 1)),
             output_dir=output_dir,
         )
@@ -188,11 +211,19 @@ def eval_cmd(
 
 @app.command("prepare-data")
 def prepare_data_cmd(
-    output: Path = typer.Option(Path("./data/cifar10_train_png"), "--output", "-o", help="Reference PNG folder."),
-    dataset: str = typer.Option("cifar10", "--dataset", help="'cifar10', a HuggingFace id, or a local folder."),
-    image_size: int = typer.Option(32, "--image-size", help="Resolution to write; must match what the model generates."),
+    output: Path = typer.Option(
+        Path("./data/cifar10_train_png"), "--output", "-o", help="Reference PNG folder."
+    ),
+    dataset: str = typer.Option(
+        "cifar10", "--dataset", help="'cifar10', a HuggingFace id, or a local folder."
+    ),
+    image_size: int = typer.Option(
+        32, "--image-size", help="Resolution to write; must match what the model generates."
+    ),
     split: str = typer.Option("train", "--split", help="Dataset split to dump."),
-    max_images: int | None = typer.Option(None, "--max-images", help="Cap the dump (default: all)."),
+    max_images: int | None = typer.Option(
+        None, "--max-images", help="Cap the dump (default: all)."
+    ),
 ) -> None:
     """Dump a dataset to PNGs for use as the FID/KID reference set.
 
@@ -218,13 +249,19 @@ def prepare_data_cmd(
 
 @app.command("eval-samples")
 def eval_samples_cmd(
-    run_dir: Path = typer.Option(..., "--run-dir", help="Training run folder (supplies config.json identity)."),
+    run_dir: Path = typer.Option(
+        ..., "--run-dir", help="Training run folder (supplies config.json identity)."
+    ),
     samples: Path = typer.Option(..., "--samples", exists=True, help="Folder of generated PNGs."),
     real: Path = typer.Option(..., "--real", exists=True, help="Reference image folder."),
     ledger: Path = typer.Option(..., "--ledger", help="results.jsonl to append to."),
-    epoch: int | None = typer.Option(None, "--epoch", help="Checkpoint epoch these samples came from."),
+    epoch: int | None = typer.Option(
+        None, "--epoch", help="Checkpoint epoch these samples came from."
+    ),
     max_images: int = typer.Option(10000, "--max-images", help="Cap for KID / precision-recall."),
-    skip_advanced: bool = typer.Option(False, "--skip-advanced", help="FID + IS only (much faster)."),
+    skip_advanced: bool = typer.Option(
+        False, "--skip-advanced", help="FID + IS only (much faster)."
+    ),
 ) -> None:
     """Score one sample folder and append a row to the results ledger.
 
@@ -241,9 +278,7 @@ def eval_samples_cmd(
         raise typer.Exit(2)
     cfg = json.loads(cfg_path.read_text(encoding="utf-8"))
 
-    metrics = dict(
-        compute_fid_is(fake_folder=samples, real_folder=real, exp_name=run_dir.name)
-    )
+    metrics = dict(compute_fid_is(fake_folder=samples, real_folder=real, exp_name=run_dir.name))
     if not skip_advanced:
         metrics.update(
             compute_advanced_metrics(
@@ -271,13 +306,18 @@ def eval_samples_cmd(
 
 @app.command("eval-dreambooth")
 def eval_dreambooth_cmd(
-    run_dir: Path = typer.Option(..., "--run-dir", help="DreamBooth run folder (holds unet/ and config.json)."),
+    run_dir: Path = typer.Option(
+        ..., "--run-dir", help="DreamBooth run folder (holds unet/ and config.json)."
+    ),
     real: Path | None = typer.Option(
-        None, "--real",
+        None,
+        "--real",
         help="Real subject images. Defaults to the instance images this run was trained on.",
     ),
     ledger: Path = typer.Option(..., "--ledger", help="results.jsonl to append to."),
-    prompts_file: Path = typer.Option(Path("assets/prompts/awwl_dreambooth.txt"), "--prompts", help="One prompt per line."),
+    prompts_file: Path = typer.Option(
+        Path("assets/prompts/awwl_dreambooth.txt"), "--prompts", help="One prompt per line."
+    ),
     num_images: int = typer.Option(20, "--num-images", help="Images generated per prompt."),
     steps: int = typer.Option(50, "--steps", help="Denoising steps per image."),
     guidance: float = typer.Option(7.5, "--guidance"),
@@ -330,7 +370,9 @@ def eval_dreambooth_cmd(
         )
         raise typer.Exit(2)
 
-    prompts = [p.strip() for p in prompts_file.read_text(encoding="utf-8").splitlines() if p.strip()]
+    prompts = [
+        p.strip() for p in prompts_file.read_text(encoding="utf-8").splitlines() if p.strip()
+    ]
     if not prompts:
         typer.echo(f"no prompts in {prompts_file}", err=True)
         raise typer.Exit(2)
@@ -385,15 +427,24 @@ def eval_dreambooth_cmd(
                 "%s holds %d images but this run generated %d; scoring only the %d "
                 "just generated. The extras are from an earlier run at a different "
                 "--num-images and are ignored.",
-                out_dir, stale, len(images), len(images),
+                out_dir,
+                stale,
+                len(images),
+                len(images),
             )
         clip_scores += text_image_similarity(
-            clip_model=clip_model, clip_processor=clip_processor,
-            prompt=prompt, image_paths=images, device=clip_device,
+            clip_model=clip_model,
+            clip_processor=clip_processor,
+            prompt=prompt,
+            image_paths=images,
+            device=clip_device,
         )
         similarities += image_image_similarity(
-            clip_model=clip_model, clip_processor=clip_processor,
-            real_images_dir=real, generated_image_paths=images, device=clip_device,
+            clip_model=clip_model,
+            clip_processor=clip_processor,
+            real_images_dir=real,
+            generated_image_paths=images,
+            device=clip_device,
         )
 
     import statistics
@@ -444,10 +495,54 @@ def _prompts_not_matching_subject(instance_prompt: str, prompts: list[str]) -> l
     return [p for p in prompts if subject not in p.lower()]
 
 
+@app.command("eval-restoration")
+def eval_restoration_cmd(
+    run_dir: Path = typer.Option(
+        ..., "--run-dir", help="Restoration run folder (holds checkpoint-* and config.json)."
+    ),
+    real: Path = typer.Option(..., "--real", exists=True, help="Folder of clean reference images."),
+    ledger: Path = typer.Option(..., "--ledger", help="results.jsonl to append to."),
+    num_images: int = typer.Option(500, "--num-images", help="Validation images scored."),
+    batch_size: int = typer.Option(64, "--batch-size"),
+    eval_seed: int = typer.Option(
+        777, "--eval-seed", help="Seed the degradation of the validation set."
+    ),
+    device: str = typer.Option("cuda", "--device"),
+    epoch: int | None = typer.Option(
+        None, "--epoch", help="Checkpoint epoch; default is the last one."
+    ),
+) -> None:
+    """Score one restoration run: PSNR, SSIM, LPIPS, NIQE, sigma-stratified.
+
+    Appends a ledger row carrying the run's full hyperparameter identity,
+    which is what ``awwl stats`` groups on. The validation degradation is
+    seeded so every loss arm is scored on the same test set.
+    """
+    setup_logging("INFO")
+    from awwl.evaluation import evaluate_restoration
+
+    metrics = evaluate_restoration(
+        run_dir=run_dir,
+        real=real,
+        ledger=ledger,
+        num_val_images=num_images,
+        batch_size=batch_size,
+        seed=eval_seed,
+        device=device,
+        epoch=epoch,
+    )
+    import json as _json
+
+    typer.echo(_json.dumps(metrics, indent=2))
+    typer.echo(f"appended to {ledger}")
+
+
 @app.command("measure-cost")
 def measure_cost_cmd(
     config: Path = typer.Option(Path("configs/finetune.yaml"), "--config", "-c", exists=True),
-    override: list[str] = typer.Option([], "--override", "-o", help="key.path=value override (repeatable)."),
+    override: list[str] = typer.Option(
+        [], "--override", "-o", help="key.path=value override (repeatable)."
+    ),
     losses: str = typer.Option(
         "mse,adaptive_wavelet,wavelet_subband,wavelet_spatial,wavelet_learned,wavelet_lifting",
         "--losses",
@@ -478,12 +573,22 @@ def measure_cost_cmd(
 
 @app.command("sensitivity")
 def sensitivity_cmd(
-    real: Path = typer.Option(Path("./data/cifar10_train_png"), "--real", exists=True, help="Real image folder."),
-    work: Path = typer.Option(Path("runs/sensitivity"), "--work", help="Scratch space for filtered copies."),
-    deltas: str = typer.Option("0,1,2,4,8", "--deltas", help="High-band attenuations in dB; negative boosts."),
-    source: Path | None = typer.Option(None, "--source", help="Filter this folder (e.g. model samples) instead of half of --real."),
+    real: Path = typer.Option(
+        Path("./data/cifar10_train_png"), "--real", exists=True, help="Real image folder."
+    ),
+    work: Path = typer.Option(
+        Path("runs/sensitivity"), "--work", help="Scratch space for filtered copies."
+    ),
+    deltas: str = typer.Option(
+        "0,1,2,4,8", "--deltas", help="High-band attenuations in dB; negative boosts."
+    ),
+    source: Path | None = typer.Option(
+        None, "--source", help="Filter this folder (e.g. model samples) instead of half of --real."
+    ),
     count: int = typer.Option(10000, "--count", help="Images per half."),
-    effect: float | None = typer.Option(None, "--effect", help="A method's measured correction in dB, to locate on the curve."),
+    effect: float | None = typer.Option(
+        None, "--effect", help="A method's measured correction in dB, to locate on the curve."
+    ),
     keep_images: bool = typer.Option(False, "--keep-images", help="Retain filtered folders."),
     skip_advanced: bool = typer.Option(False, "--skip-advanced", help="FID + IS only (faster)."),
     out: Path | None = typer.Option(None, "--out", help="Also write the table here."),
@@ -520,14 +625,24 @@ def sensitivity_cmd(
 
 @app.command("spectrum")
 def spectrum_cmd(
-    root: Path = typer.Option(Path("runs/phase0"), "--root", exists=True, help="Sweep output directory."),
-    real: Path = typer.Option(Path("./data/cifar10_train_png"), "--real", exists=True, help="Reference images."),
-    configs: str = typer.Option("mse,static_wavelet,awwl", "--configs", help="Comma-separated config names."),
+    root: Path = typer.Option(
+        Path("runs/phase0"), "--root", exists=True, help="Sweep output directory."
+    ),
+    real: Path = typer.Option(
+        Path("./data/cifar10_train_png"), "--real", exists=True, help="Reference images."
+    ),
+    configs: str = typer.Option(
+        "mse,static_wavelet,awwl", "--configs", help="Comma-separated config names."
+    ),
     seeds: str = typer.Option("1,2,3,4,5", "--seeds", help="Comma-separated seeds to average."),
     epoch: int = typer.Option(199, "--epoch"),
-    highlight: str | None = typer.Option(None, "--highlight", help="Config drawn bold (default: the last one)."),
+    highlight: str | None = typer.Option(
+        None, "--highlight", help="Config drawn bold (default: the last one)."
+    ),
     max_images: int = typer.Option(2000, "--max-images", help="Images per run used for the FFT."),
-    out: Path | None = typer.Option(None, "--out", help="Figure path (default <root>/spectrum.png)."),
+    out: Path | None = typer.Option(
+        None, "--out", help="Figure path (default <root>/spectrum.png)."
+    ),
 ) -> None:
     """Compare radial power spectra against the real images.
 
@@ -575,14 +690,20 @@ def spectrum_cmd(
 
 @app.command("compare-samples")
 def compare_samples_cmd(
-    root: Path = typer.Option(Path("runs/phase0"), "--root", exists=True, help="Sweep output directory."),
-    configs: str = typer.Option("mse,awwl", "--configs", help="Comma-separated config names, one row each."),
+    root: Path = typer.Option(
+        Path("runs/phase0"), "--root", exists=True, help="Sweep output directory."
+    ),
+    configs: str = typer.Option(
+        "mse,awwl", "--configs", help="Comma-separated config names, one row each."
+    ),
     seed: int = typer.Option(1, "--seed", help="Which training seed's samples to show."),
     epoch: int = typer.Option(199, "--epoch"),
     count: int = typer.Option(12, "--count", help="Columns, i.e. matched samples shown."),
     start: int = typer.Option(0, "--start", help="First sample index."),
     scale: int = typer.Option(3, "--scale", help="Integer upscale; 32px is unreadable in print."),
-    out: Path | None = typer.Option(None, "--out", help="Figure path (default <root>/compare.png)."),
+    out: Path | None = typer.Option(
+        None, "--out", help="Figure path (default <root>/compare.png)."
+    ),
 ) -> None:
     """Side-by-side samples from the same initial noise, one row per loss.
 
@@ -613,7 +734,9 @@ def figures_cmd(
     out: Path = typer.Option(Path("runs/phase0"), "--out", help="Where the PNGs go."),
     epoch: int = typer.Option(199, "--epoch"),
     baseline: str = typer.Option("mse", "--baseline"),
-    boost_dir: Path = typer.Option(Path("runs/boost"), "--boost", help="scripts/boost_test.sh output."),
+    boost_dir: Path = typer.Option(
+        Path("runs/boost"), "--boost", help="scripts/boost_test.sh output."
+    ),
     alpha: float = typer.Option(0.2, "--alpha", help="For the weighting-schedule figure."),
     power: float = typer.Option(1.0, "--power"),
 ) -> None:
@@ -643,21 +766,33 @@ def figures_cmd(
             typer.echo(f"skipped {name}: {exc}")
 
     if at_epoch:
-        _try("effect-sizes", lambda: plot_effect_sizes(
-            at_epoch, metric="fid", baseline=baseline, out_path=out / "effect_sizes.png"))
-        _try("convergence", lambda: plot_convergence(
-            rows, metric="fid", baseline=baseline, out_path=out / "convergence.png"))
+        _try(
+            "effect-sizes",
+            lambda: plot_effect_sizes(
+                at_epoch, metric="fid", baseline=baseline, out_path=out / "effect_sizes.png"
+            ),
+        )
+        _try(
+            "convergence",
+            lambda: plot_convergence(
+                rows, metric="fid", baseline=baseline, out_path=out / "convergence.png"
+            ),
+        )
     else:
         typer.echo(f"no eval rows at epoch {epoch}; skipping ledger-based figures")
 
-    _try("weight-schedule", lambda: plot_weight_schedule(
-        alpha=alpha, power=power, out_path=out / "weights.png"))
+    _try(
+        "weight-schedule",
+        lambda: plot_weight_schedule(alpha=alpha, power=power, out_path=out / "weights.png"),
+    )
 
     if boost_dir.is_dir():
         arms = parse_boost_tables(boost_dir)
         if arms:
-            _try("correction-value", lambda: plot_correction_value(
-                arms, out_path=out / "correction_value.png"))
+            _try(
+                "correction-value",
+                lambda: plot_correction_value(arms, out_path=out / "correction_value.png"),
+            )
         else:
             typer.echo(f"no parseable boost tables in {boost_dir}")
     else:
@@ -669,8 +804,12 @@ def figures_cmd(
 
 @app.command("plot-curriculum")
 def plot_curriculum_cmd(
-    run_dir: Path = typer.Option(..., "--run-dir", exists=True, help="Run folder with config.json."),
-    out: Path | None = typer.Option(None, "--out", help="Output image (default <run>/curriculum.png)."),
+    run_dir: Path = typer.Option(
+        ..., "--run-dir", exists=True, help="Run folder with config.json."
+    ),
+    out: Path | None = typer.Option(
+        None, "--out", help="Output image (default <run>/curriculum.png)."
+    ),
     points: int = typer.Option(101, "--points", help="How many sigma values to evaluate."),
 ) -> None:
     """Plot the sub-band schedule a trained run actually applies.
@@ -688,12 +827,24 @@ def plot_curriculum_cmd(
 
 @pipeline_app.command("run")
 def pipeline_run_cmd(
-    manifest: Path = typer.Option(..., "--manifest", "-m", exists=True, help="Pipeline manifest YAML."),
-    gpus: str | None = typer.Option(None, "--gpus", help="Comma-separated device ids, e.g. 0,1. Defaults to all."),
-    max_tier: int | None = typer.Option(None, "--max-tier", help="Only run jobs at or below this tier."),
-    max_attempts: int = typer.Option(3, "--max-attempts", help="Retries before a job is parked as failed."),
-    stale_after: float = typer.Option(900.0, "--stale-after", help="Seconds without a heartbeat before requeueing."),
-    dry_run: bool = typer.Option(False, "--dry-run", help="Expand the manifest and print the plan, run nothing."),
+    manifest: Path = typer.Option(
+        ..., "--manifest", "-m", exists=True, help="Pipeline manifest YAML."
+    ),
+    gpus: str | None = typer.Option(
+        None, "--gpus", help="Comma-separated device ids, e.g. 0,1. Defaults to all."
+    ),
+    max_tier: int | None = typer.Option(
+        None, "--max-tier", help="Only run jobs at or below this tier."
+    ),
+    max_attempts: int = typer.Option(
+        3, "--max-attempts", help="Retries before a job is parked as failed."
+    ),
+    stale_after: float = typer.Option(
+        900.0, "--stale-after", help="Seconds without a heartbeat before requeueing."
+    ),
+    dry_run: bool = typer.Option(
+        False, "--dry-run", help="Expand the manifest and print the plan, run nothing."
+    ),
 ) -> None:
     """Run a sweep, resuming whatever a previous invocation left unfinished.
 
@@ -751,7 +902,9 @@ def pipeline_run_cmd(
 
 @pipeline_app.command("status")
 def pipeline_status_cmd(
-    manifest: Path = typer.Option(..., "--manifest", "-m", exists=True, help="Pipeline manifest YAML."),
+    manifest: Path = typer.Option(
+        ..., "--manifest", "-m", exists=True, help="Pipeline manifest YAML."
+    ),
 ) -> None:
     """Print queue progress and any failures."""
     setup_logging("WARNING")
@@ -766,7 +919,9 @@ def pipeline_status_cmd(
 
 @pipeline_app.command("reset")
 def pipeline_reset_cmd(
-    manifest: Path = typer.Option(..., "--manifest", "-m", exists=True, help="Pipeline manifest YAML."),
+    manifest: Path = typer.Option(
+        ..., "--manifest", "-m", exists=True, help="Pipeline manifest YAML."
+    ),
     running: bool = typer.Option(False, "--running", help="Also requeue jobs stuck in 'running'."),
 ) -> None:
     """Requeue failed jobs so the next ``pipeline run`` retries them."""
@@ -782,12 +937,20 @@ def pipeline_reset_cmd(
 
 @app.command("stats")
 def stats_cmd(
-    ledger: Path = typer.Option(..., "--ledger", "-l", exists=True, help="results.jsonl, or a folder holding some."),
-    metric: str = typer.Option("fid", "--metric", help="Ledger field to analyse, e.g. fid, is_mean, kid."),
-    baseline: str | None = typer.Option(None, "--baseline", help="Config to test the others against, e.g. mse."),
+    ledger: Path = typer.Option(
+        ..., "--ledger", "-l", exists=True, help="results.jsonl, or a folder holding some."
+    ),
+    metric: str = typer.Option(
+        "fid", "--metric", help="Ledger field to analyse, e.g. fid, is_mean, kid."
+    ),
+    baseline: str | None = typer.Option(
+        None, "--baseline", help="Config to test the others against, e.g. mse."
+    ),
     kind: str = typer.Option("eval", "--kind", help="Ledger row kind to read."),
     epoch: int | None = typer.Option(None, "--epoch", help="Restrict to one checkpoint epoch."),
-    curve: bool = typer.Option(False, "--curve", help="Print metric-vs-epoch instead of a significance test."),
+    curve: bool = typer.Option(
+        False, "--curve", help="Print metric-vs-epoch instead of a significance test."
+    ),
     alpha: float = typer.Option(0.05, "--alpha", help="Family-wise significance level."),
 ) -> None:
     """Summarise the results ledger with confidence intervals and paired tests.
@@ -804,7 +967,9 @@ def stats_cmd(
     if epoch is not None:
         rows = [r for r in rows if r.get("epoch") == epoch]
     if not rows:
-        typer.echo(f"no '{kind}' rows in {ledger}" + (f" at epoch {epoch}" if epoch else ""), err=True)
+        typer.echo(
+            f"no '{kind}' rows in {ledger}" + (f" at epoch {epoch}" if epoch else ""), err=True
+        )
         raise typer.Exit(1)
 
     if curve:
@@ -814,7 +979,11 @@ def stats_cmd(
     typer.echo(format_summary_table(summarize_groups(rows, metric=metric), metric=metric))
     if baseline:
         typer.echo("")
-        typer.echo(format_comparison_table(compare_to_baseline(rows, metric=metric, baseline=baseline, alpha=alpha)))
+        typer.echo(
+            format_comparison_table(
+                compare_to_baseline(rows, metric=metric, baseline=baseline, alpha=alpha)
+            )
+        )
 
 
 @app.command("list-checkpoints")
@@ -836,10 +1005,13 @@ def status_cmd(
     manifests: list[Path] = typer.Argument(None, help="Manifests to report on (default: all)."),
     out: Path | None = typer.Option(None, "--out", help="Also write the report here."),
     show_errors: bool = typer.Option(
-        False, "--show-errors",
+        False,
+        "--show-errors",
         help="Print the full captured stderr for one job per distinct failure reason.",
     ),
-    workers: int = typer.Option(1, "--workers", help="GPUs the sweep runs on, for the time estimate."),
+    workers: int = typer.Option(
+        1, "--workers", help="GPUs the sweep runs on, for the time estimate."
+    ),
     max_tier: int | None = typer.Option(None, "--max-tier", help="Estimate only up to this tier."),
 ) -> None:
     """What has been measured, and what is still missing.
@@ -902,8 +1074,12 @@ def prune_cmd(
 def price_dreambooth_cmd(
     run_dirs: list[Path] = typer.Argument(..., help="DreamBooth run folders to price."),
     prompts_file: Path = typer.Option(Path("assets/prompts/robot_toy.txt"), "--prompts"),
-    real: Path | None = typer.Option(None, "--real", help="Defaults to each run's instance images."),
-    boost: float | None = typer.Option(None, "--boost", help="dB to boost; default is each run's own deficit."),
+    real: Path | None = typer.Option(
+        None, "--real", help="Defaults to each run's instance images."
+    ),
+    boost: float | None = typer.Option(
+        None, "--boost", help="dB to boost; default is each run's own deficit."
+    ),
     work: Path = typer.Option(Path("runs/db_pricing"), "--work"),
     ledger: Path | None = typer.Option(None, "--ledger", help="Append one row per run."),
     out: Path | None = typer.Option(None, "--out", help="Also write the table here."),
@@ -924,7 +1100,9 @@ def price_dreambooth_cmd(
     from awwl.evaluation import image_image_similarity, text_image_similarity
     from awwl.evaluation.pricing import format_pricing_table, price_run
 
-    prompts = [p.strip() for p in prompts_file.read_text(encoding="utf-8").splitlines() if p.strip()]
+    prompts = [
+        p.strip() for p in prompts_file.read_text(encoding="utf-8").splitlines() if p.strip()
+    ]
     if not prompts:
         typer.echo(f"no prompts in {prompts_file}", err=True)
         raise typer.Exit(2)
@@ -936,21 +1114,39 @@ def price_dreambooth_cmd(
     priced = []
     for run_dir in run_dirs:
         reference = real or Path(
-            json.loads((run_dir / "config.json").read_text(encoding="utf-8"))["data"]["instance_data_dir"]
+            json.loads((run_dir / "config.json").read_text(encoding="utf-8"))["data"][
+                "instance_data_dir"
+            ]
         )
 
         def score(folder: Path, prompt: str, _ref=reference):
             images = sorted(p for p in folder.glob("*") if p.suffix.lower() in (".png", ".jpg"))
             return (
-                text_image_similarity(clip_model=model, clip_processor=processor,
-                                      prompt=prompt, image_paths=images, device=dev),
-                image_image_similarity(clip_model=model, clip_processor=processor,
-                                       real_images_dir=_ref, generated_image_paths=images, device=dev),
+                text_image_similarity(
+                    clip_model=model,
+                    clip_processor=processor,
+                    prompt=prompt,
+                    image_paths=images,
+                    device=dev,
+                ),
+                image_image_similarity(
+                    clip_model=model,
+                    clip_processor=processor,
+                    real_images_dir=_ref,
+                    generated_image_paths=images,
+                    device=dev,
+                ),
             )
 
         try:
-            result = price_run(run_dir, prompts=prompts, score_folder=score,
-                               real_dir=real, boost_db=boost, work=work)
+            result = price_run(
+                run_dir,
+                prompts=prompts,
+                score_folder=score,
+                real_dir=real,
+                boost_db=boost,
+                work=work,
+            )
         except Exception as exc:
             typer.echo(f"skipped {run_dir}: {exc}", err=True)
             continue

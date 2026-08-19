@@ -1,0 +1,80 @@
+# Restoration reframing — smoke test on CIFAR-10 32x32.
+#
+# The diffusion replication (phase0) found no significant AWWL-vs-MSE
+# difference on FID/IS, and the frequency balance per se hurt. Restoration is
+# the reframing PHASE0.md recommends when a from-scratch generative claim
+# does not survive: here the target is the image itself and high-frequency
+# detail is the direct evaluation criterion.
+#
+# This tier answers the survival question in the new setting: does the
+# adaptive wavelet objective beat the pixel baselines on PSNR / SSIM / LPIPS
+# with a variable noise level? A second tier (CelebA-HQ 64) then tests
+# whether any gain transfers to real texture, with sigma-stratified PSNR.
+#
+# Prerequisites (once):
+#   awwl prepare-data --output ./data/cifar10_test_png --split test
+#   pip install lpips
+#
+# Run (repeatable — resumes):
+#   awwl pipeline run -m configs/pipeline/restoration.yaml --gpus 0,1
+#
+# Then:
+#   awwl stats -l runs/restoration_cifar/results.jsonl --metric psnr  --baseline mse
+#   awwl stats -l runs/restoration_cifar/results.jsonl --metric lpips --baseline mse
+
+name: restoration_cifar
+method: restoration
+base_config: configs/restoration.yaml
+output_root: ./runs/restoration_cifar
+ledger: ./runs/restoration_cifar/results.jsonl
+real_images: ./data/cifar10_test_png
+
+defaults:
+  seeds: [1, 2, 3]
+  # Only the final checkpoint; the smoke test asks about final quality, not
+  # convergence.
+  eval_epochs: [99]
+  sample:
+    num_samples: 500        # validation images scored per run
+
+experiments:
+
+  - group: mse
+    tier: 1
+    overrides: {loss.name: mse}
+
+  - group: l1
+    tier: 1
+    overrides: {loss.name: l1}
+
+  - group: charbonnier
+    tier: 1
+    overrides: {loss.name: charbonnier}
+
+  # p=0: static frequency weighting, no temporal adaptation.
+  - group: static_wavelet
+    tier: 1
+    overrides:
+      loss.name: adaptive_wavelet
+      loss.alpha: 0.5
+      loss.power: 0.0
+
+  # The adaptive objective at the neutral balance point.
+  - group: awwl
+    tier: 1
+    overrides:
+      loss.name: adaptive_wavelet
+      loss.alpha: 0.5
+      loss.power: 1.0
+
+  # The phase0 finding that is the strongest evidence this reframing could
+  # overturn: normalising the total weight at every sigma isolates the
+  # frequency balance. If the awwl advantage (if any) disappears here, it was
+  # the sigma-schedule, not the frequency balance.
+  - group: awwl_normalized
+    tier: 1
+    overrides:
+      loss.name: adaptive_wavelet
+      loss.alpha: 0.5
+      loss.power: 1.0
+      loss.normalize_weights: true

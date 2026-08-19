@@ -48,6 +48,9 @@ eval = [
     "torch-fidelity>=0.3.0",
     "prdc",
     "scipy",
+    # LPIPS perceptual distance for the restoration reframing; downloads
+    # its AlexNet weights on first use.
+    "lpips>=0.1.4",
 ]
 plot = [
     "matplotlib>=3.7",
