@@ -193,6 +193,51 @@ def test_manifest_rejects_incomplete_spec(tmp_path):
         load_manifest(path)
 
 
+_REUSE_MANIFEST = """
+name: r
+base_config: configs/finetune.yaml
+output_root: ./runs/phase0
+reuse_runs: true
+real_images: ./data/ref
+defaults:
+  seeds: [1]
+  eval_epochs: [199]
+  sample: {sampler: ddpm, steps: 1000, out_name: samples_ddpm1000}
+experiments:
+  - group: mse
+    overrides: {loss.name: mse}
+"""
+
+
+def test_reuse_runs_skips_train_and_never_chains_to_it(tmp_path):
+    """A re-scoring sweep must not create train jobs for runs that exist.
+
+    A no-op ``train`` looks harmless but rewrites the run's config.json with
+    the new sweep's ledger path before it notices the run is finished, so the
+    only safe reuse is to never enter the trainer at all.
+    """
+    path = tmp_path / "r.yaml"
+    path.write_text(_REUSE_MANIFEST, encoding="utf-8")
+    by_id = {j.job_id: j for j in build_jobs(load_manifest(path))}
+
+    assert not any(jid.startswith("r:train:") for jid in by_id)
+    assert "r:sample:mse_s1:199" in by_id
+    assert by_id["r:sample:mse_s1:199"].depends_on is None
+    assert by_id["r:eval:mse_s1:199"].depends_on == "r:sample:mse_s1:199"
+
+
+def test_reuse_runs_samples_land_beside_the_originals(tmp_path):
+    path = tmp_path / "r.yaml"
+    path.write_text(_REUSE_MANIFEST, encoding="utf-8")
+    by_id = {j.job_id: j for j in build_jobs(load_manifest(path))}
+
+    argv = " ".join(by_id["r:sample:mse_s1:199"].argv).replace("\\", "/")
+    assert "--sampler ddpm" in argv and "--steps 1000" in argv
+    # The DDIM samples behind the paper's figures live in samples/ep199;
+    # a different sampler must write somewhere else.
+    assert "samples_ddpm1000/ep199" in argv
+
+
 def test_manifest_edits_reach_unfinished_jobs(store):
     """A job's command is otherwise frozen at the moment it was first queued.
 
@@ -271,8 +316,9 @@ def test_dreambooth_eval_is_scheduled_without_real_images(tmp_path):
 def test_dreambooth_real_images_still_overrides_when_given(tmp_path):
     path = tmp_path / "db.yaml"
     path.write_text(
-        _DREAMBOOTH_MANIFEST.replace("output_root: ./runs/db",
-                                     "output_root: ./runs/db\nreal_images: ./data/ref"),
+        _DREAMBOOTH_MANIFEST.replace(
+            "output_root: ./runs/db", "output_root: ./runs/db\nreal_images: ./data/ref"
+        ),
         encoding="utf-8",
     )
 
@@ -293,12 +339,19 @@ def test_refresh_propagates_a_tier_change_with_an_unchanged_command(tmp_path):
 
     store = JobStore(tmp_path / "state.db")
     job = Job(
-        job_id="p:train:x", pipeline="p", kind="train", group_id="x", tier=3,
-        depends_on=None, payload={"argv": ["awwl", "train"]}, status=PENDING, attempts=0,
+        job_id="p:train:x",
+        pipeline="p",
+        kind="train",
+        group_id="x",
+        tier=3,
+        depends_on=None,
+        payload={"argv": ["awwl", "train"]},
+        status=PENDING,
+        attempts=0,
     )
     store.add_jobs([job])
 
-    demoted = replace(job, tier=5)          # same command, later tier
+    demoted = replace(job, tier=5)  # same command, later tier
     store.add_jobs([demoted])
 
     stored = {j.job_id: j for j in store.list_jobs()}["p:train:x"]

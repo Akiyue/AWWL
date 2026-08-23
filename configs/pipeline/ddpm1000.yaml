@@ -1,0 +1,59 @@
+# Sampler sensitivity check — does the DDIM-100 null survive DDPM-1000?
+#
+# The paper's §4 flags its one open threat: every comparison so far samples
+# with DDIM at 100 steps, and few-step samplers produce smoother output —
+# precisely where a frequency-aware objective should have its advantage. So
+# the choice is not neutral with respect to the hypothesis, and a referee can
+# ask for the published sampler before believing the null.
+#
+# This manifest answers it by re-scoring runs phase0 already trained. It
+# creates NO train jobs (reuse_runs), touches nothing inside the existing run
+# directories, and writes to its own ledger and sample folders:
+#
+#   runs/phase0/<exp>/samples/ep199          <- DDIM-100 originals, untouched
+#   runs/phase0/<exp>/samples_ddpm1000/ep199 <- this check's samples
+#   runs/phase0_ddpm1000/results.jsonl       <- this check's rows
+#
+# Cost: 15 sample jobs at ~10x the DDIM-100 cost each (~80 min on one RTX 5000
+# Ada), plus FID passes. Roughly half a day on both GPUs.
+#
+# Reading the result: `awwl stats -l runs/phase0_ddpm1000/results.jsonl
+# --metric fid --baseline mse` compares arms under DDPM-1000; the paired
+# question "did the absolute FID move?" is answered against the phase0 ledger,
+# seed by seed. Either way the null stands or falls as a set.
+
+name: phase0_ddpm1000
+base_config: configs/finetune.yaml
+reuse_runs: true
+
+# Where the trained tier-1 runs live. Sample and eval jobs read checkpoints
+# from here; nothing is written back into these directories except the new
+# sample folders named below.
+output_root: ./runs/phase0
+ledger: ./runs/phase0_ddpm1000/results.jsonl
+real_images: ./data/cifar10_train_png
+
+defaults:
+  seeds: [1, 2, 3, 4, 5]
+  eval_epochs: [199]
+  sample:
+    num_samples: 10000     # identical to phase0, so FIDs stay comparable
+    sampler: ddpm          # the published operating point
+    steps: 1000
+    batch_size: 256
+    seed: 12345            # same sampling seed as phase0 used for DDIM
+    out_name: samples_ddpm1000
+
+experiments:
+  # Tier-1 arms only: the comparison the whole paper rests on.
+  - group: mse
+    tier: 1
+    overrides: {loss.name: mse}
+
+  - group: static_wavelet
+    tier: 1
+    overrides: {loss.name: adaptive_wavelet, loss.alpha: 0.2, loss.power: 0.0, loss.wavelet_type: db1}
+
+  - group: awwl
+    tier: 1
+    overrides: {loss.name: adaptive_wavelet, loss.alpha: 0.2, loss.power: 1.0, loss.wavelet_type: db1}

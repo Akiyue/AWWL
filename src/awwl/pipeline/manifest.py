@@ -100,6 +100,11 @@ def build_jobs(manifest: dict[str, Any], *, manifest_dir: Path | None = None) ->
     default_epochs = list(defaults.get("eval_epochs", []))
     default_sample = dict(defaults.get("sample", {}) or {})
     default_overrides = dict(defaults.get("overrides", {}) or {})
+    # ``reuse_runs`` marks a sweep that only re-scores runs an earlier pipeline
+    # already trained (e.g. a sampler sensitivity check): no train job is
+    # created, so nothing about the existing runs is touched — not even their
+    # config.json, which a no-op ``train`` invocation would rewrite.
+    reuse_runs = bool(manifest.get("reuse_runs", False))
 
     jobs: list[Job] = []
     for spec in manifest["experiments"]:
@@ -115,34 +120,35 @@ def build_jobs(manifest: dict[str, Any], *, manifest_dir: Path | None = None) ->
             run_dir = output_root / exp
             train_id = f"{name}:train:{exp}"
 
-            train_overrides = {
-                **overrides,
-                "seed": seed,
-                "output.dir": str(output_root),
-                "output.name": exp,
-                "output.group": group,
-                "output.ledger": ledger,
-            }
-            jobs.append(
-                Job(
-                    job_id=train_id,
-                    pipeline=name,
-                    kind="train",
-                    group_id=group,
-                    tier=tier,
-                    depends_on=None,
-                    payload={
-                        "argv": _cli(
-                            "train", "--config", base_config, *_override_args(train_overrides)
-                        ),
-                        "run_dir": str(run_dir),
-                        "exp": exp,
-                        "seed": seed,
-                    },
-                    status="pending",
-                    attempts=0,
+            if not reuse_runs:
+                train_overrides = {
+                    **overrides,
+                    "seed": seed,
+                    "output.dir": str(output_root),
+                    "output.name": exp,
+                    "output.group": group,
+                    "output.ledger": ledger,
+                }
+                jobs.append(
+                    Job(
+                        job_id=train_id,
+                        pipeline=name,
+                        kind="train",
+                        group_id=group,
+                        tier=tier,
+                        depends_on=None,
+                        payload={
+                            "argv": _cli(
+                                "train", "--config", base_config, *_override_args(train_overrides)
+                            ),
+                            "run_dir": str(run_dir),
+                            "exp": exp,
+                            "seed": seed,
+                        },
+                        status="pending",
+                        attempts=0,
+                    )
                 )
-            )
 
             if method == "dreambooth":
                 jobs.append(
@@ -219,7 +225,11 @@ def build_jobs(manifest: dict[str, Any], *, manifest_dir: Path | None = None) ->
 
             for epoch in eval_epochs:
                 checkpoint = run_dir / f"checkpoint-{epoch}"
-                samples_dir = run_dir / "samples" / f"ep{epoch}"
+                # ``out_name`` defaults to the historical folder so existing
+                # manifests keep writing where they always did; a re-scoring
+                # sweep sets it (e.g. samples_ddpm1000) so its samples land
+                # beside — never on top of — the originals.
+                samples_dir = run_dir / str(sample_cfg.get("out_name", "samples")) / f"ep{epoch}"
                 sample_id = f"{name}:sample:{exp}:{epoch}"
                 jobs.append(
                     Job(
@@ -228,7 +238,7 @@ def build_jobs(manifest: dict[str, Any], *, manifest_dir: Path | None = None) ->
                         kind="sample",
                         group_id=group,
                         tier=tier,
-                        depends_on=train_id,
+                        depends_on=None if reuse_runs else train_id,
                         payload={
                             "argv": _cli(
                                 "infer",
