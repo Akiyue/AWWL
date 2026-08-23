@@ -43,6 +43,7 @@ def store_path(output_root: str | Path) -> Path:
     """
     return Path(output_root) / "pipeline" / "state.db"
 
+
 PENDING = "pending"
 RUNNING = "running"
 DONE = "done"
@@ -276,12 +277,24 @@ class JobStore:
 
     # ---------------------------------------------------------------- claim
 
-    def claim(self, worker: str, *, max_tier: int | None = None) -> Job | None:
+    def claim(
+        self,
+        worker: str,
+        *,
+        max_tier: int | None = None,
+        pipeline: str | None = None,
+    ) -> Job | None:
         """Atomically take the next runnable job, or return ``None``.
 
         A job is runnable when it is ``pending``, within ``max_tier``, and its
         dependency (if any) is ``done``. Ordering is by tier first so the
         decisive low-tier experiments finish before the exploratory ones start.
+
+        The store is shared by every manifest that writes to the same
+        ``output_root``, so a runner must scope its claims to its own
+        pipeline: without the filter, two sweeps sharing a root would each
+        happily execute the other's jobs — concurrently claiming both for
+        whichever GPU happens to poll first.
         """
         now = time.time()
         with self._connect() as conn:
@@ -292,12 +305,13 @@ class JobStore:
                     SELECT * FROM jobs
                     WHERE status = ?
                       AND (? IS NULL OR tier <= ?)
+                      AND (? IS NULL OR pipeline = ?)
                       AND (depends_on IS NULL
                            OR depends_on IN (SELECT job_id FROM jobs WHERE status = ?))
                     ORDER BY tier, ordering
                     LIMIT 1
                     """,
-                    (PENDING, max_tier, max_tier, DONE),
+                    (PENDING, max_tier, max_tier, pipeline, pipeline, DONE),
                 ).fetchone()
                 if row is None:
                     conn.execute("COMMIT")
@@ -403,15 +417,16 @@ class JobStore:
             rows = conn.execute(query, params).fetchall()
         return [_to_job(r) for r in rows]
 
-    def pending_work(self, *, max_tier: int | None = None) -> int:
+    def pending_work(self, *, max_tier: int | None = None, pipeline: str | None = None) -> int:
         """How many jobs are still unfinished (pending or running) within tier."""
         with self._connect() as conn:
             row = conn.execute(
                 """
                 SELECT COUNT(*) AS n FROM jobs
                  WHERE status IN (?, ?) AND (? IS NULL OR tier <= ?)
+                   AND (? IS NULL OR pipeline = ?)
                 """,
-                (PENDING, RUNNING, max_tier, max_tier),
+                (PENDING, RUNNING, max_tier, max_tier, pipeline, pipeline),
             ).fetchone()
         return int(row["n"])
 

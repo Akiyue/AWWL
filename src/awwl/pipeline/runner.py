@@ -28,7 +28,7 @@ import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from awwl.pipeline.store import DONE, FAILED, Job, JobStore
+from awwl.pipeline.store import DONE, FAILED, RETIRED, Job, JobStore
 from awwl.utils.io import ensure_dir
 
 logger = logging.getLogger(__name__)
@@ -70,6 +70,7 @@ def run_pipeline(
     poll_interval: float = 20.0,
     heartbeat_interval: float = 60.0,
     cwd: str | Path | None = None,
+    pipeline: str | None = None,
 ) -> RunReport:
     """Drain the queue using one worker per entry in ``gpus``.
 
@@ -84,6 +85,10 @@ def run_pipeline(
             waiting on another worker's training job to finish).
         heartbeat_interval: How often a running job's liveness is recorded.
             Must be well under the store's ``stale_after``.
+        pipeline: Claim only this pipeline's jobs. The store is shared by
+            every manifest writing to the same ``output_root``, so an
+            unscoped runner would execute whichever other sweep's pending
+            jobs it found first — on its GPUs.
 
     Returns:
         A :class:`RunReport`. Failed jobs do not abort the sweep; they are
@@ -117,9 +122,9 @@ def run_pipeline(
     def _worker(gpu: str) -> None:
         worker_id = f"gpu{gpu}@{os.getpid()}"
         while not stop.requested:
-            job = store.claim(worker_id, max_tier=max_tier)
+            job = store.claim(worker_id, max_tier=max_tier, pipeline=pipeline)
             if job is None:
-                if store.pending_work(max_tier=max_tier) == 0:
+                if store.pending_work(max_tier=max_tier, pipeline=pipeline) == 0:
                     return
                 stop.wait(poll_interval)
                 continue
@@ -177,7 +182,9 @@ def _run_job(
     started = time.time()
     log_path.parent.mkdir(parents=True, exist_ok=True)
     with log_path.open("a", encoding="utf-8") as log:
-        log.write(f"\n=== {time.strftime('%Y-%m-%d %H:%M:%S')} gpu={gpu} attempt={job.attempts} ===\n")
+        log.write(
+            f"\n=== {time.strftime('%Y-%m-%d %H:%M:%S')} gpu={gpu} attempt={job.attempts} ===\n"
+        )
         log.write(" ".join(job.argv) + "\n\n")
         log.flush()
         try:
@@ -250,7 +257,11 @@ def format_status(store: JobStore) -> str:
         lines.append("")
         lines.append("retry them with:  awwl pipeline reset --manifest <manifest>")
 
-    remaining = [j for j in store.list_jobs() if j.status not in (DONE, FAILED)]
+    remaining = [j for j in store.list_jobs() if j.status not in (DONE, FAILED, RETIRED)]
+    retired = counts.get(RETIRED, 0)
+    if retired:
+        lines.append("")
+        lines.append(f"retired: {retired} (no longer in the manifest; they are never claimed)")
     if remaining:
         by_kind: dict[str, int] = {}
         for job in remaining:

@@ -9,7 +9,7 @@ import pytest
 
 from awwl.core.exceptions import ConfigError
 from awwl.pipeline.manifest import build_jobs, load_manifest
-from awwl.pipeline.store import DONE, FAILED, PENDING, RUNNING, Job, JobStore
+from awwl.pipeline.store import DONE, FAILED, PENDING, RETIRED, RUNNING, Job, JobStore
 
 
 def _job(job_id: str, *, tier: int = 1, depends_on: str | None = None) -> Job:
@@ -69,6 +69,22 @@ def test_max_tier_filters(store):
     store.add_jobs([_job("t2", tier=2)])
     assert store.claim("w", max_tier=1) is None
     assert store.claim("w", max_tier=2).job_id == "t2"
+
+
+def test_claim_is_scoped_to_pipeline(store):
+    """Two manifests sharing an output_root share one store; neither may
+    execute the other's jobs — concurrent runners would otherwise put two
+    heavy jobs on whichever GPU polls first."""
+    store.add_jobs([_job("b_first", tier=1), _job("a_later", tier=2)])
+    with store._connect() as conn:
+        conn.execute("UPDATE jobs SET pipeline = 'other' WHERE job_id = 'b_first'")
+        conn.execute("UPDATE jobs SET pipeline = 'mine' WHERE job_id = 'a_later'")
+
+    claimed = store.claim("w", pipeline="mine")
+    assert (
+        claimed is not None and claimed.job_id == "a_later"
+    ), "claim crossed the pipeline boundary"
+    assert store.claim("w", pipeline="mine") is None
 
 
 def test_reclaim_stale_requeues_dead_jobs(store):
@@ -236,6 +252,50 @@ def test_reuse_runs_samples_land_beside_the_originals(tmp_path):
     # The DDIM samples behind the paper's figures live in samples/ep199;
     # a different sampler must write somewhere else.
     assert "samples_ddpm1000/ep199" in argv
+
+
+_REUSE_RESTORE_MANIFEST = """
+name: rr
+base_config: configs/finetune.yaml
+method: restoration
+reuse_runs: true
+output_root: ./runs/restored
+real_images: ./data/ref
+defaults:
+  seeds: [1]
+  eval_epochs: [99]
+experiments:
+  - group: mse
+    overrides: {loss.name: mse}
+"""
+
+
+def test_reuse_runs_never_depends_on_a_train_job_that_was_not_created(tmp_path):
+    """restoration/dreambooth evals chained to a skipped train would deadlock."""
+    path = tmp_path / "rr.yaml"
+    path.write_text(_REUSE_RESTORE_MANIFEST, encoding="utf-8")
+    by_id = {j.job_id: j for j in build_jobs(load_manifest(path))}
+
+    assert "rr:train:mse_s1" not in by_id
+    assert by_id["rr:eval:mse_s1:99"].depends_on is None
+
+
+def test_format_status_reports_retired_separately_from_remaining(tmp_path):
+    """Retired jobs are never going to run; listing them as 'remaining'
+    made a finished sweep look like it still had work."""
+    from awwl.pipeline.runner import format_status
+
+    store = JobStore(tmp_path / "state.db")
+    store.add_jobs([_job("d"), _job("gone")])
+    store.finish("d")
+    # add_jobs inserts as pending; retirement happens later, on a re-expand
+    # that no longer lists the job.
+    with store._connect() as conn:
+        conn.execute("UPDATE jobs SET status = ? WHERE job_id = 'gone'", (RETIRED,))
+
+    text = format_status(store)
+    assert "remaining:" not in text, "retired jobs were counted as outstanding work"
+    assert "retired" in text
 
 
 def test_manifest_edits_reach_unfinished_jobs(store):

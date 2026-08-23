@@ -883,6 +883,7 @@ def pipeline_run_cmd(
         log_dir=root / "pipeline" / "logs",
         max_tier=max_tier,
         cwd=Path.cwd(),
+        pipeline=str(spec["name"]),
     )
     typer.echo("")
     typer.echo(format_status(store))
