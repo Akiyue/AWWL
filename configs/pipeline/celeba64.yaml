@@ -1,0 +1,63 @@
+# Second resolution: CelebA at 64x64 — the same audit, one axis moved.
+#
+# What §generality needs to separate resolution from task. Identical in
+# structure to phase0 tier 1 (the arms, seeds, sampler and sample count the
+# paper's headline table rests on), differing only in the dataset config:
+#
+#   prerequisite (once):  awwl prepare-data --dataset flwrlabs/celeba \
+#                           --output ./data/celeba64_train_png \
+#                           --split train --image-size 64
+#   run (repeatable):     awwl pipeline run -m configs/pipeline/celeba64.yaml --gpus 0,1
+#
+# Only final-epoch evaluation is queued here; save_model_epochs=40 keeps the
+# intermediate checkpoints, so convergence curves can be added later by
+# re-expanding with more eval_epochs — no retraining.
+#
+# Cost: 15 training runs at roughly four times CIFAR-10's per-epoch cost
+# (~3-4 days on two RTX 5000 Ada), then sampling and FID.
+
+name: celeba64
+base_config: configs/finetune_celeba64.yaml
+output_root: ./runs/celeba64
+ledger: ./runs/celeba64/results.jsonl
+real_images: ./data/celeba64_train_png
+
+defaults:
+  seeds: [1, 2, 3, 4, 5]
+  eval_epochs: [199]
+  sample:
+    num_samples: 10000     # identical to phase0, so FIDs stay comparable
+    sampler: ddim
+    steps: 100
+    batch_size: 256
+    seed: 12345
+  overrides:
+    train.num_epochs: 200
+    train.save_model_epochs: 40
+
+experiments:
+
+  # ---------------------------------------------------------------- tier 1
+  # The three configurations the whole paper rests on, exactly as phase0.
+
+  - group: mse
+    tier: 1
+    overrides:
+      loss.name: mse
+
+  - group: static_wavelet
+    tier: 1
+    eval_epochs: [199]
+    overrides:
+      loss.name: adaptive_wavelet
+      loss.alpha: 0.2
+      loss.power: 0.0        # p=0: fixed weights, no temporal adaptation
+      loss.wavelet_type: db1
+
+  - group: awwl
+    tier: 1
+    overrides:
+      loss.name: adaptive_wavelet
+      loss.alpha: 0.2
+      loss.power: 1.0
+      loss.wavelet_type: db1

@@ -1,0 +1,72 @@
+# AWWL audit — CelebA at 64x64: the resolution axis, varied alone.
+#
+# The paper's two tasks change architecture, resolution and task at once;
+# this sweep changes ONLY the resolution (same UNet family, same losses,
+# same seeds, same protocol as phase0 tier 1). It answers the reviewer
+# question §limitations flags: does absence at 32x32 say anything about
+# resolutions where high-frequency content carries more of what Inception
+# encodes?
+#
+# Differences from configs/finetune.yaml (the CIFAR recipe):
+#   * image_size 64 here and in model — 4x the pixels per image.
+#   * dataset_name points at HuggingFace's CelebA (any hub id or local
+#     folder works; see awwl.data.images). Swap the id or point at a local
+#     folder without touching code.
+#   * num_workers raised for the larger decodes.
+# If a 32GB card OOMs at batch 128 with these activations, drop
+# data.batch_size to 64 and say so in the paper's protocol section — never
+# silently.
+_base_: base.yaml
+
+method: finetune
+
+model:
+  image_size: 64
+  in_channels: 3
+  out_channels: 3
+  layers_per_block: 2
+  block_out_channels: [128, 256, 256, 256]
+  down_block_types: [DownBlock2D, DownBlock2D, DownBlock2D, DownBlock2D]
+  up_block_types: [UpBlock2D, UpBlock2D, UpBlock2D, UpBlock2D]
+  model_weights_path: null
+
+data:
+  dataset_name: flwrlabs/celeba
+  split: train
+  image_size: 64
+  batch_size: 128
+  num_workers: 8
+  source: auto
+  root: ./data
+
+train:
+  num_epochs: 200
+  learning_rate: 2.0e-4
+  lr_warmup_steps: 500
+  save_model_epochs: 40
+  grad_clip_norm: 1.0
+  resume: true
+  save_state_epochs: 5
+  keep_last_states: 2
+  use_ema: false
+  ema_decay: 0.9999
+
+scheduler:
+  num_train_timesteps: 1000
+
+loss:
+  # Same published optimum as CIFAR-10 (alpha=0.2): this sweep varies the
+  # resolution, nothing else — including not the alpha whose per-dataset
+  # tuning is itself one of the paper's findings.
+  name: adaptive_wavelet
+  alpha: 0.2
+  power: 1.0
+  wavelet_type: db1
+  levels: 1
+  weighting: normalized
+  normalize_weights: false
+  detail_reduction: mean
+  level_reduction: sum
+
+output:
+  dir: ./runs/finetune
