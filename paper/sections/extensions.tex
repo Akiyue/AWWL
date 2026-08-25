@@ -1,0 +1,82 @@
+\section{Can the weighting learn its way out?}
+\label{sec:extensions}
+
+Everything to this point audits one fixed weighting: two parameters,
+$\alpha$ and $p$, chosen by grid search per dataset. The objective's own
+future-work section points past them --- weight each detail band separately,
+adapt over image position, deepen the decomposition, learn the schedule from
+$\sigma$ instead of assuming $\sigma^{p}$, even learn the basis itself. If the
+shortfall of \S\ref{sec:worth} is an artefact of one hand-chosen weighting, a
+learned or finer-grained one should escape it. This section turns each of
+those axes on separately, so that a negative answer attaches to the idea
+rather than to one implementation.
+
+\paragraph{Protocol.} Every extension holds its summed band weight at $1$ for
+all $\sigma$, so each is read against the normalised variants of
+\S\ref{sec:confound} --- \emph{not} against the published form, whose
+gradient-magnitude schedule normalisation removes, and whose comparison would
+otherwise confound the new axis with a learning-rate change. Five seeds unless
+marked; pairing, correction and metrics as throughout.
+
+\begin{table}[t]
+\centering
+\small
+\caption{The method extensions, CIFAR-10 epoch \num{199}. Reference rows give
+the comparisons each extension must beat: the published weighting, and the
+budget-held-fixed variant that isolates the frequency component.
+$\Delta$ is the paired-by-seed difference from MSE; $p$ is Holm-corrected
+across the comparison family of Tables~\ref{tab:compare-fid}
+and~\ref{tab:confound}. A superscript marks arms run at three seeds.}
+\label{tab:extensions}
+\begin{tabular}{llrr}
+\toprule
+Arm & Axis turned on & $\Delta$ FID & $p$ (Holm) \\
+\midrule
+\multicolumn{4}{l}{\emph{reference}} \\
+Published weighting & $\alpha$, $p$ by grid search & $+0.44$ & $0.43$ \\
+\quad budget held fixed & shape alone & $+1.34$ & $0.004$ \\
+\midrule
+Per-subband powers & steeper schedule for HH & $+2.61$ & $0.001$ \\
+Spatially adaptive & weights vary over position & $+4.65$ & $0.0002$ \\
+Learned basis & lifting filters, Haar init & $+6.13$\textsuperscript{3} & $0.015$ \\
+Learned schedule & $\sigma$-conditioned, no $\alpha$/$p$ & $+6.66$ & $0.0001$ \\
+Multi-level (3) & deeper decomposition & $+88.87$ & $0.021$ \\
+GradNorm balancing & gradients set the weights & $+330.39$ & $0.0002$ \\
+All axes combined & learned, spatial, lifting & $+12.53$\textsuperscript{3} & $0.004$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+No route escapes. Every extension in Table~\ref{tab:extensions} is
+significantly worse than the MSE baseline, and every one is worse than the
+budget-held-fixed weighting it was meant to improve upon --- the nearest of
+them by $+1.3$~FID. The ordering is the finding: each additional degree of
+adaptive freedom costs more than it returns, which is what
+Eq.~\ref{eq:parseval} leads one to expect. Sub-band weighting reallocates a
+fixed error budget; \S\ref{sec:confound} showed that the pure-frequency
+version of the reallocation is already significantly harmful; the extensions
+grant that reallocation more freedom still, and it uses them.
+
+Two arms did not degrade but diverged. GradNorm balancing ends at
+$348.8 \pm 28.0$~FID, joining SNR-weighted (\S\ref{sec:replication}) in
+outright training collapse: both schemes reallocate gradient mass according
+to their own dynamics while training runs, and both destabilise what they
+are reweighting. The three-level decomposition is unstable rather than
+collapsed --- its across-seed spread is two orders of magnitude above any
+tier-1 arm's --- which is its own warning: depth buys variance before it
+buys anything else.
+
+The decisive row is the learned schedule. A $\sigma$-conditioned uncertainty
+weighting removes $\alpha$ and $p$ entirely and lets training find the
+schedule --- exactly the remedy proposed for having to tune those parameters
+per dataset. It lands at $+6.66$~FID ($p = 0.0001$). What gradient descent
+finds in this family is worse than what grid search published, and
+\S\ref{sec:confound} explains why: whatever freedom the optimiser is given
+is freedom over the frequency axis, and the frequency axis is the one that
+hurts.
+
+These are extensions of one objective at one resolution, not independent
+members of the family; \S\ref{sec:limitations} carries that scope forward.
+What they do establish is that the shortfall of \S\ref{sec:worth} is not an
+artefact of under-engineered weights. There is no setting of this mechanism,
+fixed or learned, in which we found the correction paying for itself.
