@@ -13,12 +13,19 @@ never mix DDPM-1000 rows with DDIM-100 rows.
 
 from __future__ import annotations
 
+import json
 import logging
 from pathlib import Path
 from typing import Literal
 
 import torch
-from diffusers import DDIMPipeline, DDIMScheduler, DDPMPipeline
+from diffusers import (
+    DDIMPipeline,
+    DDIMScheduler,
+    DDPMPipeline,
+    DDPMScheduler,
+    UNet2DModel,
+)
 from tqdm.auto import tqdm
 
 from awwl.utils.io import ensure_dir
@@ -120,3 +127,38 @@ def generate_samples(
                 pbar.update(1)
     pbar.close()
     return out
+
+
+def rebuild_checkpoint_from_state(run_dir: str | Path, target: str | Path | None = None) -> Path:
+    """Reconstitute a sampling checkpoint from a run's crash-recovery snapshot.
+
+    Pruning deletes every evaluated run's ``checkpoint-*`` folder — samples
+    and metrics survive, the samplable weights do not. What pruning never
+    touches is ``state/``, whose latest snapshot carries the same UNet weights
+    at the same epoch (the trainer writes both from the same object). This
+    rebuilds a full ``DDPMPipeline`` from that snapshot so a re-scoring sweep
+    has something to load.
+
+    Args:
+        run_dir: A training run folder (``config.json``, ``state/latest.json``).
+        target: Where to write the checkpoint. Defaults to
+            ``<run_dir>/checkpoint-<epoch>`` — the path the deleted one had.
+
+    Returns:
+        The checkpoint folder written.
+    """
+    run = Path(run_dir)
+    cfg = json.loads((run / "config.json").read_text(encoding="utf-8"))
+    pointer = json.loads((run / "state" / "latest.json").read_text(encoding="utf-8"))
+    snap = run / "state" / str(pointer["dir"])
+    meta = json.loads((snap / "meta.json").read_text(encoding="utf-8"))
+
+    unet = UNet2DModel.from_pretrained(snap / "unet")
+    scheduler = DDPMScheduler(num_train_timesteps=int(cfg["scheduler"]["num_train_timesteps"]))
+    epoch = int(meta.get("epoch", -1))
+    if epoch < 0:
+        raise ValueError(f"{snap}/meta.json carries no epoch; cannot name the checkpoint")
+    destination = Path(target) if target else run / f"checkpoint-{epoch}"
+    DDPMPipeline(unet=unet, scheduler=scheduler).save_pretrained(destination)
+    logger.info("rebuilt %s from %s (epoch %d)", destination, snap, epoch)
+    return destination
