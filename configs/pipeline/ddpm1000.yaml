@@ -26,10 +26,12 @@ name: phase0_ddpm1000
 base_config: configs/finetune.yaml
 reuse_runs: true
 
-# Where the trained tier-1 runs live. Sample and eval jobs read checkpoints
-# from here; nothing is written back into these directories except the new
-# sample folders named below.
-output_root: ./runs/phase0
+# ``output_root`` controls where this sweep's own store/ledger live.
+# ``run_root`` points at the trained runs it re-scores.  Keeping them
+# separate means ddpm1000's jobs don't collide with phase0's in a shared
+# state.db — the root cause of the first run silently producing 0 eval rows.
+output_root: ./runs/phase0_ddpm1000
+run_root: ./runs/phase0
 ledger: ./runs/phase0_ddpm1000/results.jsonl
 real_images: ./data/cifar10_train_png
 

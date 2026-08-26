@@ -85,6 +85,12 @@ def build_jobs(manifest: dict[str, Any], *, manifest_dir: Path | None = None) ->
     base_config = str(manifest["base_config"])
     method = str(manifest.get("method", "finetune"))
     output_root = Path(manifest["output_root"])
+    # ``run_root`` decouples the store/ledger location from the directory the
+    # trained runs actually live in.  A ``reuse_runs`` sweep (e.g. a sampler
+    # sensitivity check) inherits checkpoints from an earlier pipeline, so its
+    # ``output_root`` must point at a fresh directory for its own store while
+    # ``run_root`` still resolves the train folders it re-scores.
+    run_root = Path(manifest.get("run_root", output_root))
     ledger = str(manifest.get("ledger", output_root / "results.jsonl"))
     real_images = manifest.get("real_images")
     if method not in ("finetune", "dreambooth", "restoration"):
@@ -117,7 +123,7 @@ def build_jobs(manifest: dict[str, Any], *, manifest_dir: Path | None = None) ->
 
         for seed in seeds:
             exp = f"{group}_s{seed}"
-            run_dir = output_root / exp
+            run_dir = run_root / exp
             train_id = f"{name}:train:{exp}"
 
             if not reuse_runs:
@@ -158,7 +164,7 @@ def build_jobs(manifest: dict[str, Any], *, manifest_dir: Path | None = None) ->
                         kind="eval",
                         group_id=group,
                         tier=tier,
-                        depends_on=train_id,
+                        depends_on=None if reuse_runs else train_id,
                         payload={
                             "argv": _cli(
                                 "eval-dreambooth",
@@ -198,7 +204,7 @@ def build_jobs(manifest: dict[str, Any], *, manifest_dir: Path | None = None) ->
                             kind="eval",
                             group_id=group,
                             tier=tier,
-                            depends_on=train_id,
+                            depends_on=None if reuse_runs else train_id,
                             payload={
                                 "argv": _cli(
                                     "eval-restoration",

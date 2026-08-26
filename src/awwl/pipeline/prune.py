@@ -60,6 +60,7 @@ def survey(manifest_path: str | Path) -> tuple[str, list[Reclaimable]]:
     manifest = load_manifest(manifest_path)
     name = str(manifest["name"])
     output_root = Path(manifest["output_root"])
+    run_root = Path(manifest.get("run_root", output_root))
     ledger = Path(manifest.get("ledger", output_root / "results.jsonl"))
 
     evaluated: set[str] = set()
@@ -76,7 +77,7 @@ def survey(manifest_path: str | Path) -> tuple[str, list[Reclaimable]]:
 
     out: list[Reclaimable] = []
     for exp, group in sorted(seen.items()):
-        run_dir = output_root / exp
+        run_dir = run_root / exp
         paths = _weight_paths(run_dir)
         if not paths:
             continue

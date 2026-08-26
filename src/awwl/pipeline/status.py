@@ -119,7 +119,7 @@ def _last_meaningful_line(error: str, *, width: int = 300) -> str:
     for line in reversed(lines):
         if not line or line in _NOISE or _PROGRESS_RE.search(line):
             continue
-        if line.startswith(("File \"", "^", "~")) or line.isdigit():
+        if line.startswith(('File "', "^", "~")) or line.isdigit():
             continue
         return line[:width]
     return "(process died without a traceback -- killed, or output truncated)"
@@ -130,8 +130,14 @@ def collect_status(
     *,
     ledger_override: Path | None = None,
     max_tier: int | None = None,
-) -> tuple[str, str, list[GroupStatus], dict[str, int], dict[str, int],
-           tuple[dict[str, int], dict[str, list[float]]]]:
+) -> tuple[
+    str,
+    str,
+    list[GroupStatus],
+    dict[str, int],
+    dict[str, int],
+    tuple[dict[str, int], dict[str, list[float]]],
+]:
     """Cross-reference a manifest's plan against the ledger and the job queue.
 
     Returns:
@@ -149,12 +155,15 @@ def collect_status(
     ledger = Path(ledger_override or manifest.get("ledger", output_root / "results.jsonl"))
 
     statuses: dict[str, GroupStatus] = {}
+    reuse_runs = bool(manifest.get("reuse_runs", False))
     for job in build_jobs(manifest):
         st = statuses.setdefault(job.group_id, GroupStatus(job.group_id, job.tier))
-        # Only train jobs are counted, one per seed. Eval job ids carry an
-        # epoch suffix (``:eval:mse_s1:199``), so counting those would multiply
-        # the seed total by the number of evaluated checkpoints.
-        if job.kind == "train":
+        # ``planned_seeds`` determines whether a configuration shows as
+        # "complete".  Normal sweeps count train jobs (one per seed).
+        # ``reuse_runs`` sweeps create no train jobs, so we count sample jobs
+        # instead — sample ids carry an epoch suffix (``:sample:mse_s1:199``)
+        # but ``_seed_in`` extracts the seed from the experiment name regardless.
+        if job.kind == "train" or (reuse_runs and job.kind == "sample"):
             seed = _seed_in(job.job_id)
             if seed is not None:
                 st.planned_seeds.add(seed)
@@ -300,8 +309,7 @@ def format_status(
     if ghosts:
         lines += [
             "",
-            "  WARNING: queue reports done but no ledger rows exist for: "
-            + ", ".join(ghosts),
+            "  WARNING: queue reports done but no ledger rows exist for: " + ", ".join(ghosts),
             "  Those runs cannot be written about. Check the eval logs.",
         ]
     lines.append("")
@@ -326,7 +334,15 @@ def status_report(
             out += [f"## {path}", "", f"  could not read: {exc}", ""]
             continue
         out.append(
-            format_status(name, method, statuses, counts, orphans=orphans,
-                          timing=timing, workers=workers, show_errors=show_errors)
+            format_status(
+                name,
+                method,
+                statuses,
+                counts,
+                orphans=orphans,
+                timing=timing,
+                workers=workers,
+                show_errors=show_errors,
+            )
         )
     return "\n".join(out)
