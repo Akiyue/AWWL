@@ -33,7 +33,10 @@ The comparison is internally consistent and the sampling seed is fixed across
 arms, but it is one operating point. Few-step samplers produce smoother output,
 which is precisely where a frequency-aware objective should have its advantage,
 so the choice is not neutral with respect to the hypothesis.
-\pending{DDPM-1000 check on the tier-1 arms}
+\S\ref{sec:sampler-check} re-scores the tier-1 arms under DDPM-1000 and
+finds the null survives: AWWL is still $+0.98$~FID worse than MSE, and the
+penalty actually shrinks under the longer sampler, consistent with the
+temporal schedule contributing more when given more denoising steps.
 
 \paragraph{The post-process is not the model's own failure mode.}
 The Fourier correction of \S\ref{sec:worth} raises a band; a model

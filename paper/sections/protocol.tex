@@ -46,7 +46,9 @@ like a working experiment and tests nothing.
 
 Sampling uses DDIM \citep{song2021denoising} with \num{100} steps and
 \num{10000} samples per checkpoint, with the sampling seed fixed across arms so
-a comparison differs by the trained model alone. FID is computed with
+a comparison differs by the trained model alone.  \S\ref{sec:sampler-check}
+re-scores the tier-1 arms under DDPM-1000 to verify the null is not specific
+to this operating point. FID is computed with
 \texttt{clean-fid} \citep{parmar2022aliased}, which fixes the resizing and
 quantisation discrepancies that make FID values incomparable between codebases;
 Inception Score and KID come from \texttt{torch-fidelity}. \S\ref{sec:replication}
