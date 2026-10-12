@@ -1,0 +1,30 @@
+% Supplementary results for Section~\ref{sec:confound}: the normalisation
+% control built on the summed-detail variant. Input under the appendix section
+% that carries \label{app:supp}, so this file starts at subsection level.
+
+\subsection{A normalisation control on the summed-detail shape}
+\label{app:supp-confound}
+
+A further control is built on the summed-detail variant of
+Eq.~\eqref{eq:summed}, whose per-band weights are
+$(w_{\mathrm{LL}}, w_{\det}, w_{\det}, w_{\det})$, and fixes
+$\sum_b \omega_b^2$ at \levelSqFixedSum, that variant's mean over the training
+timesteps (Table~\ref{tab:confound-summed}). Because it differs from the
+controls of Table~\ref{tab:confound} in band shape as well as in
+normalisation, it is compared only with its parent, the unnormalised
+summed-detail arm. Against that parent, the control changes FID by
+$\dSqFixedSumVsEqSeven$ $[\dSqFixedSumVsEqSevenLo, \dSqFixedSumVsEqSevenHi]$
+(raw $p = \dSqFixedSumVsEqSevenP$, $p_{\mathrm{Holm}} = \dSqFixedSumVsEqSevenHolm$
+over the \nFamilyConfound{} confound contrasts), although it remains
+worse than MSE ($+\dSqFixedSum$~FID $[\dSqFixedSumLo, \dSqFixedSumHi]$,
+$p_{\mathrm{Holm}} = \dSqFixedSumHolm$). For this shape, whose total falls
+from $3(1 - \alpha)$ to $\alpha$, holding $\sum_b \omega_b^2$ constant
+therefore improves FID relative to the parent, whereas for the released,
+detail-averaged shape the same normalisation raises FID relative to AWWL
+(Section~\ref{sec:confound-results}). The effect of normalising the timestep
+weight depends on the band shape it accompanies, and the controls support no
+general statement that timestep reweighting helps or harms. As for the main
+controls, the effective timestep weight $\Lambda(t)$ is not held fixed
+(Proposition~\ref{prop:confound}(b)).
+
+\input{tables/confound_summed}

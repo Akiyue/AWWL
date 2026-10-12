@@ -6,6 +6,9 @@ unpublished results and candid notes on what went wrong.
 Every number is measured. Sections marked ⏳ are waiting on runs; nothing
 pending can overturn §2–§6, which are closed.
 
+Numbers in the manuscript come from the ledger via `scripts/make_tables.py`;
+the ones in *this* file are transcribed and can go stale. Trust `paper/tables/`.
+
 ---
 
 ## Title candidates
@@ -117,8 +120,9 @@ reweighting riding along with it.
   Holm–Bonferroni across the family.
 - Wilcoxon reported as a direction check only: its floor is 2/2^N = 0.0625 at
   N = 5, so it cannot clear α = 0.05 and is not a verdict.
-- DDIM-100, 10 000 samples, identical across arms. ⏳ DDPM-1000 sensitivity
-  check outstanding — the one open threat to the null.
+- DDIM-100, 10 000 samples, identical across arms. DDPM-1000 check **done**
+  (§sampler): the gap widens rather than closing, so the sampler was
+  concealing the effect, not creating it. That threat is closed.
 - EMA reported as its own configuration.
 - Spectra in dB (20·log10); an earlier revision used a natural log, 2.3×
   larger and not dB.
@@ -216,21 +220,67 @@ point, where the derivative is non-zero, the same correction is worth 0.346 —
 the minimum. This study drew, and then retracted, the wrong conclusion from
 the wrong calibration.
 
-## §8 Does a learned weighting escape? ⏳
+## §8 Does a learned weighting escape? — CLOSED
 
-Tier 4, running. `awwl_learned` (σ-conditioned uncertainty weighting, removes
-α and p entirely), `awwl_gradnorm` (cited in the original related work, never
-implemented there), `awwl_subband`, `awwl_spatial`, `awwl_lifting`.
+Tier 4 complete. No route escapes: every added axis of adaptivity is
+significantly worse than MSE and worse than the budget-held-fixed weighting it
+was meant to improve on (nearest: +1.3 FID). Two arms diverged rather than
+lost — GradNorm (348.8 ± 28.0) and, separately, raw SNR. The decisive row is
+the σ-conditioned learned schedule at +6.66 FID (p = 0.0001): gradient descent
+finds something worse than grid search published.
 
-Either outcome is reportable. A learned weighting that improves the spectrum
-further while FID stays flat confirms the §7 accounting on an independent
-mechanism. One that succeeds becomes the paper's positive result.
+## §9 Generality — mostly closed
 
-## §9 Generality ⏳
-
-- DreamBooth, 5 seeds — 25/25 trained, evaluation rerunning.
-- Second resolution (CelebA-64) — supported, not run. **Needed for top tier.**
+- DreamBooth, 5 seeds × 9 objectives — **done**, §generality written.
+- Restoration (CIFAR-10 denoising, 3 seeds × 6 objectives) — **done**, and a
+  complete null on PSNR/SSIM/LPIPS/NIQE. Worth more than it looks: this task
+  was chosen *because* larger effects were expected, and there are none.
+  LPIPS was recorded as 0.0 for the whole sweep by a swallowed device error;
+  re-evaluated on CPU, now real. Table generated from the ledger.
+- DDPM-1000 sampler check — **done**, and it strengthens the paper: the gap
+  widens from +0.44 (n.s.) to +0.982 (p = 0.0002), and the static ablation
+  becomes significant too. Written up as §sampler.
+- Second resolution (CelebA-64) — **running, 1 worker only.** GPU 0 is held by
+  unrelated processes, so the sweep gets one card: 15.5 days remaining for the
+  10 outstanding runs, not the ~4 the manifest assumed. Only MSE (5/5) is done.
 - Second architecture (LDM or DiT) — not run. **Needed for top tier.**
+
+## §11 A second family member — ANALYTIC HALF CLOSED, ARM NOT RUN
+
+Focal Frequency Loss implemented (`losses/focal_frequency.py`, 10 tests).
+Two properties settled without a GPU, both now in the paper:
+
+- **Parseval holds on the Fourier basis too**, exact to machine precision.
+  So §family's claim generalises from "orthonormal wavelet" to "any unitary
+  transform", which is what makes it a family claim rather than a claim about
+  one basis. Written into §family, §intro contributions, §discussion.
+
+- **The confound recurs in a weighting with no σ in it.** FFL's total is
+  *exactly* invariant to the residual's scale but not to its spectral shape —
+  and spectral shape is what the schedule moves. So it imposes a timestep
+  reweighting as an emergent consequence, and **the §confound protocol does
+  not transfer**: holding Σw fixed needs a parameter separating shape from
+  total, which an error-keyed weighting has none of. Only its unweighted
+  limit is available as a control, so a positive result from such a member
+  could not be credited to the frequency axis. New subsection
+  §confound-family, plus §extensions "A second published member".
+
+Both computed by `verify_loss_math.py` checks 4-5, not transcribed. The
+empirical arm is queued (14 GPU-h); until it runs the paper has **no
+family-level empirical claim**, and §extensions says so explicitly.
+
+Watch the wording: it is *characterised*, not *trained*. Three places said
+"we run" and had to be corrected.
+
+## §10 The SNR row is mislabelled — FIXED IN CODE, ARM NOT YET RUN
+
+`snr_weighted` is the *raw* ratio, not Min-SNR-γ, and §generality cited Hang
+et al. for it — on the paper's only positive result. Measured: the raw weight
+peaks at 9997, spans 2.5e8, and puts 95% of the gradient mass in the lowest 5%
+of timesteps, which is exactly why it craters on from-scratch training and
+survives a 400-step fine-tune. The prose now says raw SNR and explains the
+divergence; a real `min_snr` loss (γ=5) is implemented, tested and queued in
+both manifests. 14 GPU-hours on CIFAR-10, minutes on DreamBooth.
 
 ## §10 Limitations — write these; do not wait to be asked
 
@@ -258,14 +308,49 @@ mechanism. One that succeeds becomes the paper's positive result.
 
 ## Still missing before submission
 
-| | Blocking | Cost |
+Everything experimental is done: 176 training runs, 525 GPU-hours, 324
+evaluated checkpoints, 40 arms, three tasks, two family members, four
+operating points, a seven-point convergence curve. The manuscript has no
+`\pending` or `\todo` markers left.
+
+| | Blocking | Who |
 |---|---|---|
-| Tier 4 (§8) | yes | running, ~2.5 days |
-| DreamBooth eval (§9) | yes | ~1 h |
-| Second resolution (§9) | for top tier | ~2 days |
-| Second architecture (§9) | for top tier | ~4 days |
-| DDPM-1000 sampler check (§4) | yes | ~6 h |
-| Cost table | no | minutes |
+| Authorship + CRediT | **yes** | the group — longest pole, nothing else needs it |
+| Build the PDF and read it end to end | **yes** | whoever has TeX |
+| Presubmission inquiry to Neurocomputing on revising a prior conference paper | **yes** | corresponding author |
+| Fill the 13 placeholders in `paper/submission/` | yes | submitter |
+| Zenodo DOI from a tagged release | yes | whoever owns the repo |
+| CelebA-64 second arm | no — stated as a limitation, kept as revision ammunition | — |
+
+## What the final sweeps changed
+
+Three claims had to be **scoped to the 200-epoch recipe** because each
+attenuates by roughly half at four times the budget:
+
+| | 200 ep | 800 ep |
+|---|---|---|
+| Pricing shortfall | 0.787 | 0.335 ± 0.237 |
+| Ancestral-sampler gap | +0.982 (p = 0.0002) | +0.344 (p = 0.12) |
+| DDIM gap | +0.441 | +0.146 |
+
+What survives every operating point is the null and its direction: behind at
+all seven checkpoints, both samplers, both budgets, never ahead. The paper now
+says this explicitly rather than leading with a single number.
+
+Two results arrived that were not planned and are worth more than what they
+replaced:
+
+* **Min-SNR-γ dissolves the study's only positive finding.** The +0.0411 CLIP
+  gain belongs to the *unclamped* ratio, which craters on CIFAR-10 at FID 325.
+  The clamped method moves nothing (−0.0019, p = 0.45) and on CIFAR-10 trains
+  normally while still losing to MSE by +2.09. Neither task gives the timestep
+  axis a result once the weighting is bounded.
+* **The spectral deficit widens with training.** Within one sweep, paired by
+  seed, the baseline's high-band deficit grows by 0.43 dB by the epoch where
+  FID is *best* and 0.67 dB by the end, while FID improves. That refutes the
+  under-convergence explanation directly, and it says the spectrum and the
+  metric come apart during ordinary training — which is the paper's thesis,
+  measured without any frequency-aware objective involved.
 
 ## Framing notes
 

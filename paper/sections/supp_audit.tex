@@ -1,0 +1,244 @@
+% Supplementary material for Section~\ref{sec:audit} (Auditing AWWL). Input
+% under Appendix D (Supplementary results); starts at subsection level. Moved
+% floats keep their labels (tab:replication-details is new): tab:convergence,
+% fig:convergence, tab:sampler,
+% tab:budget, fig:budget-sampler, fig:budget-curve, tab:deficit-budget,
+% fig:deficit-metric, tab:extensions.
+
+\subsection{Replication details}
+\label{app:supp-replication}
+
+Table~\ref{tab:replication-details} completes the FID comparison of
+Table~\ref{tab:replication} with Inception Score, the one-sided tests against
+the published differences and the 95\% prediction intervals for one further
+paired run, under both samplers.
+
+\IfFileExists{tables/replication_details.tex}{\input{tables/replication_details}}{%
+  \begin{table}[tbp]\centering
+  \fbox{\textbf{tables/replication\_details.tex not built}}
+  \caption{Not built.}\label{tab:replication-details}
+  \end{table}}
+
+On Inception Score neither wavelet objective differs from MSE under either
+sampler, even before correction: AWWL's paired difference is $\ddpmDISAWWL$
+$[\ddpmDISAWWLLo, \ddpmDISAWWLHi]$ under DDPM-1000 (raw $p = \ddpmDISAWWLP$)
+and $\dISAWWL$ $[\dISAWWLLo, \dISAWWLHi]$ under DDIM-100 (raw
+$p = \dISAWWLP$), and the static wavelet arm's differences lie nearer zero.
+
+A published single-run difference can be read as the objective's mean effect
+or as the outcome of one run. A one-sided test against the published
+difference, uncorrected and under the published sampler, rejects the first
+reading for AWWL on both metrics (FID: $p \pPubFIDAWWLDdpm$; Inception Score:
+$p = \pPubISAWWLDdpm$) and for the static wavelet arm on FID only
+($p = \pPubFIDStaticDdpm$, against $p = \pPubISStaticDdpm$ for Inception
+Score). The published differences were measured with DDPM-1000; compared with
+DDIM-100 means, which assumes that the published effect does not depend on
+the sampler, the same tests give $p = \pPubFIDAWWLDdim$ (FID) and
+$p = \pPubISAWWLDdim$ (Inception Score) for AWWL.
+
+The second reading is judged against the prediction interval. AWWL's
+published Inception Score gain of $+\pubDISAWWL$ lies inside it under both
+samplers, so one run can show that gain through seed variation alone. The
+published FID differences lie outside it under DDPM-1000 ($\pubDFIDAWWL$
+against $[\piFIDAWWLDdpmLo, \piFIDAWWLDdpmHi]$ for AWWL, $\pubDFIDStatic$
+against $[\piFIDStaticDdpmLo, \piFIDStaticDdpmHi]$ for the static wavelet
+arm) and inside the wider intervals of DDIM-100. Under the published sampler,
+seed variation can therefore account for the published Inception Score gain
+but not for the published FID differences.
+
+\subsection{Implementation dependence of KID}
+\label{app:supp-kid}
+
+The sign of AWWL's KID difference from MSE depends on the implementation.
+The library used for KID in the comparison tables
+(Tables~\ref{tab:compare-other} and~\ref{tab:full}), \texttt{torch-fidelity},
+gives a difference of
+$+\dKIDAWWL \times 10^{-3}$ ($[\dKIDAWWLLo, \dKIDAWWLHi] \times 10^{-3}$,
+uncorrected $p = \dKIDAWWLP$), whereas a
+hand-written implementation with the same kernel and unbiased estimator gives
+a nominally significant difference in AWWL's favour
+($\dKIDhandAWWL \times 10^{-3}$,
+$[\dKIDhandAWWLLo, \dKIDhandAWWLHi] \times 10^{-3}$, uncorrected
+$p = \dKIDhandAWWLP$). The two differ only in choices that the definition of
+KID leaves open: the Inception weights and preprocessing, a reference subset
+of \num{10000} training images rather than all \num{\nRefImages}, and one
+estimate over all samples rather than an average over subsets. The
+\texttt{clean-fid} implementation used for the pricing test
+(Section~\ref{sec:worth-headline}) gives $+\kidGapAWWL \times 10^{-3}$
+($[\kidGapAWWLLo, \kidGapAWWLHi] \times 10^{-3}$, uncorrected
+$p = \kidGapAWWLP$). An evaluation with the hand-written implementation alone
+would have reported a gain that neither library reproduces.
+
+\FloatBarrier
+\subsection{Convergence within the 200-epoch schedule}
+\label{app:supp-convergence}
+
+The intermediate checkpoints give no evidence that AWWL reaches a given
+quality with less training (Table~\ref{tab:convergence} and
+Fig.~\ref{fig:convergence}). Under DDIM-100 it trails MSE at epochs 39, 79,
+119 and 199 and leads only at epoch 159 (AWWL $-$ MSE $= \convDOneFiftyNine$~FID
+$[\convDOneFiftyNineLo, \convDOneFiftyNineHi]$, uncorrected
+$p = \convDOneFiftyNineP$, lower for \convAheadOneFiftyNine{} of the five
+seeds), where seed variation is much larger than at the final checkpoint (MSE
+standard deviation $\convSDMSEOneFiftyNine$~FID against
+$\convSDMSEOneNinetyNine$). No checkpoint shows a significant difference in
+AWWL's favour. Under the cosine learning-rate schedule these checkpoints
+trace one run rather than shorter training budgets;
+Section~\ref{sec:budget} and Appendix~\ref{app:supp-budget} report a longer
+budget.
+
+\IfFileExists{tables/convergence.tex}{\input{tables/convergence}}{%
+  \begin{table}[tbp]\centering
+  \fbox{\textbf{tables/convergence.tex not built}}
+  \caption{Not built.}\label{tab:convergence}
+  \end{table}}
+
+\guardedfigure{1.0}{convergence.png}{%
+  FID through training for MSE, the static wavelet arm and AWWL: CIFAR-10,
+  DDIM-100, \num{10000} samples, no EMA, five seeds, evaluated at epochs 39,
+  79, 119, 159 and 199. (a)~Means over seeds. (b)~Mean paired
+  difference from MSE with its 95\% $t$-interval, the error bars offset
+  horizontally for legibility; markers are hollow as no correction is applied
+  across checkpoints. Table~\ref{tab:convergence} lists the values
+  for AWWL.}{fig:convergence}
+
+\FloatBarrier
+\subsection{Sampler and training budget}
+\label{app:supp-budget}
+
+Table~\ref{tab:sampler} gives the DDPM-1000 resampling of
+Section~\ref{sec:sampler} with its KID differences; its FID entries repeat
+those of Table~\ref{tab:replication}.
+
+\IfFileExists{tables/sampler.tex}{\input{tables/sampler}}{%
+  \begin{table}[tbp]\centering
+  \fbox{\textbf{tables/sampler.tex not built}}
+  \caption{Not built.}\label{tab:sampler}
+  \end{table}}
+
+Table~\ref{tab:budget} and Fig.~\ref{fig:budget-sampler} set AWWL's gap to MSE
+at the two budgets of Section~\ref{sec:budget} side by side. The 800-epoch
+runs differ from the main matrix in three respects: the budget, an
+exponential moving average of the weights, and a cosine schedule stretched to
+the new length. Within each budget the two objectives are trained
+identically, so the table is read row by row. At 200 epochs EMA shows no
+effect that could account for the difference between the rows, although three
+seeds cannot exclude one: it leaves the FID of MSE where it was ($\dMSEema$
+$[\dMSEemaLo, \dMSEemaHi]$) and AWWL's gap close to its value without EMA
+($+\dEMApair$, $p = \dEMApairP$, against $+\dAWWL$). Of the gaps
+in Table~\ref{tab:budget}, only the 200-epoch DDPM-1000 gap is significant.
+
+\IfFileExists{tables/budget.tex}{\input{tables/budget}}{%
+  \begin{table}[tbp]\centering
+  \fbox{\textbf{tables/budget.tex not built}}
+  \caption{Not built.}\label{tab:budget}
+  \end{table}}
+
+\guardedfigure{0.72}{budget_sampler.png}{%
+  AWWL's paired FID gap to MSE at the two budgets of Table~\ref{tab:budget},
+  under DDIM-100 (solid line, circles) and DDPM-1000 (dashed line, squares),
+  with 95\% $t$-intervals. Filled markers: $p < 0.05$ after Holm correction
+  within the contrast's family (Table~\ref{tab:families}). The 800-epoch
+  points rest on three seeds and differ from the 200-epoch points in EMA and
+  schedule length as well as in budget.}{fig:budget-sampler}
+
+Fig.~\ref{fig:budget-curve} follows the longer runs through training. The FID
+of MSE is lowest at epoch~\longBestEpochMSE{} (\longBestFIDMSE) and rises
+afterwards, so the 800-epoch endpoint lies past the optimum of this recipe;
+the recipe uses no dropout, and the rise is consistent with overfitting,
+which we did not test. The paired gap is positive at every evaluated
+checkpoint, between $+\longGapSixNinetyNine$ and $+\longGapOneNinetyNine$,
+and no checkpoint's interval excludes zero. Because the checkpoints share the
+same three seed pairs, they are repeated measurements of one set of runs, not
+independent replications. Averaged over the checkpoints within each seed, the
+gap is $+\longGapAvg$ $[\longGapAvgLo, \longGapAvgHi]$ ($p = \longGapAvgP$).
+
+\guardedfigure{1.0}{budget_curve.png}{%
+  The 800-epoch runs at every evaluated checkpoint (epochs 199 to 799 in steps
+  of 100): EMA, stretched cosine schedule, DDIM-100, three seeds.
+  (a)~Seed means of FID for MSE and AWWL. (b)~Mean paired
+  difference AWWL $-$ MSE, with its 95\% $t$-interval shaded. The seven
+  checkpoints share the same three seed pairs.}{fig:budget-curve}
+
+The under-training reading predicts that the baseline's high-band deficit
+(Section~\ref{sec:pricing-test}) shrinks as training continues;
+Table~\ref{tab:deficit-budget} tests this. Compared end against end, each run
+at the annealed end of its own schedule and both with EMA, the deficit of MSE
+is larger after 800 epochs than after 200, by $+\trajEndToEnd$~dB
+$[\trajEndToEndLo, \trajEndToEndHi]$, while its FID improves from
+\budFIDMSEShortEmaDdim{} to \budFIDMSELongDdim. Within the 800-epoch run the
+deficit rises from \trajDefMSEOneNinetyNine~dB at epoch~199 to
+\trajDefMSESevenNinetyNine~dB at epoch~799 (Table~\ref{tab:deficit-budget} and
+Fig.~\ref{fig:deficit-metric}), but these checkpoints differ in learning-rate
+phase as well as in training length, the early ones being taken at a high
+learning rate, so this trajectory is descriptive only. At
+epoch~\longBestEpochMSE, where FID is lowest, the deficit does not differ from
+that at the end of the 200-epoch schedule (Table~\ref{tab:deficit-budget},
+last column). Over this range, more training improves FID without closing the
+deficit. AWWL's high-band change at the end of the longer schedule
+($+\trajCorrSevenNinetyNine$~dB
+$[\trajCorrSevenNinetyNineLo, \trajCorrSevenNinetyNineHi]$) has a point
+estimate below its value at the end of the 200-epoch schedule with EMA
+($+\trajCorrEnd$~dB $[\trajCorrEndLo, \trajCorrEndHi]$), but the two
+intervals overlap; Section~\ref{sec:worth} prices the change at this budget.
+
+\IfFileExists{tables/deficit_budget.tex}{\input{tables/deficit_budget}}{%
+  \begin{table}[tbp]\centering
+  \fbox{\textbf{tables/deficit\_budget.tex not built}}
+  \caption{Not built.}\label{tab:deficit-budget}
+  \end{table}}
+
+\guardedfigure{0.82}{deficit_vs_metric.png}{%
+  High-band deficit and FID of MSE and AWWL through the 800-epoch runs.
+  (a)~High-band spectral deficit of the samples (dB below the real
+  images) and (b)~FID at epochs 199, 399 and 799 (EMA, DDIM-100), mean $\pm$ one sample standard
+  deviation over three seeds. The checkpoints belong to one stretched cosine
+  schedule and differ in learning-rate phase as well as in training length,
+  so the figure is descriptive; Table~\ref{tab:deficit-budget} compares the
+  annealed endpoints of the two schedules.}{fig:deficit-metric}
+
+\FloatBarrier
+\subsection{Extensions of the weighting}
+\label{app:supp-extensions}
+
+Table~\ref{tab:extensions} gives every extension of
+Section~\ref{sec:extensions} against MSE and against its parent. Apart from
+GradNorm, whose global weights sum to four, no arm fixes its total weight
+over $\sigma_t$. The per-sub-band, spatially adaptive and learned-basis arms
+give each detail band the full $w_{\det}$, so their parent is AWWL with detail
+bands summed (Eq.~\eqref{eq:summed}); the three-level arm divides $w_{\det}$
+among its nine detail bands, and the remaining arms set their own weights.
+
+The extensions do not deliver the mechanism either
+(Table~\ref{tab:pricing-arms}). The per-sub-band and learned-weighting arms
+leave the high band close to that of MSE, the learned basis raises it by about
+as much as AWWL, and the spatially adaptive and all-axes arms lower it.
+Priced by transplant (Section~\ref{sec:pricing-test}), the last two changes
+are worth $\valueArmSpatial$ and $\valueArmAllAxes$~FID: each raises the FID
+of the MSE samples.
+
+The learned weighting is uncertainty weighting \citep{kendall2018multi}
+conditioned on the noise level: a small network maps $\sigma_t$ to a
+log-variance $\psi_b$ for each band $b$, the band is weighted by
+$\tfrac{1}{2}e^{-\psi_b}$, and the total is left free (a per-band form of the
+EDM2 weighting \citep{karras2024analyzing}). Each weight is then driven
+towards a value inversely proportional to the loss of its band at that noise
+level, which produces the steep timestep schedule reported in
+Section~\ref{sec:extensions}.
+
+Two arms failed rather than degraded, and neither is priced. GradNorm
+\citep{chen2018gradnorm}, run at asymmetry $1.5$ with global weights that sum
+to four, drove the LL, LH and HL weights to their positivity floor in all five
+seeds, training the network through the HH band alone; it ends at
+\num[round-mode=places,round-precision=1]{\fidGradNormmean}~FID with zero
+recall (Table~\ref{tab:full}), a failure of the balancer at one setting
+rather than evidence about balancing. The three-level arm is unstable across
+seeds (\num[round-mode=places,round-precision=1]{\fidMultilevelmean}~$\pm$~%
+\num[round-mode=places,round-precision=1]{\fidMultilevelsd}~FID); its
+per-band averaging weights a level-$j$ detail coefficient $4^{j-1}$ times a
+level-1 one (Section~\ref{sec:family-parseval}), so the instability cannot be
+attributed to depth alone.
+
+\input{tables/extensions}
+
+\FloatBarrier

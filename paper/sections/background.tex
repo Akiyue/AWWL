@@ -1,55 +1,212 @@
-\section{Background}
+\section{Background and the objective family}
 \label{sec:background}
 
-\subsection{Diffusion training objectives}
+\subsection{Diffusion training and notation}
+\label{sec:notation}
 
-A denoising diffusion model \citep{ho2020denoising} corrupts a datum $x_0$ by
-$x_t = \sqrt{\bar\alpha_t}\,x_0 + \sqrt{1-\bar\alpha_t}\,\epsilon$ with
-$\epsilon \sim \mathcal{N}(0, I)$, and trains a network
-$\hat\epsilon_\theta(x_t, t)$ to recover $\epsilon$ under
+A denoising diffusion model \citep{ho2020denoising} with $T$ timesteps and
+noise schedule $\beta_1,\dots,\beta_T$ sets
+$\bar\alpha_t = \prod_{s \le t}(1-\beta_s)$ and corrupts a datum $x_0$ as
+\begin{equation}
+  x_t = \sqrt{\bar\alpha_t}\,x_0 + \sigma_t\,\epsilon, \qquad
+  \sigma_t = \sqrt{1-\bar\alpha_t} \in (0,1), \qquad
+  \epsilon \sim \mathcal{N}(0, I).
+  \label{eq:forward}
+\end{equation}
+We call $\sigma_t$ the noise level ($\sigma_t \to 1$ is the high-noise end of
+the schedule) and write
+$\mathrm{SNR}_t = \bar\alpha_t/\sigma_t^2 = (1-\sigma_t^2)/\sigma_t^2$ for the
+signal-to-noise ratio. A network $\hat\epsilon_\theta(x_t, t)$ is trained to
+predict $\epsilon$ under
 \begin{equation}
   \mathcal{L}_{\mathrm{simple}}
-  = \mathbb{E}_{x_0,\epsilon,t}\big[\|\hat\epsilon_\theta(x_t,t) - \epsilon\|_2^2\big].
+  = \mathbb{E}_{x_0,\epsilon,t}\big[\operatorname{ms}\big(\hat\epsilon_\theta(x_t,t) - \epsilon\big)\big],
+  \qquad
+  \operatorname{ms}(z) = \lVert z \rVert_2^2 / \dim z ,
   \label{eq:simple}
 \end{equation}
-We write $\sigma_t = \sqrt{1-\bar\alpha_t} \in (0,1)$ for the noise magnitude,
-so $\sigma_t \to 1$ is the high-noise end of the schedule.
+with $t$ uniform on $\{1, \dots, T\}$. The prediction defines a clean-image
+estimate $\hat x_0 = (x_t - \sigma_t \hat\epsilon_\theta)/\sqrt{\bar\alpha_t}$.
+Substituting Eq.~\eqref{eq:forward} gives, for the residual
+$r = \hat\epsilon_\theta(x_t,t) - \epsilon$ of one sample,
+\begin{equation}
+  r = -\sqrt{\mathrm{SNR}_t}\,(\hat x_0 - x_0),
+  \qquad
+  \operatorname{ms}(r) = \mathrm{SNR}_t \operatorname{ms}(\hat x_0 - x_0).
+  \label{eq:residual}
+\end{equation}
+Every loss is averaged over channels and over the minibatch, and $N$ is the
+number of entries per channel. Two consequences of Eq.~\eqref{eq:residual}
+are used throughout. First, the regression target $\epsilon$ is white noise
+but the residual is not: it is the model's clean-image error rescaled by
+$\sqrt{\mathrm{SNR}_t}$, so it carries image structure and its spectrum
+depends on the noise level. For stationary Gaussian data with power spectrum
+$P$, the optimal predictor's residual has variance
+$\bar\alpha_t P(u)/(\bar\alpha_t P(u) + \sigma_t^2)$ at frequency $u$
+(Proposition~\ref{prop:residual}; all propositions are proved in
+Appendix~\ref{app:theory}): nearly white
+at low noise, and increasingly shaped like the data spectrum, concentrated at
+low frequencies for natural images, as the noise level grows. Second, a
+timestep weight $\kappa_t$ on the $\epsilon$-loss is a weight
+$\kappa_t\,\mathrm{SNR}_t$ on the clean-image error, so
+Eq.~\eqref{eq:simple} weights that error by $\mathrm{SNR}_t$.
+Min-SNR-$\gamma$ \citep{hang2023efficient} sets
+$\kappa_t = \min(\mathrm{SNR}_t, \gamma)/\mathrm{SNR}_t$ ($\gamma = 5$
+throughout), lowering the weight of the low-noise timesteps, those with
+$\mathrm{SNR}_t > \gamma$; raw SNR weighting, $\kappa_t = \mathrm{SNR}_t$,
+raises it without bound.
 
-Equation~\ref{eq:simple} is a uniformly weighted regression: every timestep and
-every spatial frequency contributes in proportion to its squared error. Both
-uniformities have been questioned, and the two lines of work are usually
-pursued separately --- a separation this paper argues is not maintained in
-practice (\S\ref{sec:confound}).
+\subsection{The objective family}
+\label{sec:family}
+\label{sec:family-def}
 
-\subsection{Wavelet sub-bands}
+A sub-band objective fixes a linear transform $W$ whose output coefficients are
+partitioned into bands $b \in \mathcal{B}$, band $b$ holding $n_b$
+coefficients, and weights the bands by non-negative functions of the noise
+level (Section~\ref{sec:family-ffl} admits weights that also depend on the
+residual):
+\begin{equation}
+  \mathcal{L}_{W,\omega}
+  = \mathbb{E}_{x_0,\epsilon,t}\Big[\sum_{b \in \mathcal{B}} \omega_b(\sigma_t)
+      \operatorname{ms}\big((W\hat\epsilon_\theta)_b - (W\epsilon)_b\big)\Big]
+  = \mathbb{E}_{x_0,\epsilon,t}\Big[\sum_{b \in \mathcal{B}} \omega_b(\sigma_t)
+      \operatorname{ms}\big((W r)_b\big)\Big].
+  \label{eq:family}
+\end{equation}
+The one-level 2\nobreakdash-D discrete wavelet transform (DWT) \citep{mallat1989theory}
+splits each channel into an approximation band $\mathrm{LL}$ and horizontal,
+vertical and diagonal detail bands $\mathrm{LH}$, $\mathrm{HL}$ and
+$\mathrm{HH}$ at half resolution; with Haar filters and even image sizes it
+is orthonormal and each band holds $N/4$ coefficients. The 2\nobreakdash-D discrete
+Fourier transform (DFT) $F$ is applied per channel with orthonormal scaling,
+so it is unitary.
 
-A one-level 2-D discrete wavelet transform \citep{mallat1989theory} splits an
-image into an approximation band $\mathrm{LL}$ and three detail bands
-$\mathrm{LH}$, $\mathrm{HL}$, $\mathrm{HH}$ carrying horizontal, vertical and
-diagonal high-frequency content, each at half resolution. Iterating on
-$\mathrm{LL}$ gives a multi-level decomposition.
+By the linearity of $W$ the weighted bands are bands of the residual, and by
+Eq.~\eqref{eq:residual} the term inside the expectation equals
+\begin{equation}
+  \mathrm{SNR}_t \sum_{b \in \mathcal{B}} \omega_b(\sigma_t)
+  \operatorname{ms}\big((W(\hat x_0 - x_0))_b\big),
+  \label{eq:family-x0}
+\end{equation}
+a band weighting of the clean-image error multiplied by the timestep factor
+$\mathrm{SNR}_t$ that $\mathcal{L}_{\mathrm{simple}}$ already carries. How
+that error's energy divides among the bands changes with $\sigma_t$
+(Section~\ref{sec:notation}), so a weight that depends on $\sigma_t$ acts on
+two things at once: the frequency content of the error and the relative
+weight of timesteps. Proposition~\ref{prop:confound} splits the loss exactly
+into a residual-independent timestep weight on the pixel loss and a zero-sum
+band term, which also reweights timesteps through the residual's band
+energies; Section~\ref{sec:confound} examines the consequences for AWWL.
 
-Two properties matter here. The transform is \emph{linear}, so applying it to a
-prediction and a target and differencing is identical to applying it to their
-residual --- the decomposition acts on the error, not on image content. And for
-an orthonormal family (Haar, Daubechies, Symlets) it is \emph{energy
-preserving}, which is what makes Eq.~\ref{eq:parseval} exact and bounds what
-any sub-band weighting can achieve.
+\label{sec:family-parseval}
+\label{sec:family-info}
+If $W^{*}W = I$, with $W^{*}$ the adjoint, that is, if $W$ is an isometry (as
+are the orthonormal DWT with zero or periodic extension and the unitary DFT,
+but not a DWT with symmetric extension, biorthogonal filters or unconstrained
+learned filters), then for every residual
+\begin{equation}
+  \sum_{b \in \mathcal{B}} \big\lVert (W r)_b \big\rVert_2^2 = \lVert r \rVert_2^2 ,
+  \label{eq:parseval}
+\end{equation}
+so the weights $\omega_b = n_b/N$ turn Eq.~\eqref{eq:family} into
+$\mathcal{L}_{\mathrm{simple}}$ exactly (checked to single precision by
+\texttt{scripts/verify\_loss\_math.py}). The condition is $W^{*}W = I$, not
+equal band sizes; for the one-level Haar DWT this unweighted limit is
+$\omega_b = 1/4$.
 
-\subsection{Evaluation}
+If the weights are strictly positive and depend on the timestep only, then
+for any injective $W$ the population minimiser of Eq.~\eqref{eq:family} is
+the conditional mean $\mathbb{E}[\epsilon \mid x_t, t]$, as for
+$\mathcal{L}_{\mathrm{simple}}$ (Proposition~\ref{prop:minimiser}). In
+this sense such a weighting adds no information about the target; it acts
+only through how a model of finite capacity trades errors between bands and
+timesteps and through the gradients that the optimiser receives
+(Propositions~\ref{prop:confound} and~\ref{prop:scale}). The statement fails
+for weights that depend on the residual (FFL) or on the target (the spatially
+adaptive arm of Section~\ref{sec:extensions}; remarks after
+Proposition~\ref{prop:minimiser}).
+Equation~\eqref{eq:parseval} holds for a fixed residual and does not constrain
+which residuals training reaches, so whether a change of emphasis helps is
+empirical.
 
-Fréchet Inception Distance \citep{heusel2017gans} fits Gaussians to Inception-V3
-features of real and generated sets and reports their Fréchet distance;
-Kernel Inception Distance \citep{binkowski2018demystifying} replaces this with
-an unbiased polynomial-kernel MMD in the same feature space; Inception Score
-\citep{salimans2016improved} uses only the generated set. Precision and recall
-\citep{kynkaanniemi2019improved,naeem2020reliable} separate fidelity from
-coverage.
+\subsection{The audited objective}
+\label{sec:family-awwl}
 
-All of these are known to be sensitive to implementation details that are not
-part of their definition: resizing and compression
-\citep{parmar2022aliased}, finite-sample bias \citep{chong2020effectively},
-and the particular ImageNet classes the feature extractor happens to encode
-\citep{kynkaanniemi2023role}. \S\ref{sec:replication} adds one more to that
-list, and \S\ref{sec:worth} shows that the operating point at which a metric's
-sensitivity is measured changes the answer by more than an order of magnitude.
+AWWL, introduced in our conference paper \citep{thao2026awwl}, uses the
+one-level Haar DWT (zero extension) with the rational weighting
+\begin{equation}
+  w_{\mathrm{LL}}(\sigma) = \alpha\,\lambda_p(\sigma), \qquad
+  w_{\det}(\sigma) = (1-\alpha)\big(1 - \lambda_p(\sigma)\big), \qquad
+  \lambda_p(\sigma) = \frac{\sigma^{p}}{\sigma^{p} + (1-\sigma)^{p}} .
+  \label{eq:weights}
+\end{equation}
+Here $\alpha \in [0,1]$ sets the balance between the approximation band and the
+detail bands and $p \ge 0$ how sharply that balance follows $\sigma$. For
+$p > 0$, $\lambda_p$ increases from $0$ at $\sigma = 0$ to $1$ at $\sigma = 1$,
+so the approximation band dominates at high noise. The published settings are
+$\alpha = 0.2$, $p = 1$ on CIFAR-10 and $\alpha = 0.8$, $p = 2$ for DreamBooth
+fine-tuning. In the released implementation, which produced the published
+results and is audited here, the three detail bands
+$\mathcal{D} = \{\mathrm{LH},\mathrm{HL},\mathrm{HH}\}$ are averaged,
+whereas the equation printed in the conference paper (its Eq.~7) sums them:
+\begin{linenomath}
+\begin{align}
+  \mathcal{L}_{\mathrm{AWWL}}
+  &= \mathbb{E}\Big[w_{\mathrm{LL}}(\sigma_t)\operatorname{ms}(r_{\mathrm{LL}})
+    + \frac{w_{\det}(\sigma_t)}{3}
+      \sum_{b \in \mathcal{D}} \operatorname{ms}(r_b)\Big],
+  \qquad r_b = (W r)_b ,
+  \label{eq:audited}\\
+  \mathcal{L}_{\Sigma}
+  &= \mathbb{E}\Big[w_{\mathrm{LL}}(\sigma_t)\operatorname{ms}(r_{\mathrm{LL}})
+    + w_{\det}(\sigma_t)
+      \sum_{b \in \mathcal{D}} \operatorname{ms}(r_b)\Big].
+  \label{eq:summed}
+\end{align}
+\end{linenomath}
+We call the averaged form, Eq.~\eqref{eq:audited}, AWWL; `published' refers
+below only to the conference paper's printed equation, settings and results.
+Sums over bands such as $\sum_b \omega_b$ and $\sum_b \omega_b^2$ refer to
+the per-band weights of AWWL,
+$\omega = (w_{\mathrm{LL}}, w_{\det}/3, w_{\det}/3, w_{\det}/3)$. The
+summed-detail variant, Eq.~\eqref{eq:summed}, triples the ratio of detail to
+approximation weight at every $\sigma$, so it is a different objective, not a
+rescaling of AWWL; Section~\ref{sec:replication} reports it, and arms built on
+it are identified where they appear. The total weight of AWWL is
+\begin{equation}
+  S(\sigma) = \sum_b \omega_b(\sigma) = w_{\mathrm{LL}}(\sigma) + w_{\det}(\sigma)
+  = (1-\alpha) + (2\alpha - 1)\,\lambda_p(\sigma) ,
+  \label{eq:total}
+\end{equation}
+which is affine in $\lambda_p$, runs from $1-\alpha$ ($\sigma \to 0$) to
+$\alpha$ ($\sigma \to 1$), and is constant only at $\alpha = 1/2$ (for
+$p > 0$). The unweighted limit of AWWL is $w_{\mathrm{LL}} = 1/4$,
+$w_{\det} = 3/4$; Proposition~\ref{prop:minimiser} covers both forms for
+$0 < \alpha < 1$.
+
+\subsection{A second member: Focal Frequency Loss}
+\label{sec:family-ffl}
+
+Focal Frequency Loss (FFL) \citep{jiang2021focal} takes $W = F$ with one band
+per frequency and weights each frequency by the current magnitude of its own
+error:
+\begin{equation}
+  \mathcal{L}_{\mathrm{FFL}}
+  = \mathbb{E}\Big[\frac{1}{N} \sum_{u} w_u \lvert R_u \rvert^2\Big],
+  \qquad R = F r,
+  \qquad w_u = \operatorname{sg}\bigg[\frac{\lvert R_u \rvert^{a}}{\max_{u'} \lvert R_{u'} \rvert^{a}}\bigg],
+  \label{eq:ffl}
+\end{equation}
+where the maximum runs over all frequencies and channels of the sample,
+$\operatorname{sg}$ is the stop-gradient operator, and $a = 1$ as in
+\citet{jiang2021focal}; with $a = 0$, Eq.~\eqref{eq:ffl} is the pixel MSE by
+Eq.~\eqref{eq:parseval}. FFL differs from AWWL in three respects: its basis is
+global rather than spatially localised; its weights depend on the residual
+rather than on $\sigma_t$, so Proposition~\ref{prop:minimiser} does not
+apply; and it weights timesteps implicitly, since the ratio of the loss to
+the pixel MSE,
+$\Lambda_{\mathrm{FFL}}(r) = \sum_u w_u \lvert R_u \rvert^2 / \sum_u \lvert R_u \rvert^2$,
+is unchanged when $r$ is rescaled but depends on the spectral shape of the
+residual, which changes with $\sigma_t$. \citet{jiang2021focal} add FFL to an
+existing spatial-domain loss; here it is the sole objective on the
+$\epsilon$-residual (Section~\ref{sec:second-member}).

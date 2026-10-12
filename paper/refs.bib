@@ -1,21 +1,34 @@
 % ---------------------------------------------------------------------------
-% Every entry marked [checked] was verified against the publisher or arXiv
-% record in August 2026: author list, venue, year and pages.
-% Unmarked entries are the authors' own prior work, verified from the
-% proceedings directly.
+% Bibliography for the manuscript. Entries are grouped by topic. Titles brace
+% proper nouns and acronyms so that sentence-casing styles (plainnat,
+% elsarticle-num) keep them intact. Keys are cited from paper/sections and
+% paper/tables; do not rename them.
 % ---------------------------------------------------------------------------
+
+% --- the audited objective -------------------------------------------------
+
+@inproceedings{thao2026awwl,
+  title     = {{Adaptive Weight Wavelet Loss}: A Dynamic Frequency-Aware Loss
+               Function for Diffusion Model Training},
+  author    = {Do, Thi Phuong Thao and Tran, Ngoc Duc Anh and Nguyen, Van An and
+               Le, Quang Ngoc and Tran, Huy Hoang Son and Nguyen, Quoc Huy},
+  booktitle = {Proceedings of the Conference on Information Technology and its
+               Applications (CITA)},
+  address   = {Hanoi, Vietnam},
+  year      = {2026}
+}
 
 % --- diffusion foundations -------------------------------------------------
 
-% [checked] NeurIPS 2020, arXiv:2006.11239
 @inproceedings{ho2020denoising,
   title     = {Denoising Diffusion Probabilistic Models},
   author    = {Ho, Jonathan and Jain, Ajay and Abbeel, Pieter},
   booktitle = {Advances in Neural Information Processing Systems},
+  volume    = {33},
+  pages     = {6840--6851},
   year      = {2020}
 }
 
-% [checked] ICLR 2021, arXiv:2010.02502
 @inproceedings{song2021denoising,
   title     = {Denoising Diffusion Implicit Models},
   author    = {Song, Jiaming and Meng, Chenlin and Ermon, Stefano},
@@ -23,16 +36,32 @@
   year      = {2021}
 }
 
-% [checked] ICML 2021, PMLR 139, arXiv:2102.09672
 @inproceedings{nichol2021improved,
   title     = {Improved Denoising Diffusion Probabilistic Models},
   author    = {Nichol, Alexander Quinn and Dhariwal, Prafulla},
   booktitle = {International Conference on Machine Learning},
+  series    = {Proceedings of Machine Learning Research},
+  volume    = {139},
   pages     = {8162--8171},
   year      = {2021}
 }
 
-% [checked] CVPR 2022
+@inproceedings{song2020improved,
+  title     = {Improved Techniques for Training Score-Based Generative Models},
+  author    = {Song, Yang and Ermon, Stefano},
+  booktitle = {Advances in Neural Information Processing Systems},
+  volume    = {33},
+  pages     = {12438--12448},
+  year      = {2020}
+}
+
+@inproceedings{salimans2022progressive,
+  title     = {Progressive Distillation for Fast Sampling of Diffusion Models},
+  author    = {Salimans, Tim and Ho, Jonathan},
+  booktitle = {International Conference on Learning Representations},
+  year      = {2022}
+}
+
 @inproceedings{rombach2022high,
   title     = {High-Resolution Image Synthesis with Latent Diffusion Models},
   author    = {Rombach, Robin and Blattmann, Andreas and Lorenz, Dominik and
@@ -42,7 +71,6 @@
   year      = {2022}
 }
 
-% [checked] CVPR 2023
 @inproceedings{ruiz2023dreambooth,
   title     = {{DreamBooth}: Fine Tuning Text-to-Image Diffusion Models for
                Subject-Driven Generation},
@@ -53,26 +81,36 @@
   year      = {2023}
 }
 
-% --- timestep reweighting --------------------------------------------------
+% --- loss weighting across noise levels ------------------------------------
 
-% [checked] NeurIPS 2022, arXiv:2206.00364
 @inproceedings{karras2022elucidating,
   title     = {Elucidating the Design Space of Diffusion-Based Generative Models},
   author    = {Karras, Tero and Aittala, Miika and Aila, Timo and Laine, Samuli},
   booktitle = {Advances in Neural Information Processing Systems},
+  volume    = {35},
+  pages     = {26565--26577},
   year      = {2022}
 }
 
-% [checked] arXiv:2303.09556
+@inproceedings{karras2024analyzing,
+  title     = {Analyzing and Improving the Training Dynamics of Diffusion Models},
+  author    = {Karras, Tero and Aittala, Miika and Lehtinen, Jaakko and
+               Hellsten, Janne and Aila, Timo and Laine, Samuli},
+  booktitle = {IEEE/CVF Conference on Computer Vision and Pattern Recognition},
+  pages     = {24174--24184},
+  year      = {2024},
+  doi       = {10.1109/CVPR52733.2024.02282}
+}
+
 @inproceedings{hang2023efficient,
-  title     = {Efficient Diffusion Training via Min-{SNR} Weighting Strategy},
+  title     = {Efficient Diffusion Training via {Min-SNR} Weighting Strategy},
   author    = {Hang, Tiankai and Gu, Shuyang and Li, Chen and Bao, Jianmin and
                Chen, Dong and Hu, Han and Geng, Xin and Guo, Baining},
   booktitle = {IEEE/CVF International Conference on Computer Vision},
+  pages     = {7441--7451},
   year      = {2023}
 }
 
-% [checked]
 @inproceedings{choi2022perception,
   title     = {Perception Prioritized Training of Diffusion Models},
   author    = {Choi, Jooyoung and Lee, Jungbeom and Shin, Chaehun and
@@ -82,18 +120,69 @@
   year      = {2022}
 }
 
-% [checked] NeurIPS 2021, arXiv:2107.00630
 @inproceedings{kingma2021variational,
   title     = {Variational Diffusion Models},
   author    = {Kingma, Diederik P. and Salimans, Tim and Poole, Ben and
                Ho, Jonathan},
   booktitle = {Advances in Neural Information Processing Systems},
+  volume    = {34},
+  pages     = {21696--21707},
   year      = {2021}
+}
+
+@inproceedings{kingma2023understanding,
+  title     = {Understanding Diffusion Objectives as the {ELBO} with Simple Data
+               Augmentation},
+  author    = {Kingma, Diederik P. and Gao, Ruiqi},
+  booktitle = {Advances in Neural Information Processing Systems},
+  volume    = {36},
+  pages     = {65484--65516},
+  year      = {2023}
+}
+
+@inproceedings{hoogeboom2023simple,
+  title     = {Simple Diffusion: End-to-End Diffusion for High Resolution Images},
+  author    = {Hoogeboom, Emiel and Heek, Jonathan and Salimans, Tim},
+  booktitle = {International Conference on Machine Learning},
+  series    = {Proceedings of Machine Learning Research},
+  volume    = {202},
+  pages     = {13213--13232},
+  year      = {2023}
+}
+
+% arXiv:2301.10972
+@article{chen2023importance,
+  title     = {On the Importance of Noise Scheduling for Diffusion Models},
+  author    = {Chen, Ting},
+  journal   = {arXiv preprint arXiv:2301.10972},
+  year      = {2023}
+}
+
+% ECML PKDD 2025, published in LNCS vol. 16014 (2026); arXiv:2507.01516
+@inproceedings{kumar2025loss,
+  title     = {Loss Functions in Diffusion Models: A Comparative Study},
+  author    = {Kumar, Dibyanshu and V{\"a}th, Philipp and Gregorov{\'a}, Magda},
+  booktitle = {Machine Learning and Knowledge Discovery in Databases:
+               European Conference, ECML PKDD 2025},
+  series    = {Lecture Notes in Computer Science},
+  volume    = {16014},
+  pages     = {190--205},
+  publisher = {Springer},
+  year      = {2025},
+  doi       = {10.1007/978-3-032-05981-9_12}
+}
+
+% arXiv:2606.13433
+@article{li2026smoothed,
+  title     = {Smoothed-{KL} Reweighting: A Principled Account and Matching Rule
+               for {SNR}-Based Diffusion Training},
+  author    = {Li, Lei},
+  journal   = {arXiv preprint arXiv:2606.13433},
+  year      = {2026}
 }
 
 % --- multi-task weighting --------------------------------------------------
 
-% [checked] CVPR 2018
 @inproceedings{kendall2018multi,
   title     = {Multi-Task Learning Using Uncertainty to Weigh Losses for Scene
                Geometry and Semantics},
@@ -103,20 +192,20 @@
   year      = {2018}
 }
 
-% [checked] ICML 2018, PMLR 80
 @inproceedings{chen2018gradnorm,
   title     = {{GradNorm}: Gradient Normalization for Adaptive Loss Balancing in
                Deep Multitask Networks},
   author    = {Chen, Zhao and Badrinarayanan, Vijay and Lee, Chen-Yu and
                Rabinovich, Andrew},
   booktitle = {International Conference on Machine Learning},
+  series    = {Proceedings of Machine Learning Research},
+  volume    = {80},
   pages     = {794--803},
   year      = {2018}
 }
 
-% --- spectral characterisation ---------------------------------------------
+% --- spectral behaviour of generative models -------------------------------
 
-% [checked] CVPR 2020, arXiv:2003.01826
 @inproceedings{durall2020watch,
   title     = {Watch Your Up-Convolution: {CNN} Based Generative Deep Neural
                Networks Are Failing to Reproduce Spectral Distributions},
@@ -126,239 +215,96 @@
   year      = {2020}
 }
 
-% [checked] NeurIPS 2020, arXiv:1911.06465
 @inproceedings{dzanic2020fourier,
-  title     = {Fourier Spectrum Discrepancies in Deep Network Generated Images},
+  title     = {{Fourier} Spectrum Discrepancies in Deep Network Generated Images},
   author    = {Dzanic, Tarik and Shah, Karan and Witherden, Freddie},
   booktitle = {Advances in Neural Information Processing Systems},
+  volume    = {33},
+  pages     = {3022--3032},
   year      = {2020}
 }
 
-% [checked] NeurIPS 2021, arXiv:2111.02447
+@inproceedings{frank2020leveraging,
+  title     = {Leveraging Frequency Analysis for Deep Fake Image Recognition},
+  author    = {Frank, Joel and Eisenhofer, Thorsten and Sch{\"o}nherr, Lea and
+               Fischer, Asja and Kolossa, Dorothea and Holz, Thorsten},
+  booktitle = {International Conference on Machine Learning},
+  series    = {Proceedings of Machine Learning Research},
+  volume    = {119},
+  pages     = {3247--3258},
+  year      = {2020}
+}
+
 @inproceedings{schwarz2021frequency,
   title     = {On the Frequency Bias of Generative Models},
   author    = {Schwarz, Katja and Liao, Yiyi and Geiger, Andreas},
   booktitle = {Advances in Neural Information Processing Systems},
+  volume    = {34},
+  pages     = {18126--18136},
   year      = {2021}
 }
 
-% [checked] CVPR 2021 oral, arXiv:2103.17195
 @inproceedings{chandrasegaran2021closer,
-  title     = {A Closer Look at Fourier Spectrum Discrepancies for {CNN}-Generated
-               Images Detection},
+  title     = {A Closer Look at {Fourier} Spectrum Discrepancies for
+               {CNN}-Generated Images Detection},
   author    = {Chandrasegaran, Keshigeyan and Tran, Ngoc-Trung and Cheung, Ngai-Man},
   booktitle = {IEEE/CVF Conference on Computer Vision and Pattern Recognition},
   pages     = {7200--7209},
   year      = {2021}
 }
 
-% --- frequency-aware objectives and architectures --------------------------
-
-% [checked] ICCV 2021
-@inproceedings{jiang2021focal,
-  title     = {Focal Frequency Loss for Image Reconstruction and Synthesis},
-  author    = {Jiang, Liming and Dai, Bo and Wu, Wayne and Loy, Chen Change},
-  booktitle = {IEEE/CVF International Conference on Computer Vision},
-  pages     = {13919--13929},
+@article{jung2021spectral,
+  title     = {Spectral Distribution Aware Image Generation},
+  author    = {Jung, Steffen and Keuper, Margret},
+  journal   = {Proceedings of the AAAI Conference on Artificial Intelligence},
+  volume    = {35},
+  number    = {2},
+  pages     = {1734--1742},
   year      = {2021}
 }
 
-% [checked] CVPR 2023
-@inproceedings{phung2023wavelet,
-  title     = {Wavelet Diffusion Models Are Fast and Scalable Image Generators},
-  author    = {Phung, Hao and Dao, Quan and Tran, Anh},
+@inproceedings{dong2022think,
+  title     = {Think Twice Before Detecting {GAN}-Generated Fake Images from
+               Their Spectral Domain Imprints},
+  author    = {Dong, Chengdong and Kumar, Ajay and Liu, Eryun},
   booktitle = {IEEE/CVF Conference on Computer Vision and Pattern Recognition},
-  pages     = {10199--10208},
-  year      = {2023}
+  pages     = {7865--7874},
+  year      = {2022},
+  doi       = {10.1109/CVPR52688.2022.00771}
 }
 
-% [checked] arXiv:2305.13819
-@article{huang2024wavedm,
-  title   = {{WaveDM}: Wavelet-Based Diffusion Models for Image Restoration},
-  author  = {Huang, Yi and Huang, Jiancheng and Liu, Jianzhuang and Yan, Mingfu and
-             Dong, Yu and Lv, Jiaxi and Chen, Shifeng},
-  journal = {IEEE Transactions on Multimedia},
-  volume  = {26},
-  pages   = {7058--7073},
-  year    = {2024}
-}
-
-% [checked] CVPR 2024 oral
-@inproceedings{si2024freeu,
-  title     = {{FreeU}: Free Lunch in Diffusion {U-Net}},
-  author    = {Si, Chenyang and Huang, Ziqi and Jiang, Yuming and Liu, Ziwei},
-  booktitle = {IEEE/CVF Conference on Computer Vision and Pattern Recognition},
-  pages     = {4733--4743},
+@inproceedings{ricker2024towards,
+  title     = {Towards the Detection of Diffusion Model Deepfakes},
+  author    = {Ricker, Jonas and Damm, Simon and Holz, Thorsten and
+               Fischer, Asja},
+  booktitle = {Proceedings of the 19th International Joint Conference on
+               Computer Vision, Imaging and Computer Graphics Theory and
+               Applications (VISIGRAPP 2024), Volume 4: VISAPP},
+  pages     = {446--457},
+  publisher = {SciTePress},
   year      = {2024}
 }
 
-% --- wavelets --------------------------------------------------------------
-
-% [checked] IEEE TPAMI 11(7):674-693
-@article{mallat1989theory,
-  title   = {A Theory for Multiresolution Signal Decomposition: The Wavelet
-             Representation},
-  author  = {Mallat, St{\'e}phane G.},
-  journal = {IEEE Transactions on Pattern Analysis and Machine Intelligence},
-  volume  = {11},
-  number  = {7},
-  pages   = {674--693},
-  year    = {1989}
-}
-
-% [checked] SIAM J. Math. Anal. 29(2):511-546
-@article{sweldens1998lifting,
-  title   = {The Lifting Scheme: A Construction of Second Generation Wavelets},
-  author  = {Sweldens, Wim},
-  journal = {SIAM Journal on Mathematical Analysis},
-  volume  = {29},
-  number  = {2},
-  pages   = {511--546},
-  year    = {1998}
-}
-
-% --- evaluation metrics and their critics ----------------------------------
-
-% [checked] NeurIPS 2017, arXiv:1706.08500
-@inproceedings{heusel2017gans,
-  title     = {{GANs} Trained by a Two Time-Scale Update Rule Converge to a
-               Local Nash Equilibrium},
-  author    = {Heusel, Martin and Ramsauer, Hubert and Unterthiner, Thomas and
-               Nessler, Bernhard and Hochreiter, Sepp},
-  booktitle = {Advances in Neural Information Processing Systems},
-  year      = {2017}
-}
-
-% [checked] ICLR 2018, arXiv:1801.01401
-@inproceedings{binkowski2018demystifying,
-  title     = {Demystifying {MMD} {GAN}s},
-  author    = {Bi{\'n}kowski, Miko{\l}aj and Sutherland, Danica J. and
-               Arbel, Michael and Gretton, Arthur},
-  booktitle = {International Conference on Learning Representations},
-  year      = {2018}
-}
-
-% [checked] NeurIPS 2016, arXiv:1606.03498
-@inproceedings{salimans2016improved,
-  title     = {Improved Techniques for Training {GAN}s},
-  author    = {Salimans, Tim and Goodfellow, Ian and Zaremba, Wojciech and
-               Cheung, Vicki and Radford, Alec and Chen, Xi},
-  booktitle = {Advances in Neural Information Processing Systems},
-  year      = {2016}
-}
-
-% [checked] arXiv:1801.01973, not peer-reviewed
-@article{barratt2018note,
-  title   = {A Note on the Inception Score},
-  author  = {Barratt, Shane and Sharma, Rishi},
-  journal = {arXiv preprint arXiv:1801.01973},
-  year    = {2018}
-}
-
-% [checked] arXiv:1911.07023
-@inproceedings{chong2020effectively,
-  title     = {Effectively Unbiased {FID} and Inception Score and Where to Find Them},
-  author    = {Chong, Min Jin and Forsyth, David},
+@inproceedings{yang2023diffusion,
+  title     = {Diffusion Probabilistic Model Made Slim},
+  author    = {Yang, Xingyi and Zhou, Daquan and Feng, Jiashi and Wang, Xinchao},
   booktitle = {IEEE/CVF Conference on Computer Vision and Pattern Recognition},
-  year      = {2020}
-}
-
-% [checked] CVPR 2022 (clean-fid)
-@inproceedings{parmar2022aliased,
-  title     = {On Aliased Resizing and Surprising Subtleties in {GAN} Evaluation},
-  author    = {Parmar, Gaurav and Zhang, Richard and Zhu, Jun-Yan},
-  booktitle = {IEEE/CVF Conference on Computer Vision and Pattern Recognition},
-  pages     = {11400--11410},
-  year      = {2022}
-}
-
-% [checked] ICLR 2023, arXiv:2203.06026
-@inproceedings{kynkaanniemi2023role,
-  title     = {The Role of {ImageNet} Classes in {Fr\'echet} Inception Distance},
-  author    = {Kynk{\"a}{\"a}nniemi, Tuomas and Karras, Tero and Aittala, Miika and
-               Aila, Timo and Lehtinen, Jaakko},
-  booktitle = {International Conference on Learning Representations},
+  pages     = {22552--22562},
   year      = {2023}
 }
 
-% [checked] arXiv:2306.04675
-@inproceedings{stein2023exposing,
-  title     = {Exposing Flaws of Generative Model Evaluation Metrics and Their
-               Unfair Treatment of Diffusion Models},
-  author    = {Stein, George and Cresswell, Jesse C. and Hosseinzadeh, Rasa and
-               Sui, Yi and Ross, Brendan Leigh and Villecroze, Valentin and
-               Liu, Zhaoyan and Caterini, Anthony L. and Taylor, J. Eric T. and
-               Loaiza-Ganem, Gabriel},
-  booktitle = {Advances in Neural Information Processing Systems},
-  year      = {2023}
+@inproceedings{corvi2023detection,
+  title     = {On the Detection of Synthetic Images Generated by Diffusion Models},
+  author    = {Corvi, Riccardo and Cozzolino, Davide and Zingarini, Giada and
+               Poggi, Giovanni and Nagano, Koki and Verdoliva, Luisa},
+  booktitle = {IEEE International Conference on Acoustics, Speech and Signal
+               Processing (ICASSP)},
+  pages     = {1--5},
+  year      = {2023},
+  doi       = {10.1109/ICASSP49357.2023.10095167}
 }
 
-% [checked] NeurIPS 2019, arXiv:1904.06991
-@inproceedings{kynkaanniemi2019improved,
-  title     = {Improved Precision and Recall Metric for Assessing Generative Models},
-  author    = {Kynk{\"a}{\"a}nniemi, Tuomas and Karras, Tero and Laine, Samuli and
-               Lehtinen, Jaakko and Aila, Timo},
-  booktitle = {Advances in Neural Information Processing Systems},
-  year      = {2019}
-}
-
-% [checked] ICML 2020, PMLR 119
-@inproceedings{naeem2020reliable,
-  title     = {Reliable Fidelity and Diversity Metrics for Generative Models},
-  author    = {Naeem, Muhammad Ferjad and Oh, Seong Joon and Uh, Youngjung and
-               Choi, Yunjey and Yoo, Jaejun},
-  booktitle = {International Conference on Machine Learning},
-  pages     = {7176--7185},
-  year      = {2020}
-}
-
-% --- replication practice --------------------------------------------------
-
-% [checked] arXiv:2103.03098
-@inproceedings{bouthillier2021accounting,
-  title     = {Accounting for Variance in Machine Learning Benchmarks},
-  author    = {Bouthillier, Xavier and Delaunay, Pierre and Bronzi, Mirko and
-               Trofimov, Assya and Nichyporuk, Brennan and Szeto, Justin and
-               others},
-  booktitle = {Proceedings of Machine Learning and Systems (MLSys)},
-  year      = {2021}
-}
-
-% --- recent work found in the August 2026 sweep ----------------------------
-
-% [checked] arXiv:2507.10072. Closest prior work to our post-processing
-% control: training-free wavelet sub-band regulation, but applied during
-% sampling and framed as a method for exposure bias, not as a baseline.
-@inproceedings{yu2025frequency,
-  title     = {Frequency Regulation for Exposure Bias Mitigation in Diffusion Models},
-  author    = {Yu, Meng and Zhan, Kun},
-  booktitle = {ACM International Conference on Multimedia},
-  year      = {2025}
-}
-
-% [checked] arXiv:2507.01516
-@inproceedings{kumar2025loss,
-  title     = {Loss Functions in Diffusion Models: A Comparative Study},
-  author    = {Kumar, Dibyanshu and Vaeth, Philipp and Gregorov{'a}, Magda},
-  booktitle = {European Conference on Machine Learning and Principles and
-               Practice of Knowledge Discovery in Databases (ECML PKDD)},
-  year      = {2025}
-}
-
-% [checked] arXiv:2502.10236, ICLR 2025 workshop (DeLTa / FPI)
-@inproceedings{jiralerspong2025shaping,
-  title     = {Shaping Inductive Bias in Diffusion Models through Frequency-Based
-               Noise Control},
-  author    = {Jiralerspong, Thomas and Earnshaw, Berton and Hartford, Jason and
-               Bengio, Yoshua and Scimeca, Luca},
-  booktitle = {ICLR Workshop},
-  year      = {2025}
-}
-
-% --- 2026 sweep ------------------------------------------------------------
-
-% [checked] NeurIPS 2025 spotlight, arXiv:2503.03206. The theoretical account
-% of why the high-frequency deficit exists at all.
+% NeurIPS 2025 (spotlight); arXiv:2503.03206
 @inproceedings{wang2025spectral,
   title     = {An Analytical Theory of Spectral Bias in the Learning Dynamics
                of Diffusion Models},
@@ -367,52 +313,591 @@
   year      = {2025}
 }
 
-% [checked] arXiv:2603.02447. The closest contemporary sibling of the audited
-% objective: Fourier and wavelet losses added to diffusion training.
+% --- frequency and noise level in diffusion --------------------------------
+
+@inproceedings{rissanen2023generative,
+  title     = {Generative Modelling with Inverse Heat Dissipation},
+  author    = {Rissanen, Severi and Heinonen, Markus and Solin, Arno},
+  booktitle = {International Conference on Learning Representations},
+  year      = {2023}
+}
+
+@inproceedings{hoogeboom2023blurring,
+  title     = {Blurring Diffusion Models},
+  author    = {Hoogeboom, Emiel and Salimans, Tim},
+  booktitle = {International Conference on Learning Representations},
+  year      = {2023}
+}
+
+@misc{dieleman2024spectral,
+  title        = {Diffusion is Spectral Autoregression},
+  author       = {Dieleman, Sander},
+  howpublished = {Blog post, \url{https://sander.ai/2024/09/02/spectral-autoregression.html}},
+  year         = {2024}
+}
+
+% arXiv:2505.11278
+@article{falck2025fourier,
+  title     = {A {Fourier} Space Perspective on Diffusion Models},
+  author    = {Falck, Fabian and Pandeva, Teodora and Zahirnia, Kiarash and
+               Lawrence, Rachel and Turner, Richard and Meeds, Edward and
+               Zazo, Javier and Karmalkar, Sushrut},
+  journal   = {arXiv preprint arXiv:2505.11278},
+  year      = {2025}
+}
+
+% ICML 2026; arXiv:2603.19222
+@inproceedings{esteves2026spectrally,
+  title     = {Spectrally-Guided Diffusion Noise Schedules},
+  author    = {Esteves, Carlos and Makadia, Ameesh},
+  booktitle = {International Conference on Machine Learning},
+  year      = {2026},
+  note      = {arXiv:2603.19222}
+}
+
+% arXiv:2502.10236; also presented at the ICLR 2025 FPI workshop
+@inproceedings{jiralerspong2025shaping,
+  title     = {Shaping Inductive Bias in Diffusion Models through Frequency-Based
+               Noise Control},
+  author    = {Jiralerspong, Thomas and Earnshaw, Berton and Hartford, Jason and
+               Bengio, Yoshua and Scimeca, Luca},
+  booktitle = {ICLR 2025 Workshop on Deep Generative Model in Machine Learning:
+               Theory, Principle and Efficacy (DeLTa)},
+  year      = {2025},
+  note      = {arXiv:2502.10236}
+}
+
+% --- frequency-aware objectives and architectures --------------------------
+
+@inproceedings{jiang2021focal,
+  title     = {Focal Frequency Loss for Image Reconstruction and Synthesis},
+  author    = {Jiang, Liming and Dai, Bo and Wu, Wayne and Loy, Chen Change},
+  booktitle = {IEEE/CVF International Conference on Computer Vision},
+  pages     = {13919--13929},
+  year      = {2021}
+}
+
+% arXiv:2603.02447
 @article{chandran2026spectral,
-  title   = {Spectral Regularization for Diffusion Models},
-  author  = {Chandran, Satish and Roque dos Santos, Nicolas and Wu, Yunshu and
-             Ver Steeg, Greg and Papalexakis, Evangelos},
-  journal = {arXiv preprint arXiv:2603.02447},
-  year    = {2026}
-}
-
-% [checked] arXiv:2603.28114. Training-free spectral editing, one level deeper
-% than FreeU: inside cross-attention rather than on the backbone.
-@article{oh2026attention,
-  title   = {Attention Frequency Modulation: Training-Free Spectral Modulation
-             of Diffusion Cross-Attention},
-  author  = {Oh, Seunghun and Park, Unsang},
-  journal = {arXiv preprint arXiv:2603.28114},
-  year    = {2026}
-}
-
-% [checked] arXiv:2606.13433. Unifies the SNR-weighting family and gives an
-% explicit cross-walk to Min-SNR, which is what lets us name the schedule
-% alpha imposes rather than only correlate with it.
-@article{li2026smoothed,
-  title   = {Smoothed-{KL} Reweighting: A Principled Account and Matching Rule
-             for {SNR}-Based Diffusion Training},
-  author  = {Li, Lei},
-  journal = {arXiv preprint arXiv:2606.13433},
-  year    = {2026}
-}
-
-% [checked] arXiv:2606.20536. Independent measurement of training-seed
-% variance in FID, on a different architecture, dataset and resolution.
-@article{dufour2026fid,
-  title   = {The {FID} Lottery: Quantifying Hidden Randomness in
-             Generative-Model Evaluation},
-  author  = {Dufour, Nicolas and Efros, Alexei A. and P{\'e}rez, Patrick},
-  journal = {arXiv preprint arXiv:2606.20536},
-  year    = {2026}
-}
-
-@inproceedings{thao2026awwl,
-  title     = {Adaptive Weight Wavelet Loss: A Dynamic Frequency-Aware Loss
-               Function for Diffusion Model Training},
-  author    = {Do, Thi Phuong Thao and Tran, Ngoc Duc Anh and Nguyen, Van An and
-               Le, Quang Ngoc and Tran, Huy Hoang Son and Nguyen, Quoc Huy},
-  booktitle = {Conference on Information Technology and its Applications (CITA)},
+  title     = {Spectral Regularization for Diffusion Models},
+  author    = {Chandran, Satish and Roque dos Santos, Nicolas and Wu, Yunshu and
+               Ver Steeg, Greg and Papalexakis, Evangelos},
+  journal   = {arXiv preprint arXiv:2603.02447},
   year      = {2026}
+}
+
+@inproceedings{phung2023wavelet,
+  title     = {Wavelet Diffusion Models Are Fast and Scalable Image Generators},
+  author    = {Phung, Hao and Dao, Quan and Tran, Anh},
+  booktitle = {IEEE/CVF Conference on Computer Vision and Pattern Recognition},
+  pages     = {10199--10208},
+  year      = {2023}
+}
+
+@article{huang2024wavedm,
+  title     = {{WaveDM}: Wavelet-Based Diffusion Models for Image Restoration},
+  author    = {Huang, Yi and Huang, Jiancheng and Liu, Jianzhuang and Yan, Mingfu and
+               Dong, Yu and Lv, Jiaxi and Chen, Chaoqi and Chen, Shifeng},
+  journal   = {IEEE Transactions on Multimedia},
+  volume    = {26},
+  pages     = {7058--7073},
+  year      = {2024},
+  doi       = {10.1109/TMM.2024.3359769}
+}
+
+@inproceedings{guth2022wavelet,
+  title     = {Wavelet Score-Based Generative Modeling},
+  author    = {Guth, Florentin and Coste, Simon and De Bortoli, Valentin and
+               Mallat, St{\'e}phane},
+  booktitle = {Advances in Neural Information Processing Systems},
+  volume    = {35},
+  pages     = {478--491},
+  year      = {2022}
+}
+
+% --- inference-time frequency manipulation ---------------------------------
+
+@inproceedings{si2024freeu,
+  title     = {{FreeU}: Free Lunch in Diffusion {U-Net}},
+  author    = {Si, Chenyang and Huang, Ziqi and Jiang, Yuming and Liu, Ziwei},
+  booktitle = {IEEE/CVF Conference on Computer Vision and Pattern Recognition},
+  pages     = {4733--4743},
+  year      = {2024}
+}
+
+% arXiv:2507.10072
+@inproceedings{yu2025frequency,
+  title     = {Frequency Regulation for Exposure Bias Mitigation in Diffusion Models},
+  author    = {Yu, Meng and Zhan, Kun},
+  booktitle = {Proceedings of the 33rd ACM International Conference on Multimedia},
+  pages     = {10370--10378},
+  year      = {2025},
+  doi       = {10.1145/3746027.3755608}
+}
+
+% arXiv:2603.28114
+@article{oh2026attention,
+  title     = {Attention Frequency Modulation: Training-Free Spectral Modulation
+               of Diffusion Cross-Attention},
+  author    = {Oh, Seunghun and Park, Unsang},
+  journal   = {arXiv preprint arXiv:2603.28114},
+  year      = {2026}
+}
+
+% --- wavelets ----------------------------------------------------------------
+
+@article{mallat1989theory,
+  title     = {A Theory for Multiresolution Signal Decomposition: The Wavelet
+               Representation},
+  author    = {Mallat, St{\'e}phane G.},
+  journal   = {IEEE Transactions on Pattern Analysis and Machine Intelligence},
+  volume    = {11},
+  number    = {7},
+  pages     = {674--693},
+  year      = {1989}
+}
+
+@article{sweldens1998lifting,
+  title     = {The Lifting Scheme: A Construction of Second Generation Wavelets},
+  author    = {Sweldens, Wim},
+  journal   = {SIAM Journal on Mathematical Analysis},
+  volume    = {29},
+  number    = {2},
+  pages     = {511--546},
+  year      = {1998}
+}
+
+% --- robust regression losses ----------------------------------------------
+
+@article{huber1964robust,
+  title     = {Robust Estimation of a Location Parameter},
+  author    = {Huber, Peter J.},
+  journal   = {The Annals of Mathematical Statistics},
+  volume    = {35},
+  number    = {1},
+  pages     = {73--101},
+  year      = {1964},
+  doi       = {10.1214/aoms/1177703732}
+}
+
+@article{charbonnier1997deterministic,
+  title     = {Deterministic Edge-Preserving Regularization in Computed Imaging},
+  author    = {Charbonnier, Pierre and Blanc-F{\'e}raud, Laure and
+               Aubert, Gilles and Barlaud, Michel},
+  journal   = {IEEE Transactions on Image Processing},
+  volume    = {6},
+  number    = {2},
+  pages     = {298--311},
+  year      = {1997},
+  doi       = {10.1109/83.551699}
+}
+
+% --- datasets, networks and optimisation ------------------------------------
+
+@techreport{krizhevsky2009learning,
+  title       = {Learning Multiple Layers of Features from Tiny Images},
+  author      = {Krizhevsky, Alex},
+  institution = {University of Toronto},
+  year        = {2009}
+}
+
+@inproceedings{liu2015deep,
+  title     = {Deep Learning Face Attributes in the Wild},
+  author    = {Liu, Ziwei and Luo, Ping and Wang, Xiaogang and Tang, Xiaoou},
+  booktitle = {IEEE International Conference on Computer Vision},
+  pages     = {3730--3738},
+  year      = {2015},
+  doi       = {10.1109/ICCV.2015.425}
+}
+
+@inproceedings{szegedy2016rethinking,
+  title     = {Rethinking the {Inception} Architecture for Computer Vision},
+  author    = {Szegedy, Christian and Vanhoucke, Vincent and Ioffe, Sergey and
+               Shlens, Jonathon and Wojna, Zbigniew},
+  booktitle = {IEEE Conference on Computer Vision and Pattern Recognition},
+  pages     = {2818--2826},
+  year      = {2016}
+}
+
+@inproceedings{radford2021learning,
+  title     = {Learning Transferable Visual Models from Natural Language
+               Supervision},
+  author    = {Radford, Alec and Kim, Jong Wook and Hallacy, Chris and
+               Ramesh, Aditya and Goh, Gabriel and Agarwal, Sandhini and
+               Sastry, Girish and Askell, Amanda and Mishkin, Pamela and
+               Clark, Jack and Krueger, Gretchen and Sutskever, Ilya},
+  booktitle = {International Conference on Machine Learning},
+  series    = {Proceedings of Machine Learning Research},
+  volume    = {139},
+  pages     = {8748--8763},
+  year      = {2021}
+}
+
+@inproceedings{caron2021emerging,
+  title     = {Emerging Properties in Self-Supervised Vision Transformers},
+  author    = {Caron, Mathilde and Touvron, Hugo and Misra, Ishan and
+               J{\'e}gou, Herv{\'e} and Mairal, Julien and Bojanowski, Piotr and
+               Joulin, Armand},
+  booktitle = {IEEE/CVF International Conference on Computer Vision},
+  pages     = {9650--9660},
+  year      = {2021}
+}
+
+@inproceedings{loshchilov2019decoupled,
+  title     = {Decoupled Weight Decay Regularization},
+  author    = {Loshchilov, Ilya and Hutter, Frank},
+  booktitle = {International Conference on Learning Representations},
+  year      = {2019}
+}
+
+@article{polyak1992acceleration,
+  title     = {Acceleration of Stochastic Approximation by Averaging},
+  author    = {Polyak, Boris T. and Juditsky, Anatoli B.},
+  journal   = {SIAM Journal on Control and Optimization},
+  volume    = {30},
+  number    = {4},
+  pages     = {838--855},
+  year      = {1992},
+  doi       = {10.1137/0330046}
+}
+
+% --- evaluation metrics and their critics ----------------------------------
+
+@inproceedings{heusel2017gans,
+  title     = {{GANs} Trained by a Two Time-Scale Update Rule Converge to a
+               Local {Nash} Equilibrium},
+  author    = {Heusel, Martin and Ramsauer, Hubert and Unterthiner, Thomas and
+               Nessler, Bernhard and Hochreiter, Sepp},
+  booktitle = {Advances in Neural Information Processing Systems},
+  volume    = {30},
+  pages     = {6626--6637},
+  year      = {2017}
+}
+
+@inproceedings{binkowski2018demystifying,
+  title     = {Demystifying {MMD} {GAN}s},
+  author    = {Bi{\'n}kowski, Miko{\l}aj and Sutherland, Danica J. and
+               Arbel, Michael and Gretton, Arthur},
+  booktitle = {International Conference on Learning Representations},
+  year      = {2018}
+}
+
+@inproceedings{salimans2016improved,
+  title     = {Improved Techniques for Training {GAN}s},
+  author    = {Salimans, Tim and Goodfellow, Ian and Zaremba, Wojciech and
+               Cheung, Vicki and Radford, Alec and Chen, Xi},
+  booktitle = {Advances in Neural Information Processing Systems},
+  volume    = {29},
+  pages     = {2234--2242},
+  year      = {2016}
+}
+
+% arXiv:1801.01973 (not peer-reviewed)
+@article{barratt2018note,
+  title     = {A Note on the {Inception} Score},
+  author    = {Barratt, Shane and Sharma, Rishi},
+  journal   = {arXiv preprint arXiv:1801.01973},
+  year      = {2018}
+}
+
+@inproceedings{chong2020effectively,
+  title     = {Effectively Unbiased {FID} and {Inception} Score and Where to Find
+               Them},
+  author    = {Chong, Min Jin and Forsyth, David},
+  booktitle = {IEEE/CVF Conference on Computer Vision and Pattern Recognition},
+  pages     = {6070--6079},
+  year      = {2020},
+  doi       = {10.1109/CVPR42600.2020.00611}
+}
+
+% clean-fid
+@inproceedings{parmar2022aliased,
+  title     = {On Aliased Resizing and Surprising Subtleties in {GAN} Evaluation},
+  author    = {Parmar, Gaurav and Zhang, Richard and Zhu, Jun-Yan},
+  booktitle = {IEEE/CVF Conference on Computer Vision and Pattern Recognition},
+  pages     = {11410--11420},
+  year      = {2022}
+}
+
+@misc{obukhov2020torchfidelity,
+  title     = {High-Fidelity Performance Metrics for Generative Models in
+               {PyTorch}},
+  author    = {Obukhov, Anton and Seitzer, Maximilian and Wu, Po-Wei and
+               Zhydenko, Semen and Kyl, Jonathan and Lin, Elvis Yu-Jing},
+  howpublished = {Zenodo, \url{https://github.com/toshas/torch-fidelity}},
+  note      = {Version 0.4.0},
+  year      = {2020},
+  doi       = {10.5281/zenodo.3786539}
+}
+
+@inproceedings{kynkaanniemi2023role,
+  title     = {The Role of {ImageNet} Classes in {Fr{\'e}chet Inception
+               Distance}},
+  author    = {Kynk{\"a}{\"a}nniemi, Tuomas and Karras, Tero and Aittala, Miika and
+               Aila, Timo and Lehtinen, Jaakko},
+  booktitle = {International Conference on Learning Representations},
+  year      = {2023}
+}
+
+@inproceedings{stein2023exposing,
+  title     = {Exposing Flaws of Generative Model Evaluation Metrics and Their
+               Unfair Treatment of Diffusion Models},
+  author    = {Stein, George and Cresswell, Jesse C. and Hosseinzadeh, Rasa and
+               Sui, Yi and Ross, Brendan Leigh and Villecroze, Valentin and
+               Liu, Zhaoyan and Caterini, Anthony L. and Taylor, J. Eric T. and
+               Loaiza-Ganem, Gabriel},
+  booktitle = {Advances in Neural Information Processing Systems},
+  volume    = {36},
+  pages     = {3732--3784},
+  year      = {2023}
+}
+
+@inproceedings{jayasumana2024rethinking,
+  title     = {Rethinking {FID}: Towards a Better Evaluation Metric for Image
+               Generation},
+  author    = {Jayasumana, Sadeep and Ramalingam, Srikumar and Veit, Andreas and
+               Glasner, Daniel and Chakrabarti, Ayan and Kumar, Sanjiv},
+  booktitle = {IEEE/CVF Conference on Computer Vision and Pattern Recognition},
+  pages     = {9307--9315},
+  year      = {2024}
+}
+
+@inproceedings{kynkaanniemi2019improved,
+  title     = {Improved Precision and Recall Metric for Assessing Generative Models},
+  author    = {Kynk{\"a}{\"a}nniemi, Tuomas and Karras, Tero and Laine, Samuli and
+               Lehtinen, Jaakko and Aila, Timo},
+  booktitle = {Advances in Neural Information Processing Systems},
+  volume    = {32},
+  pages     = {3927--3936},
+  year      = {2019}
+}
+
+@inproceedings{naeem2020reliable,
+  title     = {Reliable Fidelity and Diversity Metrics for Generative Models},
+  author    = {Naeem, Muhammad Ferjad and Oh, Seong Joon and Uh, Youngjung and
+               Choi, Yunjey and Yoo, Jaejun},
+  booktitle = {International Conference on Machine Learning},
+  series    = {Proceedings of Machine Learning Research},
+  volume    = {119},
+  pages     = {7176--7185},
+  year      = {2020}
+}
+
+@inproceedings{zhang2018unreasonable,
+  title     = {The Unreasonable Effectiveness of Deep Features as a Perceptual
+               Metric},
+  author    = {Zhang, Richard and Isola, Phillip and Efros, Alexei A. and
+               Shechtman, Eli and Wang, Oliver},
+  booktitle = {IEEE/CVF Conference on Computer Vision and Pattern Recognition},
+  pages     = {586--595},
+  year      = {2018}
+}
+
+@article{mittal2013making,
+  title     = {Making a ``Completely Blind'' Image Quality Analyzer},
+  author    = {Mittal, Anish and Soundararajan, Rajiv and Bovik, Alan C.},
+  journal   = {IEEE Signal Processing Letters},
+  volume    = {20},
+  number    = {3},
+  pages     = {209--212},
+  year      = {2013},
+  doi       = {10.1109/LSP.2012.2227726}
+}
+
+@article{wang2004image,
+  title     = {Image Quality Assessment: From Error Visibility to Structural
+               Similarity},
+  author    = {Wang, Zhou and Bovik, Alan C. and Sheikh, Hamid R. and
+               Simoncelli, Eero P.},
+  journal   = {IEEE Transactions on Image Processing},
+  volume    = {13},
+  number    = {4},
+  pages     = {600--612},
+  year      = {2004},
+  doi       = {10.1109/TIP.2003.819861}
+}
+
+@inproceedings{blau2018perception,
+  title     = {The Perception-Distortion Tradeoff},
+  author    = {Blau, Yochai and Michaeli, Tomer},
+  booktitle = {IEEE/CVF Conference on Computer Vision and Pattern Recognition},
+  pages     = {6228--6237},
+  year      = {2018},
+  doi       = {10.1109/CVPR.2018.00652}
+}
+
+% --- statistics --------------------------------------------------------------
+
+@article{holm1979simple,
+  title     = {A Simple Sequentially Rejective Multiple Test Procedure},
+  author    = {Holm, Sture},
+  journal   = {Scandinavian Journal of Statistics},
+  volume    = {6},
+  number    = {2},
+  pages     = {65--70},
+  year      = {1979}
+}
+
+@article{wilcoxon1945individual,
+  title     = {Individual Comparisons by Ranking Methods},
+  author    = {Wilcoxon, Frank},
+  journal   = {Biometrics Bulletin},
+  volume    = {1},
+  number    = {6},
+  pages     = {80--83},
+  year      = {1945}
+}
+
+@inproceedings{dror2018hitchhiker,
+  title     = {The Hitchhiker's Guide to Testing Statistical Significance in
+               Natural Language Processing},
+  author    = {Dror, Rotem and Baumer, Gili and Shlomov, Segev and
+               Reichart, Roi},
+  booktitle = {Proceedings of the 56th Annual Meeting of the Association for
+               Computational Linguistics (Volume 1: Long Papers)},
+  pages     = {1383--1392},
+  year      = {2018}
+}
+
+% --- replication, variance and attribution of gains -------------------------
+
+@inproceedings{bouthillier2021accounting,
+  title     = {Accounting for Variance in Machine Learning Benchmarks},
+  author    = {Bouthillier, Xavier and Delaunay, Pierre and Bronzi, Mirko and
+               Trofimov, Assya and Nichyporuk, Brennan and Szeto, Justin and
+               Mohammadi Sepahvand, Nazanin and Raff, Edward and Madan, Kanika and
+               Voleti, Vikram and Ebrahimi Kahou, Samira and Michalski, Vincent and
+               Arbel, Tal and Pal, Chris and Varoquaux, Ga{\"e}l and
+               Vincent, Pascal},
+  booktitle = {Proceedings of Machine Learning and Systems},
+  volume    = {3},
+  pages     = {747--769},
+  year      = {2021}
+}
+
+% arXiv:2606.20536
+@article{dufour2026fid,
+  title     = {The {FID} Lottery: Quantifying Hidden Randomness in
+               Generative-Model Evaluation},
+  author    = {Dufour, Nicolas and Efros, Alexei A. and P{\'e}rez, Patrick},
+  journal   = {arXiv preprint arXiv:2606.20536},
+  year      = {2026}
+}
+
+@article{lipton2019troubling,
+  title     = {Troubling Trends in Machine Learning Scholarship},
+  author    = {Lipton, Zachary C. and Steinhardt, Jacob},
+  journal   = {ACM Queue},
+  volume    = {17},
+  number    = {1},
+  pages     = {45--77},
+  year      = {2019},
+  doi       = {10.1145/3317287.3328534}
+}
+
+@inproceedings{melis2018state,
+  title     = {On the State of the Art of Evaluation in Neural Language Models},
+  author    = {Melis, G{\'a}bor and Dyer, Chris and Blunsom, Phil},
+  booktitle = {International Conference on Learning Representations},
+  year      = {2018}
+}
+
+@inproceedings{lucic2018gans,
+  title     = {Are {GANs} Created Equal? {A} Large-Scale Study},
+  author    = {Lucic, Mario and Kurach, Karol and Michalski, Marcin and
+               Gelly, Sylvain and Bousquet, Olivier},
+  booktitle = {Advances in Neural Information Processing Systems},
+  volume    = {31},
+  pages     = {698--707},
+  year      = {2018}
+}
+
+@inproceedings{musgrave2020metric,
+  title     = {A Metric Learning Reality Check},
+  author    = {Musgrave, Kevin and Belongie, Serge and Lim, Ser-Nam},
+  booktitle = {European Conference on Computer Vision},
+  series    = {Lecture Notes in Computer Science},
+  volume    = {12370},
+  pages     = {681--699},
+  publisher = {Springer},
+  year      = {2020},
+  doi       = {10.1007/978-3-030-58595-2_41}
+}
+
+@inproceedings{agarwal2021deep,
+  title     = {Deep Reinforcement Learning at the Edge of the Statistical
+               Precipice},
+  author    = {Agarwal, Rishabh and Schwarzer, Max and Castro, Pablo Samuel and
+               Courville, Aaron C. and Bellemare, Marc G.},
+  booktitle = {Advances in Neural Information Processing Systems},
+  volume    = {34},
+  pages     = {29304--29320},
+  year      = {2021}
+}
+
+% arXiv:1806.08295
+@article{colas2018many,
+  title     = {How Many Random Seeds? Statistical Power Analysis in Deep
+               Reinforcement Learning Experiments},
+  author    = {Colas, C{\'e}dric and Sigaud, Olivier and Oudeyer, Pierre-Yves},
+  journal   = {arXiv preprint arXiv:1806.08295},
+  year      = {2018}
+}
+
+% --- post-hoc baselines for training-time interventions --------------------
+
+@inproceedings{guo2017calibration,
+  title     = {On Calibration of Modern Neural Networks},
+  author    = {Guo, Chuan and Pleiss, Geoff and Sun, Yu and Weinberger, Kilian Q.},
+  booktitle = {International Conference on Machine Learning},
+  series    = {Proceedings of Machine Learning Research},
+  volume    = {70},
+  pages     = {1321--1330},
+  year      = {2017}
+}
+
+@inproceedings{menon2021long,
+  title     = {Long-Tail Learning via Logit Adjustment},
+  author    = {Menon, Aditya Krishna and Jayasumana, Sadeep and Rawat, Ankit Singh and
+               Jain, Himanshu and Veit, Andreas and Kumar, Sanjiv},
+  booktitle = {International Conference on Learning Representations},
+  year      = {2021}
+}
+
+@inproceedings{hardt2016equality,
+  title     = {Equality of Opportunity in Supervised Learning},
+  author    = {Hardt, Moritz and Price, Eric and Srebro, Nathan},
+  booktitle = {Advances in Neural Information Processing Systems},
+  volume    = {29},
+  pages     = {3315--3323},
+  year      = {2016}
+}
+
+% --- causal mediation --------------------------------------------------------
+
+@article{robins1992identifiability,
+  title     = {Identifiability and Exchangeability for Direct and Indirect
+               Effects},
+  author    = {Robins, James M. and Greenland, Sander},
+  journal   = {Epidemiology},
+  volume    = {3},
+  number    = {2},
+  pages     = {143--155},
+  year      = {1992}
+}
+
+@inproceedings{pearl2001direct,
+  title     = {Direct and Indirect Effects},
+  author    = {Pearl, Judea},
+  booktitle = {Proceedings of the 17th Conference on Uncertainty in Artificial
+               Intelligence},
+  pages     = {411--420},
+  year      = {2001}
+}
+
+@article{oquab2024dinov2,
+  title   = {{DINOv2}: Learning Robust Visual Features without Supervision},
+  author  = {Oquab, Maxime and Darcet, Timoth{\'e}e and Moutakanni, Th{\'e}o and Vo, Huy V. and Szafraniec, Marc and Khalidov, Vasil and Fernandez, Pierre and Haziza, Daniel and Massa, Francisco and El-Nouby, Alaaeldin and Assran, Mahmoud and Ballas, Nicolas and Galuba, Wojciech and Howes, Russell and Huang, Po-Yao and Li, Shang-Wen and Misra, Ishan and Rabbat, Michael and Sharma, Vasu and Synnaeve, Gabriel and Xu, Hu and Jegou, Herv{\'e} and Mairal, Julien and Labatut, Patrick and Joulin, Armand and Bojanowski, Piotr},
+  journal = {Transactions on Machine Learning Research},
+  year    = {2024}
 }

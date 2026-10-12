@@ -1,56 +1,140 @@
-\section{A confound, and a protocol}
+\section{The timestep confound}
 \label{sec:confound}
 
-The weighting we audit takes the form
-\begin{equation}
-  w_{\mathrm{LL}}(\sigma) = \frac{\alpha\,\sigma^{p}}{\sigma^{p} + (1-\sigma)^{p}},
-  \qquad
-  w_{\mathrm{det}}(\sigma) = \frac{(1-\alpha)(1-\sigma)^{p}}{\sigma^{p} + (1-\sigma)^{p}} .
-  \label{eq:weights}
-\end{equation}
+Section~\ref{sec:worth} left AWWL's MRG positive but not significant after
+Holm correction. This section examines one thing AWWL alters besides the
+spectrum, the timestep weighting that every noise-dependent band weighting
+carries (Proposition~\ref{prop:confound}). Trained without the other, AWWL's
+timestep schedule and its frequency shape at constant total weight are each
+significantly worse than MSE, and the two partly cancel when combined. The
+spectral change comes mainly from the shape, whereas how AWWL's gap to MSE
+divides between the two depends on the order in which they are added.
 
-The two share a denominator but do \emph{not} sum to a constant: the total runs
-from $\alpha$ as $\sigma \to 1$ to $1-\alpha$ as $\sigma \to 0$. So $\alpha$
-sets the frequency balance \emph{and} rescales gradient magnitude across the
-noise schedule. Measured against the Min-SNR-$\gamma$ curve
-\citep{hang2023efficient} over the $\sigma_t$ of all $1000$ training timesteps,
-the correlation is $r = +0.82$ at $\alpha = 0.8$ and $r = -0.82$ at
-$\alpha = 0.2$: the two reported optima are opposite timestep schedules, not
-merely different frequency balances (Fig.~\ref{fig:weights}). The figure is
-sensitive to the grid --- a
-uniform grid in $\sigma$ gives $0.87$ --- so we quote it on the distribution
-training actually samples.
+\subsection{AWWL's weighting as a timestep schedule}
+\label{sec:confound-schedule}
 
-\guardedfigure{0.95}{weights.png}{%
-  The published weighting at $\alpha = 0.2$, $p = 1$. The two band weights
-  (blue, orange) are what the objective is described as doing; their total
-  (black) is what it also does, and it is not constant. Plotted against the
-  Min-SNR-$\gamma$ curve (violet) with both normalised to unit mean, the total
-  is visibly a timestep schedule of the same family. Sampled at the $\sigma_t$
-  of the \num{1000} training timesteps.}{fig:weights}
+For an orthogonal transform, the per-sample loss of Eq.~\eqref{eq:family} is
+the pixel mean square $\operatorname{ms}(r)$ weighted by the total
+$S(\sigma) = \sum_b \omega_b(\sigma)$, a timestep weight that does not depend
+on the residual, plus a zero-sum band term that carries the frequency shape
+(Proposition~\ref{prop:confound}(a)). For AWWL at the CIFAR-10 setting
+($\alpha = 0.2$, $p = 1$), $S$ (Eq.~\eqref{eq:total}) falls from nearly
+$1 - \alpha = 0.8$ at the lowest noise level to $\alpha = 0.2$ at the highest
+(Fig.~\ref{fig:weights}(a)). Its mean over the $T = \num{1000}$ training
+timesteps, \wTotalMean, lies near the high-noise value because
+\pctSigmaHigh\% of them have $\sigma_t > 0.9$; under $\sigma$ uniform on
+$[0,1]$ the mean is exactly $1/2$ for every $\alpha$ and $p$, because
+$\lambda_p(1-\sigma) = 1 - \lambda_p(\sigma)$. This residual-independent
+schedule runs opposite to Min-SNR-$\gamma$, which damps the low-noise
+timesteps: over the training timesteps, the Pearson correlation of
+$S(\sigma_t)$ with the Min-SNR multiplier $\kappa_t$
+(Section~\ref{sec:notation}) is $\rSMinSNRCifar$ at this setting and
+$+\rSMinSNRDB$ at the DreamBooth setting ($\alpha = 0.8$, $p = 2$;
+Fig.~\ref{fig:weights}(b)). By Proposition~\ref{prop:confound}(c) the sign is
+that of $2\alpha - 1$, so the two published optima, presented as balances
+between the approximation and detail bands, also impose timestep schedules of
+opposite direction.
 
-\paragraph{Protocol.} To vary only the shape, hold $\sum_b w_b$ constant
-\emph{at its original mean} of $0.5$. Normalising naively to $1$ doubles the
-mean gradient magnitude and confounds the ablation with a $2\times$ learning
-rate --- a mistake we made first and caught by measuring.
+\guardedfigure{0.85}{weights.png}{%
+  AWWL's weighting as a timestep schedule. (a) The weights of
+  Eq.~\eqref{eq:weights} at the CIFAR-10 setting ($\alpha = 0.2$, $p = 1$):
+  $w_{\mathrm{LL}}$, the detail weight $w_{\det}$ (applied to the mean of the
+  three detail bands) and their total $S$ (Eq.~\eqref{eq:total}); the dotted
+  line marks the mean of $S$ over the training timesteps; the top axis gives
+  $\sigma_t$. (b) The total at the CIFAR-10 and DreamBooth settings
+  ($\alpha = 0.8$, $p = 2$, Stable Diffusion's scaled-linear schedule) and the
+  Min-SNR-$\gamma$ multiplier $\kappa_t$ ($\gamma = 5$) on each schedule, each
+  divided by its mean over the training timesteps; the legend gives the
+  Pearson correlation $r$ of each total with $\kappa_t$.}{fig:weights}
 
-\begin{table}[t]
-\centering
-\caption{Isolating the frequency component makes matters worse. CIFAR-10,
-five seeds, epoch 199; $p$ is Holm-corrected across the comparison family.}
-\label{tab:confound}
-\begin{tabular}{lrr}
-\toprule
-Configuration & $\Delta$ FID vs.\ MSE & $p$ (Holm) \\
-\midrule
-Published weighting & $+0.44$ & $0.43$ \\
-Normalised to $1$ (confounded, $2\times$ LR) & $+1.15$ & $0.045$ \\
-\textbf{Budget held fixed} & $\mathbf{+1.34}$ & $\mathbf{0.003}$ \\
-\bottomrule
-\end{tabular}
-\end{table}
+\subsection{Separating the schedule from the shape}
+\label{sec:confound-controls}
+\label{sec:confound-results}
 
-Table~\ref{tab:confound} settles the question: separated from the timestep
-effect, the frequency weighting is significantly \emph{harmful}. What residual
-appeal the published form has comes from the timestep reweighting riding along
-with it.
+Two normalisation controls keep AWWL's band shape and hold one
+residual-independent measure of its per-timestep weight constant. The first
+rescales the weights to a constant total,
+$\tilde\omega_b = c\,\omega_b / S(\sigma)$, which removes $S$ exactly
+(Proposition~\ref{prop:confound}(d)); it uses $c = \levelSumFixed$, the
+uniform-$\sigma$ mean of $S$, and is repeated at $c = 1$, which changes only
+the effect of AdamW's stability constant $\varepsilon_{\mathrm{A}}$ and of
+gradient clipping (Proposition~\ref{prop:scale}(a)). The second fixes $\sum_b \omega_b^2$ at
+\levelSqFixed, AWWL's mean over the training timesteps. For band gradients of
+equal norm, the two normalised quantities bound the per-timestep gradient
+weight: fixing $S$ fixes it when the gradients are parallel, fixing
+$\sum_b \omega_b^2$ when they are orthogonal, as in output space, and neither
+control is the stronger (Proposition~\ref{prop:scale}(b);
+Appendix~\ref{app:gradnorm}). A third arm, the timestep-only arm, keeps the
+schedule and removes the shape: it trains $S(\sigma_t)\operatorname{ms}(r)$,
+the first term of Eq.~\eqref{eq:shape-decomp}, and its two contrasts, with
+MSE and with AWWL, form a Holm family of their own.
+
+\input{tables/confound}
+
+Both normalisation controls are worse than MSE
+($p_{\mathrm{Holm}} = \dSumFixedHolm$ and \dSqFixedHolm{} over the
+\nFamilyMain{} arms) and worse than AWWL, by \dSumFixedVsAWWL{} and
+\dSqFixedVsAWWL~FID ($p_{\mathrm{Holm}} = \dSumFixedVsAWWLHolm$ and
+\dSqFixedVsAWWLHolm{} over the \nFamilyConfound{} confound contrasts;
+Table~\ref{tab:confound}); the run at $c = 1$ repeats the first on the same
+seeds and is not an independent replication. On the summed-detail shape of
+Eq.~\eqref{eq:summed}, fixing $\sum_b \omega_b^2$ improves on the
+unnormalised parent, so the sign of the effect depends on the band shape
+(Appendix~\ref{app:supp-confound}).
+
+With MSE and AWWL, these arms form a two-by-two design over whether $S$ varies
+with $\sigma_t$ and whether the frequency shape is present
+(Table~\ref{tab:confound}, lower panel). Against MSE
+($S$ constant, no shape), the schedule alone costs $+\dTimestep$~FID
+$[\dTimestepLo, \dTimestepHi]$ ($p_{\mathrm{Holm}} = \dTimestepHolm$ in its
+two-test family) and the shape at constant $S$ costs $+\dSumFixed$
+($+\dSqFixed$ with $\sum_b \omega_b^2$ held instead), yet AWWL, which
+combines them, is not resolved from MSE ($+\dAWWL$, raw $p = \dAWWLP$). The
+components therefore partly cancel, and the design reads from either corner:
+adding the shape to the schedule changes FID by $\dAWWLVsTimestep$
+$[\dAWWLVsTimestepLo, \dAWWLVsTimestepHi]$ (raw and Holm
+$p = \dAWWLVsTimestepP$, at the edge of significance), and adding the
+schedule to the shape at constant $S$ changes it by $-\dSumFixedVsAWWL$
+($p_{\mathrm{Holm}} = \dSumFixedVsAWWLHolm$). The schedule produces
+little of the spectral change: its coefficient-weighted high-band change is
+\corrHighWTimestep~dB $[\corrHighWTimestepLo, \corrHighWTimestepHi]$, against
+\corrHighWAWWL~dB for AWWL and \corrHighWSumFixed{} and \corrHighWSqFixed~dB
+for the two controls, and is worth \valueTimestep~FID
+$[\valueTimestepLo, \valueTimestepHi]$, against \priceTransplantValue{} for
+AWWL. AWWL's spectral change therefore comes mainly from its shape, but its
+cost does not divide so simply: the schedule alone has an MRG of
+\mrgTimestep~FID $[\mrgTimestepLo, \mrgTimestepHi]$ (raw $p = \mrgTimestepP$;
+the arm is outside the priced-arm family), close to AWWL's \mrgMain, whereas
+the shape at constant $S$ has larger MRGs (\mrgArmSumFixed{} with
+$\sum_b \omega_b = \levelSumFixed$, \mrgArmSqFixed{} with $\sum_b \omega_b^2$
+fixed; Table~\ref{tab:pricing-arms}), so the design credits AWWL's residual
+cost to neither component alone.
+
+This interaction is described, not tested, and the rows of the design are
+defined by $S$, not by the effective timestep weight $\Lambda(t)$, the ratio of
+the expected loss to the expected pixel mean square at $t$
+(Eq.~\eqref{eq:eff-weight}); it equals $1$ for MSE and
+$S(\sigma_t)$ for the timestep-only arm, but for the controls, as for AWWL,
+it retains a residual-dependent term that no rescaling by a function of
+$\sigma$ removes (Proposition~\ref{prop:confound}(b),~(d)) and that changes
+with $\sigma_t$ under a Gaussian data model (Proposition~\ref{prop:residual}).
+The `constant' row is therefore constant in $S$ only, and as $\Lambda(t)$ was
+not measured, the difference between the columns cannot, in either row, be
+assigned to the frequency shape alone.
+
+\subsection{The confound across the objective family}
+\label{sec:confound-family}
+
+The residual-dependent part of the timestep weight is present throughout the
+family. By Proposition~\ref{prop:confound}(b), $\Lambda(t)$ is a convex
+combination of the pixel-equivalent weights $(N/n_b)\,\omega_b(\sigma_t)$
+with the residual's band energy fractions as coefficients; unless those
+weights are equal, it depends on the residual's spectrum, which changes with
+$\sigma_t$, whatever normalisation fixes $S$. FFL, whose weights contain no
+$\sigma_t$, weights timesteps through the ratio $\Lambda_{\mathrm{FFL}}(r)$ of
+its loss to the pixel MSE, which depends on the spectral shape of the residual
+(Section~\ref{sec:family-ffl}). This reweighting was not measured, so FFL's
+result (Section~\ref{sec:worth}) is not divided into timestep and frequency
+parts.
+Whether an objective reweights timesteps must therefore be established from
+$\Lambda(t)$, not from whether $\sigma_t$ appears in its definition.

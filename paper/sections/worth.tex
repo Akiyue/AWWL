@@ -1,88 +1,281 @@
-\section{What the correction is worth}
+\section{What the spectral change is worth}
 \label{sec:worth}
 
-Sections \ref{sec:replication} and \ref{sec:mechanism} leave an obvious
-question unanswered: how much \emph{should} FID have moved? Without that
-number, ``the metrics did not respond'' is an observation rather than an
-argument.
+This section applies the pricing test (Algorithm~\ref{alg:pricing}) with $B$
+the MSE arm and $A$ AWWL at epoch 199 of the main recipe, sampled with
+DDIM-100, under which AWWL changes the spectrum (P1;
+Section~\ref{sec:mechanism}); operators act on $B$'s \num{10000} samples in
+each of five seeds. $M$ is FID; brackets give 95\% $t$-intervals of paired
+differences, and $p$ is the two-sided paired $t$-test, raw unless marked Holm.
 
-We answer it by applying the correction directly. Taking each model's own
-samples and boosting the high band by \SI{0.41}{\decibel} --- the amount the
-trained objective achieves --- is a pure post-process, so the resulting change
-in FID isolates the value of the spectral correction from everything else
-training might have altered.
+\subsection{The price curve and measurement hazard H1}
+\label{sec:worth-curve}
 
-\begin{table}[t]
-\centering
-\caption{The correction applied as a Fourier post-process, five seeds per arm.
-The \SI{0}{\decibel} column reproduces the sweep's FID exactly, validating the
-apparatus.}
-\label{tab:worth}
-\begin{tabular}{lrrr}
-\toprule
-& Spectral deficit & FID & FID after $+\SI{0.41}{\decibel}$ \\
-\midrule
-MSE & \SI{2.22}{\decibel} & $\fidMSE \pm 0.210$ & $\mathbf{\fidMSEboost \pm 0.202}$ \\
-Frequency-aware & \SI{1.80}{\decibel} & $\fidAWWL \pm 0.344$ & $\fidAWWLboost \pm 0.335$ \\
-\bottomrule
-\end{tabular}
-\end{table}
+FID registers the spectral statistic on CIFAR-10, so precondition P4 holds.
+The value of the unquantised raised-cosine boost rises monotonically
+with the high-band change it produces
+(Fig.~\ref{fig:price-curve}(a); Table~\ref{tab:price-curve}), by
+\priceBoostPerDB~FID per decibel up to the 0.8~dB dose. Because the boost's
+ramp also lifts the upper mid-band bins (Section~\ref{sec:pricing-ops}), the
+high band is priced alone by band-restricted operators
+(Fig.~\ref{fig:price-curve}(b)), and FID registers it: the high-band match is
+worth $\priceMatchHighValue$ $[\priceMatchHighValueLo, \priceMatchHighValueHi]$.
 
-Two independent measurements agree that the objective corrects
-$\correction \pm 0.18$~\si{\decibel}: the difference of deficits in
-Table~\ref{tab:worth}, and the band analysis of \S\ref{sec:mechanism} obtained
-by a different route.
+\paragraph{Measurement hazard H1: re-quantisation.}
+Re-quantising filtered images to 8 bits changes the price by more than the
+filter does. The 0.41~dB boost, the dose that reproduces AWWL's high-band
+change, is worth $\priceBoostDitherValue$ when rounded with uniform dither and
+$\priceBoostValue$ in floating point (Table~\ref{tab:operators}). Uniform
+white noise of $\pm0.5$ and $\pm1$~LSB per channel, added without filtering
+or rounding, improves FID by $\priceNoiseHalfValue$ and $\priceNoiseOneValue$
+(Fig.~\ref{fig:price-curve}(a)), far above the boost's curve at the high-band changes the noise produces, so an operator re-quantised with
+dither inherits a gain out of all proportion to its change in $s$. Every
+value below is therefore scored in floating point (P0); the trained arms are
+all quantised once, identically, so H1 does not bias comparisons between
+them. The noise gain is a property of the operating point, not of FID in
+general: on the \num{10000} held-out CIFAR-10 test images (FID
+\realTestFID{} against the training set), noise of $\pm0.5$~LSB does not
+lower FID (value $\realNoiseHalfValue$) and noise of $\pm1$~LSB raises it
+($\realNoiseOneValue$; single measurements). The real-image control was not
+repeated on CelebA-64, where the noise also lowers the FID of the baseline's
+samples (Section~\ref{sec:celeba}).
 
-Applying that correction post hoc is worth $\boostValue \pm \boostCI$~FID. The
-accounting follows immediately, and Fig.~\ref{fig:worth} states it in one
-picture.
+\guardedfigure{0.85}{price_curve.png}{%
+  The price of the spectral statistic on CIFAR-10 (MSE's samples, epoch 199,
+  DDIM-100, five seeds): value $M(B) - M(T(B))$, paired by seed, with 95\%
+  $t$-intervals; filled markers are significant after Holm correction within
+  the panel (a display aid outside the declared families). (a)~The unquantised
+  raised-cosine boost at nominal doses of 0.1--2.4~dB, the 0.41~dB boost
+  dithered to 8 bits (arrow) and white noise of $\pm0.5$ and $\pm1$~LSB
+  (hazard H1), against the measured high-band change. (b)~The transplant of
+  AWWL's change and the match to the reference spectrum, in single band
+  thirds or in all bands; right, each operator's high-band change.}{fig:price-curve}
 
-\guardedfigure{0.95}{correction_value.png}{%
-  What the spectral correction is worth, and what the objective gets for it.
-  Each arm is plotted at its own high-band deficit and FID; the arrow runs to
-  the same samples after the Fourier post-process, so its length \emph{is} the
-  value of the correction. The baseline's post-processed spectrum lands almost
-  exactly where the trained objective's does unaided, which makes the vertical
-  gap between them very nearly a controlled comparison --- the same spectrum,
-  \shortfall~FID apart. Lower and left are both better.}{fig:worth}
+\subsection{What AWWL's change is worth, and what it costs}
+\label{sec:worth-headline}
 
-\begin{table}[t]
-\centering
-\caption{The objective falls \shortfall~FID short of what its own spectral
-correction predicts.}
-\label{tab:accounting}
-\begin{tabular}{lr}
-\toprule
-& FID \\
-\midrule
-MSE baseline & \fidMSE \\
-Predicted for the objective from its own spectral correction & \fidMSEboost \\
-Objective, measured & \fidAWWL \\
-\midrule
-\textbf{Unexplained penalty} & $\mathbf{+\shortfall}$ \\
-\bottomrule
-\end{tabular}
-\end{table}
+AWWL's spectral change is worth $V = \priceTransplantValue$~FID
+$[\priceTransplantValueLo, \priceTransplantValueHi]$, and AWWL falls short of
+the baseline carrying that change by $\mathrm{MRG} = \mrgMain$
+$[\mrgMainLo, \mrgMainHi]$ (Table~\ref{tab:accounting}; raw $p = \mrgMainP$).
+Its Holm-adjusted $p$ over the \nFamilyPricing{} arms of the pricing family
+(Section~\ref{sec:worth-arms}) is \mrgArmAWWLHolm, so the MRG does not
+survive the family-wise correction. The family includes both EMA arms, as
+declared; over the \nFamilyPricingObjectives{} arms that are training objectives, without
+the two weight-averaging rows, the corrected $p$ is \mrgArmAWWLHolmNoEMA, so the
+family-wise verdict is borderline and depends on the family.
+The transplant is the primary operator because it imposes AWWL's change in
+every radial bin, seed by seed (P2); it replaced, after a first analysis,
+the 0.41~dB boost re-quantised to 8 bits, whose value H1 inflates.
+Unquantised, the boost gives $\mathrm{MRG} = \mrgBoost$ $[\mrgBoostLo, \mrgBoostHi]$
+($p = \mrgBoostP$), smaller as it credits less of the change.
 
-The objective buys $0.35$~FID of spectral improvement and pays roughly
-$1.1$~FID for it elsewhere. Two framings of the same fact are worth stating
-separately:
+By Eq.~\eqref{eq:accounting}, which holds seed by seed,
+$D = M(A) - M(B) = \dAWWL = \mrgMain - \priceTransplantValue$. A positive MRG
+thus says that what AWWL changes besides the spectrum costs FID on balance,
+not that this cost exceeds what the spectral change earns; the latter is the
+statement $D > 0$, which five seeds do not resolve ($[\dAWWLLo, \dAWWLHi]$,
+$p = \dAWWLP$). In KID ($\times 10^{3}$; the \texttt{clean-fid}
+implementation of the scoring path, Appendix~\ref{app:scoring}, not the
+\texttt{torch-fidelity} one of Table~\ref{tab:compare-other}) the value
+replicates ($\kidTransplantValue$ $[\kidTransplantValueLo, \kidTransplantValueHi]$), but
+the MRG, of the same sign, is not resolved ($\kidMrgMain$
+$[\kidMrgMainLo, \kidMrgMainHi]$, $p = \kidMrgMainP$), since AWWL's KID gap to
+MSE is only $\kidGapAWWL$ there. On the 800-epoch schedule (three seeds;
+Section~\ref{sec:budget}) the MRG is positive but unresolved both at MSE's
+FID optimum, epoch~\longBestEpochMSE{} ($\mrgLongOpt$
+$[\mrgLongOptLo, \mrgLongOptHi]$, not tabulated), and at epoch 799
+($\mrgLong$ $[\mrgLongLo, \mrgLongHi]$; Table~\ref{tab:accounting}).
 
-\begin{itemize}
-  \item MSE plus a twenty-line Fourier post-process (\fidMSEboost) outperforms
-    the trained objective (\fidAWWL) by \shortfall~FID, at no training cost.
-  \item The objective plus the same post-process (\fidAWWLboost) is
-    \emph{still} worse than plain MSE (\fidMSE). The correction cannot recover
-    what obtaining it costs.
-\end{itemize}
+\IfFileExists{tables/accounting.tex}{\input{tables/accounting}}{%
+  \begin{table}[tbp]\centering
+  \fbox{\textbf{tables/accounting.tex not built}}
+  \caption{Not built.}\label{tab:accounting}
+  \end{table}}
 
-\paragraph{Measurement hazard: calibrate away from the minimum.}
-We first calibrated FID's sensitivity on real images --- attenuating one half
-of a real set and scoring it against the other. That measures sensitivity at
-the \emph{minimum} of the distance, where the first derivative vanishes and
-perturbations are penalised quadratically. It implied a \SI{0.41}{\decibel}
-correction was worth $0.010$~FID and would require some 17\,500 seeds to
-detect. Measured at the operating point, where the derivative is non-zero, the
-same correction is worth $\boostValue$ --- thirtyfold larger. Sensitivity
-calibrations for a generative metric must be performed away from the minimum;
-we drew, and retract, the opposite conclusion from the wrong calibration.
+\paragraph{Value by band.}
+FID rewards chiefly the mid-band part of AWWL's change, and little of the
+high-band part that motivates the objective. Restricted to one third of the radial bins
+(Fig.~\ref{fig:price-curve}(b)), the transplant is worth $V_{\mathrm{low}} = \priceTransplantLowValue$
+$[\priceTransplantLowValueLo, \priceTransplantLowValueHi]$,
+$V_{\mathrm{mid}} = \priceTransplantMidValue$
+$[\priceTransplantMidValueLo, \priceTransplantMidValueHi]$ and
+$V_{\mathrm{high}} = \priceTransplantHighValue$
+$[\priceTransplantHighValueLo, \priceTransplantHighValueHi]$. These values
+approximately add (sum \priceTransplantBandSum, against
+\priceTransplantValue), so single-band attribution is meaningful for this
+change. The value thus sits in radii \bandMidMin--\bandMidMax, the lower part
+of the range AWWL up-weights (its one-level Haar detail bands begin at
+radius 8; Section~\ref{sec:mechanism}), not in radii
+\bandHighMin--\bandHighMax, mostly corner frequencies beyond the axial
+Nyquist radius. The attribution is a property of FID as implemented:
+\texttt{clean-fid} upsamples each $32\times32$ sample bicubically to
+$299\times299$ pixels before the Inception network
+(Appendix~\ref{app:scoring}), which attenuates the outer radii more than the
+mid band, so the split, like $V$ itself, is specific to the metric.
+
+\paragraph{The match as a scale.}
+\label{sec:second-operator}
+The full radial match, which removes the mean deficit in every bin, is worth
+$\priceMatchValue$ $[\priceMatchValueLo, \priceMatchValueHi]$, and AWWL's
+change is worth \priceTransplantShareOfMatch\% as much. The match is a scale,
+not a ceiling: the mid-band match alone is worth more
+($\priceMatchMidValue$ $[\priceMatchMidValueLo, \priceMatchMidValueHi]$), so
+FID is not monotone in the distance to the reference spectrum. AWWL's gap to
+the matched baseline, \mrgMatch~FID, is not a cost: the match applies far more correction than
+AWWL achieves, violating P2.
+
+\subsection{Checks on the reading}
+\label{sec:worth-checks}
+
+\paragraph{Operator dependence (P3).}
+$V$ depends on the operator: the three operators are coherent radial gains,
+whereas FID values incoherent energy (white noise) far more per decibel
+(Fig.~\ref{fig:price-curve}(a)), and similar high-band changes are priced
+differently (Section~\ref{sec:worth-arms}). The transplant is
+canonical only in reproducing $\delta_A$ in every bin
+(Section~\ref{sec:pricing-ops}); a training-made change may be priced
+otherwise.
+
+\paragraph{No interaction (P5).}
+Removing AWWL's change from its own samples costs
+$V_A = \priceReverseValue$~FID, against $V = \priceTransplantValue$ for adding
+it to MSE's; the paired difference, \interactionTransplant{}
+$[\interactionTransplantLo, \interactionTransplantHi]$
+($p = \interactionTransplantP$), is small and unresolved, consistent with P5,
+as is that of the boost ($\priceBoostDiffAWWL$,
+$p = \priceBoostDiffAWWLP$; Table~\ref{tab:worth}).
+
+\paragraph{Controls.}
+The positive control prices the gain of longer training, which targets
+nothing spectral but also lowers the learning rate from about 85\% to 50\% of
+its peak: the three 800-epoch MSE runs (with EMA)
+at epoch~\longBestEpochMSE{}, their FID optimum ($A$), against their
+epoch-199 checkpoints ($B$). Training longer improves FID by
+$\posOptTrainGain$, the transplanted change is worth $\posOptValue$
+(unresolved), and the MRG is significantly negative,
+$\posOptMRG$ $[\posOptMRGLo, \posOptMRGHi]$ ($p = \posOptMRGP$), as it is
+with $A$ at epoch 799 ($\posCtrlMRG$, $p = \posCtrlMRGP$). The
+null control, the static wavelet arm, moves the high band by only
+$\corrHighStatic$~dB, worth $V = \valueArmStatic$, and returns
+$\mathrm{MRG} = \mrgArmStatic$ $[\mrgArmStaticLo, \mrgArmStaticHi]$ (Holm
+$p = \mrgArmStaticHolm$). As $|V|$ is small in both, $\mathrm{MRG} \approx
+D$: the controls do not test assumption~(ii) of
+Section~\ref{sec:pricing-reading}.
+
+\paragraph{A planted mechanism.}
+\label{sec:worth-planted}
+The assumption can be tested for AWWL's change by delivering that change
+through training alone. We trained MSE, five seeds, on CIFAR-10 images that
+each carry AWWL's measured change, imposed by the per-radius gain of the
+transplant (the seed mean of $s(A) - s(B)$, applied in floating point;
+Appendix~\ref{app:setup}). Training reproduced the planted change: the arm's
+samples differ from MSE's by \corrPlantedLow, \corrPlantedMid{} and
+\corrPlantedHigh~dB in the low, mid and high thirds, against AWWL's
+\corrLowAWWL, \corrMidAWWL{} and \corrHighAWWL. Its gap to MSE is
+$D = \dPlanted$ $[\dPlantedLo, \dPlantedHi]$~FID ($p = \dPlantedP$), the
+transplant prices its change at $V = \valuePlanted$
+$[\valuePlantedLo, \valuePlantedHi]$, and its MRG is $\mrgPlanted$
+$[\mrgPlantedLo, +\mrgPlantedHi]$ ($p = \mrgPlantedP$), and $\fddMrgPlanted$
+$[\fddMrgPlantedLo, +\fddMrgPlantedHi]$ in DINOv2 features
+(Section~\ref{sec:worth-dino}). A spectral change made by training is thus
+valued as the filter values it, to within about $0.25$~FID, where AWWL's MRG
+is \mrgMain: for this change the identifying assumption holds, and the MRG
+separates a gain delivered by the mechanism (the planted arm) from a cost
+incurred outside it (AWWL).
+
+\paragraph{Sensitivity to the identifying assumption.}
+For changes that are not planted, we ask how far the assumption may fail. If the
+training-made change were worth $V_{\mathrm{train}}$, the cost outside the
+change, $D + V_{\mathrm{train}}$, would keep a positive uncorrected 95\%
+interval as long as $V_{\mathrm{train}}$ exceeded the tipping point
+$V^\ast = \tipValue$~FID, \tipShare\% of the filter's value
+\priceTransplantValue. Because $V^\ast$ is minus the lower bound of the
+uncorrected interval of $D$, it bounds the raw verdict only: after Holm
+correction the MRG is unresolved even at $V_{\mathrm{train}} = V$
+(Holm $p = \mrgArmAWWLHolm$).
+
+\subsection{The test across arms}
+\label{sec:worth-arms}
+
+The pricing family holds \nFamilyPricing{} arms, each priced against MSE
+without EMA: the stably trained arms of the main family (all but raw SNR
+weighting, GradNorm balancing and the three-level arm) and AWWL + EMA
+(Fig.~\ref{fig:pricing-arms}; Table~\ref{tab:pricing-arms}). For each,
+$\mathrm{MRG} = D + V$ holds exactly. No frequency-aware arm has a negative
+MRG estimate, and the MRG is Holm-significant for all of them except AWWL
+(Section~\ref{sec:worth-headline}), AWWL + EMA (Holm
+$p = \mrgArmAWWLemaHolm$) and the static wavelet arm (\mrgArmStaticHolm).
+Objectives without a frequency term also have positive MRGs ($L_1$,
+Charbonnier, Min-SNR-$\gamma$ and, not significantly, Huber), as does,
+outside the family, the timestep-only arm of Section~\ref{sec:confound}
+($\mathrm{MRG} = \mrgTimestep$ $[\mrgTimestepLo, \mrgTimestepHi]$,
+$V = \valueTimestep$), whose gap to MSE is almost all MRG. After Holm
+correction the MRG verdicts coincide with those on the FID gap to MSE
+(Table~\ref{tab:compare-fid}), so across arms the test adds the
+decomposition, what each arm's change is worth and where, not a more powerful
+test of the gap. It also separates changes that band means do not: the
+high-band part of Min-SNR-$\gamma$'s corner-only change
+(Section~\ref{sec:mechanism}) is worth $\priceMinSNRHighValue$, against
+AWWL's $\priceTransplantHighValue$.
+
+\guardedfigure{0.8}{pricing_arms.png}{%
+  The pricing test across trained arms (CIFAR-10, epoch 199, DDIM-100; 95\%
+  $t$-intervals over paired seeds). (a)~Value $V = M(B) - M(T_A(B))$ of each
+  arm's change, transplanted onto the MSE run $B$ of the same seed; $B$ is
+  MSE without EMA in every row, so AWWL + EMA is priced against MSE, not
+  against MSE + EMA as in Fig.~\ref{fig:effects}.
+  (b)~$\mathrm{MRG} = M(A) - M(T_A(B))$. Filled: significant after Holm
+  correction over the \nFamilyPricing{} arms, for $V$ (a display aid outside
+  the declared families) and the MRG separately. Shaded: the positive control
+  (the 800-epoch MSE runs, with EMA, at their FID optimum, epoch 399, and at
+  epoch 799, each against their epoch-199 checkpoints; its own test) and the
+  null control. Arrows: mean beyond the axis, printed.
+  Raw SNR weighting, the three-level decomposition and GradNorm balancing,
+  which did not train stably, are not priced; the timestep-only arm, outside
+  the family, is in Table~\ref{tab:pricing-arms} only.}{fig:pricing-arms}
+
+\paragraph{A second member of the family.}
+\label{sec:second-member}
+Focal Frequency Loss (FFL; Section~\ref{sec:family-ffl}), which differs from
+AWWL in its basis (global rather than spatially localised) and in its weights
+(keyed on the residual rather than on $\sigma_t$), was trained untuned
+($a = 1$, five seeds) as the sole objective on the $\epsilon$-residual, not
+added to a spatial loss as its authors do. It is worse than MSE by
+$+\dFFL$~FID (Holm $p = \dFFLHolm$; Table~\ref{tab:compare-fid}), in
+precision but not in recall (Table~\ref{tab:compare-other}). It removes nearly all of the
+high-band deficit and overshoots the reference in the low and mid bands
+(Table~\ref{tab:bands}), a change worth $V = \valueArmFFL$
+$[\valueArmFFLLo, \valueArmFFLHi]$, the largest positive $V$ of any trained
+arm; yet its MRG is $\mrgArmFFL$ $[\mrgArmFFLLo, \mrgArmFFLHi]$ (Holm
+$p = \mrgArmFFLHolm$). A positive MRG therefore arises without AWWL's
+schedule and without a partial correction; FFL was, however, trained in a
+form its authors did not use.
+
+\subsection{A second feature space}
+\label{sec:worth-dino}
+Every value above is measured in Inception-V3 features. We repeated the main
+measurements in DINOv2 ViT-L/14 features \citep{oquab2024dinov2}, the space
+recommended by \citet{stein2023exposing}, as a Fr\'echet distance
+FD$_{\text{DINOv2}}$ on the same samples, scored in floating point
+(Appendix~\ref{app:scoring}; Table~\ref{tab:features}). The verdict on AWWL
+becomes sharper. Its gap to MSE, unresolved in FID, is resolved:
+$+\fddGapAWWL$ $[\fddGapAWWLLo, \fddGapAWWLHi]$ against a baseline of
+\fddMSEmean. Its spectral change is worth nothing in this space
+($V = \fddValueAWWL$ $[\fddValueAWWLLo, \fddValueAWWLHi]$), so the whole gap
+is MRG ($+\fddMrgAWWL$, $p~\fddMrgAWWLP$); the mid third alone again carries
+positive value ($+\fddValueMid$, against $+\fddValueHigh$ for the high third),
+and in this space the band values do not add. Hazard H1 does not carry over:
+white noise raises FD$_{\text{DINOv2}}$ ($\fddNoiseHalfValue$ at $\pm0.5$~LSB,
+$\fddNoiseOneValue$ at $\pm1$~LSB), so the gain it buys in FID is a property of
+Inception features at this operating point. On CelebA-64 both spaces agree:
+the full radial match raises the distance ($\fddCelebaMatchValue$) and noise
+lowers it ($+\fddCelebaNoiseHalfValue$). The positive control returns a
+negative MRG in both spaces ($\fddPosOptMRG$, $p~\fddPosOptMRGP$), and the
+two components of the two-by-two design are each worse than MSE in both
+(timestep only $+\fddGapTimestep$, shape at constant $S$ $+\fddGapSumFixed$).
+The value of a spectral change is therefore a property of the metric's
+feature space as well as of the operating point, as precondition P4
+anticipates; the conclusion that AWWL loses outside its mechanism holds in
+both spaces and is stronger in the one the evaluation literature now
+recommends.

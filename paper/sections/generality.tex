@@ -1,126 +1,118 @@
-\section{Generality}
+\section{Generality and limits of the test}
 \label{sec:generality}
 
-\pending{a third resolution (CelebA-64), to separate resolution from task}
+The preceding sections rest on one dataset, resolution and task.
+Section~\ref{sec:dreambooth} changes the model, resolution and task together,
+in a setting where the metric precondition P4 fails;
+Section~\ref{sec:celeba} moves to another dataset and resolution, where the
+price of the same spectral correction changes sign and depends on the
+operator. Gaussian denoising, which was not priced and shows no difference
+from MSE after correction, is reported in Appendix~\ref{sec:restoration}.
 
-Everything to this point concerns one task: unconditional generation trained
-from scratch at $32\times32$ with a pixel-space U-Net. This section adds a
-second --- subject-driven fine-tuning of Stable Diffusion~1.5, a latent-space
-U-Net at $512\times512$ --- which changes the architecture, the resolution and
-the task at once. That the three move together is a limitation we return to in
-\S\ref{sec:limitations}; what it buys is that no conclusion below rests on a
-single training setup.
+\subsection{Subject-driven fine-tuning}
+\label{sec:dreambooth}
 
-The objective's published optimum here is $\alpha = 0.8$, the mirror image
-of the $\alpha = 0.2$ used above, and that inversion is the evidence offered
-for a resolution-dependent law. It is also
-the setting where \S\ref{sec:confound} predicts something specific: if
-$\alpha$'s effect runs through the timestep axis rather than the frequency
-one, then a pure timestep method should do at least as well as the
-frequency-aware objective here, and the frequency-aware objective's advantage
-should not survive replication.
+We fine-tune the U-Net of Stable Diffusion~1.5 \citep{rombach2022high} with
+DreamBooth \citep{ruiz2023dreambooth} on one subject (five instance
+photographs) for 400 steps at $512\times512$, with \dbNobjectives{}
+objectives and five seeds each; AWWL uses the conference paper's setting for
+this task, $\alpha = 0.8$, $p = 2$ (Section~\ref{sec:family-awwl}). Each run
+generates \dbNimages{} images from \dbNprompts{} prompts placing the subject
+in new scenes or styles, scored with CLIP ViT-B/32
+\citep{radford2021learning} on text--image agreement and on similarity to the
+instance photographs (Appendix~\ref{app:setup-dreambooth}); DINO similarity
+\citep{caron2021emerging} was not computed (Section~\ref{sec:limitations}).
 
-\subsection{The published table, replicated}
+\guardedfigure{0.64}{dreambooth_tradeoff.png}{%
+  DreamBooth on Stable Diffusion~1.5 (one subject, five seeds): paired
+  difference from MSE (the dot at the origin) in CLIP text--image score and
+  subject similarity, with paired 95\% $t$-intervals. Filled: differs from MSE
+  after Holm correction on at least one metric (only raw SNR weighting, on
+  CLIP score). None lies in the upper-right quadrant (better than MSE on both
+  metrics). Means and ranks: Table~\ref{tab:dreambooth}.}{fig:db-tradeoff}
 
-We fine-tune Stable Diffusion~1.5 on one subject for \num{400} steps, five
-seeds per objective, and score \num{60} generated images per run against three
-prompts: CLIP text-image agreement, and CLIP image-image similarity to the
-instance set the run was trained on.
+The conference paper \citep{thao2026awwl} reports AWWL as the only method in
+the top two on both metrics. Over five seeds it is ranked \dbRankSimAWWL{} of
+\dbNobjectives{} on similarity but \dbRankClipAWWL{} on CLIP score, below MSE
+(Table~\ref{tab:dreambooth}), and neither difference from MSE survives Holm
+correction (Fig.~\ref{fig:db-tradeoff}; $p_{\mathrm{Holm}} = \dbDSimAWWLHolm$
+and \dbDClipAWWLHolm). The only surviving difference is the gain of raw SNR
+weighting in CLIP score ($+\dbDClipRawSNR$,
+$p_{\mathrm{Holm}} = \dbDClipRawSNRHolm$), an arm that is last on similarity
+and fails to train from scratch on CIFAR-10 (FID
+\num[round-mode=places,round-precision=0]{\fidRawSNRmean};
+Section~\ref{sec:compare}). Neither Min-SNR-$\gamma$ nor any
+frequency-aware objective differs significantly from MSE on this task.
 
-\IfFileExists{tables/dreambooth.tex}{\input{tables/dreambooth}}{%
-  \begin{table}[t]\centering
-  \fbox{\parbox{0.8\linewidth}{\centering\vspace{4mm}
-  \textbf{tables/dreambooth.tex not built}\\[1mm]
-  run \texttt{python scripts/make\_tables.py}\vspace{4mm}}}
-  \caption{DreamBooth, five seeds per objective.}\label{tab:dreambooth}
-  \end{table}}
+\paragraph{Pricing.} AWWL changes the high band here, but the metrics cannot
+price the change. Against the instance photographs, MSE's samples lie
+\dbDefMSE~dB below the reference in the high band and AWWL's \dbDefAWWL~dB, a
+paired correction of \dbCorr~dB $[\dbCorrLo, \dbCorrHi]$ (raw
+$p = \dbCorrP$); as the reference lacks the prompted scenes and styles, this
+deficit mixes content mismatch with spectral bias. Boosting each run's high
+band by its full deficit (leaving MSE's samples \dbResid~dB below the
+reference) changes CLIP score and similarity by means below $10^{-4}$ in
+magnitude, with standard deviations of
+\num[exponent-mode=scientific]{\dbPriceClipSD} and
+\num[exponent-mode=scientific]{\dbPriceSimSD} over the \dbPriceClipN{} MSE
+and AWWL runs, against seed standard deviations of \dbSeedSDClip{} and
+\dbSeedSDSim{}. This price is indistinguishable from zero, although the
+boosted images were stored as dithered 8-bit files (contrary to P0), and
+follows from the metric's design: the boost acts only above two thirds of the
+Nyquist frequency of the 512-pixel samples, whereas the CLIP encoder receives
+an antialiased 224-pixel resize, which attenuates everything above $224/512$
+of that frequency.
+Precondition P4 (Section~\ref{sec:pricing-pre}) therefore fails, which
+limits the test rather than the objective: no CLIP difference on this task,
+AWWL's lead in similarity included, can be credited to the high-band
+correction that AWWL names as its mechanism.
 
-The published claim is that the audited objective is the only method in the
-top two on \emph{both} metrics. Over five seeds it is not: it ranks first of
-nine on subject similarity (\num{0.8721}) and seventh on prompt agreement
-(\num{0.3003}), below the MSE baseline. Neither of its differences from MSE
-survives correction --- $-0.0108$ on CLIP score and $+0.0292$ on similarity,
-the latter at $p = 0.050$ uncorrected and $p = 0.35$ after Holm. As on
-CIFAR-10, the reported ordering is a reading of differences smaller than the
-seed variance that produces them.
+\subsection{Another dataset and resolution: CelebA-64}
+\label{sec:celeba}
 
-\subsection{The timestep axis is the one that moves}
+CelebA \citep{liu2015deep} at $64\times64$ keeps the architecture family,
+recipe (200 epochs), sampler and FID protocol of CIFAR-10
+(Appendix~\ref{app:setup-celeba}), with FID computed against the full training
+split. Five MSE seeds reach FID $\celebaFIDMSEmean \pm \celebaFIDMSEsd$. AWWL
+was not trained here (Section~\ref{sec:limitations}), so only the value side
+of the test is computed.
 
-One row does clear correction, and it is the row that carries no frequency
-component at all. Min-SNR-$\gamma$ weighting \citep{hang2023efficient}
-improves CLIP score by $+0.0411$ ($p = 0.005$, Holm), four times the largest
-effect any wavelet variant produces and in the opposite direction to most of
-them.
+\paragraph{Coherent corrections raise FID\@.} The baseline's high-band deficit
+matches CIFAR-10's (\celebaDeficitHigh~dB against \deficitHighMSE~dB), yet
+correcting it makes FID worse (Table~\ref{tab:price-curve}; a negative value
+means a higher FID). The $+0.41$~dB boost, which reduces the deficit by the
+same amount on both datasets, is worth $+\priceBoostValue$~FID
+$[\priceBoostValueLo, \priceBoostValueHi]$ on CIFAR-10 and
+$\celebaPriceBoost$ $[\celebaPriceBoostLo, \celebaPriceBoostHi]$ on
+CelebA-64; a $+1.25$~dB boost is worth $\celebaPriceBoostHigh$
+$[\celebaPriceBoostHighLo, \celebaPriceBoostHighHi]$; and the full
+radial-spectrum match, worth $+\priceMatchValue$ on CIFAR-10, is worth
+$\celebaPriceMatch$ $[\celebaPriceMatchLo, \celebaPriceMatchHi]$ (raw
+$p \celebaPriceMatchP$ for each). P4 holds, since FID responds more strongly
+to a larger correction; what differs is the sign.
 
-This is the prediction of \S\ref{sec:confound} confirmed on an independent
-task. There, the published $\alpha$ was shown to impose a timestep schedule
-correlated with Min-SNR at $|r| = 0.82$, so that a result credited to
-frequency balance might belong to the other axis. Here the two axes are
-separated by construction --- one objective reweights only frequency, another
-only timesteps --- and only the timestep one produces an effect the data can
-distinguish from noise.
+\paragraph{Incoherent noise lowers it.} Uniform white noise of $\pm0.5$~LSB
+per channel, added to the same samples without rounding, is worth
+$+\celebaNoiseHalfValue$ $[\celebaNoiseHalfValueLo, \celebaNoiseHalfValueHi]$,
+and noise of $\pm1$~LSB $+\celebaNoiseOneValue$
+$[\celebaNoiseOneValueLo, \celebaNoiseOneValueHi]$ (raw
+$p \celebaNoiseOneValueP$ for each), as on CIFAR-10
+(Section~\ref{sec:worth-curve}). Relative to the image spectrum, the noise,
+like the boost, adds energy mostly in the high band, yet the two move FID in
+opposite directions: direct evidence that $V$ depends on the operator, not
+only on the statistic it changes (P3). Hazard H1 thus also arises at a second
+resolution and operating point.
 
-The effect is a trade rather than an improvement. Min-SNR is simultaneously
-the best objective on prompt agreement and the worst on subject similarity
-($-0.0441$ against MSE), which is what a shift in where gradient mass falls
-along the schedule should look like: prompt-following and subject fidelity are
-formed at different noise levels, and emphasising one costs the other. We
-report it as a relocation of the trade-off, not as a better objective.
-
-\subsection{What five seeds can and cannot establish}
-
-The paired $t$-test reports $p = 0.0006$ for the Min-SNR effect on CLIP score.
-The Wilcoxon signed-rank test on the same five pairs reports $p = 0.0625$,
-which is its \emph{smallest attainable value} at $n = 5$: the statistic is
-bounded below by $2/2^{n}$, so no rank-based test on five seeds can reach
-\num{0.05} however large the effect. The two numbers do not disagree; the
-second is at its floor.
-
-We report both throughout for that reason. A rank test is the natural
-robustness check against the $t$-test's normality assumption, and at the seed
-counts common in this literature it cannot supply one. Reading its $p$-value
-as evidence of absence --- rather than as the floor it sits on --- would
-reverse this section's only positive finding.
-
-\subsection{What the correction is worth here: nothing the metrics can see}
-
-The pricing argument of \S\ref{sec:worth} transfers to this task directly, and
-gives a sharper answer than it did on CIFAR-10. We measure each run's
-high-frequency deficit against the instance images it was trained on, apply a
-Fourier post-process that removes that deficit, and re-score. No training is
-involved; the samples already exist.
-
-Both halves of the measurement behave. The baseline's samples sit
-\dbDeficitMSE~\si{\decibel} below the instance images in the high band and the
-audited objective's sit \dbDeficitAWWL~\si{\decibel} below, so the objective
-corrects \dbCorrection~\si{\decibel} here --- three times what it corrects on
-CIFAR-10, and evidence that the mechanism is not merely present but stronger on
-this task. The post-process drives the residual deficit to
-\dbResidual~\si{\decibel}: a near-complete correction, larger than any objective
-in the table achieves by training.
-
-It buys nothing. Pooled over ten runs, CLIP score moves by
-$+0.00000 \pm 0.00011$ and subject similarity by $+0.00001 \pm 0.00009$. The
-seed-to-seed spread of those metrics is \num{0.0091} and \num{0.0206}
-respectively --- two orders of magnitude larger than the effect of removing the
-spectral deficit entirely.
-
-The reason is not mysterious. CLIP's image tower resizes its input to
-$224\times224$; these samples are generated at $512\times512$. Everything above
-the Nyquist frequency of that resize is discarded before the network sees it,
-and the high band under discussion is largely above it. The metric is not
-insensitive to the correction so much as blind to it by construction.
-
-\paragraph{What follows from a price of zero.} Two things, and it is worth
-separating them. For this task, the practical conclusion is unusually clean:
-an objective cannot be credited with an improvement by a metric that cannot
-register its mechanism, so a frequency-aware loss has no headroom on
-CLIP-scored subject fine-tuning whatever it does to the spectrum. That is not a
-statement about this objective; it holds for the family.
-
-For the method, it is a precondition made visible. The pricing test asks what a
-statistic is worth \emph{in the metric the field reports}, and a price of zero
-has two readings --- the change does not matter, or the metric cannot see it ---
-which the test alone does not separate. Reporting the residual deficit
-alongside the price is what makes the second reading checkable: a correction
-that demonstrably landed and moved nothing is a fact about the metric.
+\paragraph{Attribution.} The two settings differ in the data; in the
+resolution, and with it the factor by which FID's Inception network upsamples
+the samples to 299 pixels (4.7 against 9.3); in the operating point (FID
+\celebaFIDMSEmean{} against
+\num[round-mode=places,round-precision=2]{\fidMSEmean}); and, since 200
+epochs cover a larger training set, in the number of optimiser steps (3.25
+times as many). The experiment does not separate these factors, and the
+band attribution of Section~\ref{sec:worth} was not repeated on CelebA-64.
+The price of the same spectral correction thus differs in sign between two
+settings, and a mechanism that pays in one cannot be assumed to pay in
+another. Because the value side needs only scoring passes, it can be computed
+before any training; on CelebA-64 it predicts that an objective whose only
+effect was this coherent correction would raise FID.

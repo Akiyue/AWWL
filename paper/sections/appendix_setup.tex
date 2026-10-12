@@ -1,0 +1,395 @@
+% Appendix B, experimental details. appendix.tex carries \section and
+% \label{app:setup}, so this file starts at subsection level. Every value below
+% is a design constant read from the released configuration files (configs/)
+% or from the code defaults they rely on; measured quantities come from
+% generated/numbers.tex.
+
+\subsection{CIFAR-10 recipe}
+\label{app:setup-cifar}
+
+Table~\ref{tab:setup} lists the settings of the CIFAR-10 matrix and of the
+settings derived from it. They are those of the released configuration files,
+and every run stores its resolved configuration next to its checkpoints.
+
+\begin{table}[tbp]
+\centering
+\footnotesize
+\setlength{\tabcolsep}{3pt}
+\caption{Training and evaluation settings. ``$=$'' means as in the CIFAR-10
+matrix. $s$ is the spectral statistic of Section~\ref{sec:pricing-test}. The
+learning rates of objectives with learnable parameters are given in
+Table~\ref{tab:arms}; the DreamBooth recipe is given in
+Appendix~\ref{app:setup-dreambooth}.}
+\label{tab:setup}
+\begin{tabular}{@{}>{\raggedright\arraybackslash}p{2.2cm}
+                >{\raggedright\arraybackslash}p{4.4cm}
+                >{\raggedright\arraybackslash}p{2.75cm}
+                >{\raggedright\arraybackslash}p{2.75cm}
+                >{\raggedright\arraybackslash}p{2.75cm}@{}}
+\toprule
+ & CIFAR-10 matrix & Four times the budget & CelebA-64 & Denoising \\
+\midrule
+\multicolumn{5}{@{}l}{\emph{Data and model}} \\
+Training set & CIFAR-10 train \citep{krizhevsky2009learning} & $=$
+  & CelebA train \citep{liu2015deep}, \num{162770} images & $=$ \\
+Resolution & $32\times32$ & $=$ & $64\times64$ (short side resized,
+  centre crop) & $=$ \\
+Preprocessing & scaled to $[-1,1]$, random horizontal flip & $=$ & $=$ & $=$ \\
+Network & U-Net, channels (128, 256, 256, 256), two residual blocks per
+  level, one self-attention layer (bottleneck only), dropout~0, 34.4\,M
+  parameters & $=$ & $=$ & $=$; maps the degraded image to the clean one \\
+Task & $T = 1000$, $\beta_t$ linear from $10^{-4}$ to $0.02$,
+  $\epsilon$-prediction, $t$ uniform & $=$ & $=$ & additive Gaussian noise,
+  $\sigma \sim \mathcal{U}[0.05, 0.5]$ on the $[-1,1]$ scale; $\sigma$ drives
+  the time embedding \\
+\midrule
+\multicolumn{5}{@{}l}{\emph{Optimisation}} \\
+Optimiser & AdamW \citep{loshchilov2019decoupled}, learning rate
+  $2\times10^{-4}$, $(\beta_1,\beta_2) = (0.9, 0.999)$, $\varepsilon_{\mathrm{A}} = 10^{-8}$,
+  weight decay $0.01$ & $=$, fused kernel & $=$ & $=$ \\
+Schedule & 500 linear warm-up steps, then cosine decay to zero & $=$, over
+  800 epochs & $=$ & $=$ \\
+Batch; epochs; steps & 128; 200; \num{78200} & 128; 800; \num{312800}
+  & 128; 200; \num{254200} & 128; 100; \num{39100} \\
+Clipping; precision & gradient norm 1.0; float16 mixed precision & $=$ & $=$
+  & $=$ \\
+Weight averaging & none (EMA arms: decay 0.9999) & EMA, decay 0.9999 & none
+  & none \\
+\texttt{torch.compile} & off & on & off & off \\
+Arms; seeds & Table~\ref{tab:arms}; 1--5 (1--3 for four arms) & MSE, AWWL;
+  1--3 & MSE; 1--5 & six objectives; 1--3 \\
+\midrule
+\multicolumn{5}{@{}l}{\emph{Evaluation}} \\
+Checkpoints & epoch 199; also 39, 79, 119, 159 for MSE, static, AWWL
+  & epochs 199 to 799, every 100 & epoch 199 & epoch 99 \\
+Sampler & DDIM-100, $\eta = 0$; DDPM-1000 at epoch 199 for MSE, static, AWWL
+  & DDIM-100; DDPM-1000 at epoch 799 & DDIM-100 & one forward pass \\
+Samples; reference & \num{10000}; all \num{\nRefImages} training images & $=$
+  & \num{10000}; all \num{162770} training images & 500 test images \\
+Metrics & FID, IS, KID, precision, recall; $s$ & FID, IS, KID; $s$ & FID;
+  $s$ & PSNR, SSIM, LPIPS, NIQE \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\paragraph{Network.}
+The denoiser is \texttt{UNet2DModel} of \texttt{diffusers} with plain residual
+blocks (\texttt{DownBlock2D} and \texttt{UpBlock2D}) at every resolution level
+and the library's default bottleneck, two residual blocks around one
+self-attention layer with 32 heads of dimension 8. It uses group normalisation
+with 32 groups, SiLU activations and a sinusoidal timestep embedding projected
+to 512 dimensions. The first three levels halve the resolution with strided
+convolutions, so the bottleneck operates at $4\times4$ on CIFAR-10 and at
+$8\times8$ on CelebA-64; the parameter count does not depend on the
+resolution.
+
+\paragraph{Sampling.}
+DDIM uses 100 timesteps spaced by 10 from $t = 990$ down to $t = 0$, with
+$\eta = 0$ and the predicted clean image clipped to $[-1,1]$. The ancestral
+sampler uses all 1000 steps with the posterior variance of the forward
+process. Samples are generated in batches of 256 from the sampling seed 12345,
+the same for every arm, training seed and checkpoint. The assignment of noise
+to images depends on the batch size, so the batch size is the same in every
+sampling run. Arms trained with EMA are sampled from the averaged weights.
+
+\paragraph{Execution.}
+Compilation with \texttt{torch.compile} and the fused AdamW kernel change
+kernel selection and the order of floating-point operations, so a compiled arm
+would not be exactly comparable with an uncompiled baseline. Both are off
+throughout the 200-epoch matrix. The four-times-budget runs use both, because
+both of their arms were trained for that comparison and neither is compared
+with an uncompiled run of the same budget.
+
+\subsection{Arms of the CIFAR-10 matrix}
+\label{app:setup-arms}
+
+Table~\ref{tab:arms} lists the arms with their settings. The timestep-only
+arm separates AWWL's timestep component from its frequency shape
+(Section~\ref{sec:confound}); it belongs to neither the main nor the pricing
+family but to a two-test family of its own (Appendix~\ref{app:setup-stats}). Every wavelet arm except the learned basis
+and the combination of all axes, which use the lifting transform, uses the
+Haar DWT with zero boundary
+extension. Arms with learnable loss parameters optimise them with AdamW in a
+parameter group of their own, at the learning rate given in the table and
+under the same schedule as the network.
+
+The VGG perceptual loss of the conference paper is not replicated. The
+trainer applies every objective to the pair $(\hat\epsilon, \epsilon)$, and
+the target $\epsilon$ is white Gaussian noise, whose VGG features carry no
+perceptual content, so the loss would not measure what its name suggests; at
+the $224\times224$ input of VGG-16 it would also upsample every $32\times32$
+batch 49-fold, twice per step.
+
+\begin{table}[tbp]
+\centering
+\footnotesize
+\setlength{\tabcolsep}{4pt}
+\caption{Arms of the CIFAR-10 matrix, grouped and named as in the result
+tables; MSE is the baseline. $\omega_b$ are the per-band weights of
+Eq.~\eqref{eq:family}; ``AWWL weighting'' is the averaged-detail weighting of
+Eq.~\eqref{eq:audited} and ``summed weighting'' the summed-detail weighting of
+Eq.~\eqref{eq:summed}, both with $\alpha = 0.2$ and $p = 1$ unless stated. A
+constraint on $\sum_b \omega_b$ or $\sum_b \omega_b^2$ holds at every noise
+level and rescales the weights without changing their ratios; the four
+normalisation controls impose such a constraint. Learning rates are those of
+the learnable loss parameters.}
+\label{tab:arms}
+\begin{tabular}{@{}>{\raggedright\arraybackslash}p{4.6cm}
+                >{\raggedright\arraybackslash}p{8.9cm}r@{}}
+\toprule
+Arm & Objective and settings & Seeds \\
+\midrule
+MSE & $\mathcal{L}_{\mathrm{simple}}$, Eq.~\eqref{eq:simple} & 5 \\
+\addlinespace[2pt]
+\multicolumn{3}{@{}l}{\emph{Conference-paper arms}} \\
+AWWL & AWWL weighting, one-level Haar DWT & 5 \\
+Static wavelet ($p = 0$) & AWWL weighting with $p = 0$ & 5 \\
+AWWL, detail bands summed & summed weighting & 5 \\
+\addlinespace[2pt]
+\multicolumn{3}{@{}l}{\emph{Normalisation controls}} \\
+AWWL, $\sum_b \omega_b = 1$ & AWWL weighting, $\sum_b \omega_b = 1$ & 5 \\
+AWWL, $\sum_b \omega_b = 0.5$ & AWWL weighting, $\sum_b \omega_b = 0.5$ & 5 \\
+AWWL, $\sum_b \omega_b^2$ fixed & AWWL weighting,
+  $\sum_b \omega_b^2 = \wSqMean$, the mean of $\sum_b \omega_b^2$ under the
+  AWWL weighting over the training timesteps & 5 \\
+AWWL, detail bands summed, $\sum_b \omega_b^2$ fixed & summed weighting,
+  $\sum_b \omega_b^2 = \wSqMeanSummed$, the mean of $\sum_b \omega_b^2$ under
+  the summed weighting over the training timesteps & 5 \\
+\addlinespace[2pt]
+\multicolumn{3}{@{}l}{\emph{Timestep schedule alone}} \\
+AWWL, timestep only & $S(\sigma_t)\,\mathcal{L}_{\mathrm{simple}}$, with $S$
+  the total weight of AWWL (Eq.~\eqref{eq:total}) and no frequency shape & 5 \\
+\addlinespace[2pt]
+\multicolumn{3}{@{}l}{\emph{Planted-mechanism control}} \\
+MSE, planted change & $\mathcal{L}_{\mathrm{simple}}$ on training images whose
+  spectrum carries AWWL's measured change: each channel's centred DFT is
+  multiplied by $10^{\bar\delta(r)/20}$ at integer radius $r$, with
+  $\bar\delta$ the seed mean of $s(A) - s(B)$ at epoch 199, in floating point
+  and clipped to $[0,1]$ before normalisation & 5 \\
+\addlinespace[2pt]
+\multicolumn{3}{@{}l}{\emph{Other weightings}} \\
+Min-SNR-$\gamma$ & $\kappa_t = \min(\mathrm{SNR}_t, \gamma)/\mathrm{SNR}_t$,
+  $\gamma = 5$ \citep{hang2023efficient} & 5 \\
+Raw SNR weighting & timestep weight $\kappa_t = \mathrm{SNR}_t$
+  (Section~\ref{sec:notation}) & 5 \\
+FFL & Eq.~\eqref{eq:ffl} with $a = 1$, weights computed per image
+  \citep{jiang2021focal} & 5 \\
+\addlinespace[2pt]
+\multicolumn{3}{@{}l}{\emph{Pixel losses}} \\
+$L_1$ & mean absolute residual & 5 \\
+Huber & Huber loss with threshold 1 \citep{huber1964robust} & 5 \\
+Charbonnier & mean of $\sqrt{r^2 + \varepsilon_{\mathrm{C}}^2}$, $\varepsilon_{\mathrm{C}} = 10^{-6}$
+  \citep{charbonnier1997deterministic} & 5 \\
+\addlinespace[2pt]
+\multicolumn{3}{@{}l}{\emph{Extensions (unnormalised)}} \\
+Per-sub-band schedules & summed weighting, $p = 2$ for $\mathrm{HH}$ and
+  $p = 1$ for $\mathrm{LH}$ and $\mathrm{HL}$ & 5 \\
+Spatially adaptive & summed weighting; each detail weight is multiplied by a
+  map of local activity of the target's coefficients ($3\times3$ mean of their
+  magnitude), raised to the power $1-\sigma_t$ and renormalised to mean 1 per
+  image and band; the target is the noise $\epsilon$, so the map carries no
+  image structure & 5 \\
+Multi-level (3 levels) & three-level Haar DWT; the approximation band keeps
+  $w_{\mathrm{LL}}$ and $w_{\det}$ is divided equally among the nine detail
+  bands & 5 \\
+Learned weighting & uncertainty weighting \citep{kendall2018multi}: a small
+  network maps $\sigma_t$ to one log-variance per band; learning rate
+  $10^{-3}$ & 5 \\
+GradNorm balancing & band weights set by GradNorm \citep{chen2018gradnorm}
+  on the output layer, asymmetry 1.5, weights renormalised to a fixed sum
+  after every step; learning rate $2.5\times10^{-2}$ & 5 \\
+Learned basis (lifting) & summed weighting on a learnable lifting transform
+  \citep{sweldens1998lifting} initialised at the Haar wavelet; its filters are
+  trained on the loss they define, with no orthogonality constraint; learning
+  rate $10^{-4}$ & 3 \\
+All axes combined & learned weighting, spatial modulation and lifting basis
+  together; learning rate $10^{-3}$ & 3 \\
+\addlinespace[2pt]
+\multicolumn{3}{@{}l}{\emph{With EMA}} \\
+MSE + EMA & MSE; EMA of the weights, decay 0.9999 & 3 \\
+AWWL + EMA & AWWL; EMA of the weights, decay 0.9999 & 3 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Four times the training budget}
+\label{app:setup-budget}
+
+The four-times-budget runs train MSE and AWWL for 800 epochs with EMA, three
+seeds each, with the settings of the corresponding column of
+Table~\ref{tab:setup}. The cosine
+schedule spans the whole run, so a longer run is also annealed more slowly: at
+epoch 199 these runs are at about \SI{85}{\percent} of the peak learning rate,
+whereas the 200-epoch runs have reached zero. Their intermediate checkpoints
+are therefore points of a different schedule, and a comparison across budgets
+is between endpoints: epoch 799 here against epoch 199 of the EMA arms of the
+matrix. Such a comparison also spans the change of execution path described
+above, and is descriptive; the tests compare AWWL with MSE within one budget.
+The same weights at epoch 799 are also sampled with DDPM-1000.
+
+\subsection{CelebA-64}
+\label{app:setup-celeba}
+
+The CelebA-64 runs keep the network and the optimisation of the CIFAR-10
+matrix, including the 200 epochs, so they change more than the data and the
+resolution. The larger training set gives \num{254200} optimiser steps
+against \num{78200}, 3.25 times as many, and the higher resolution also
+enlarges the bottleneck to $8\times8$ and lowers the factor by which FID
+upsamples the images to $299\times299$ from 9.3 to 4.7. The training set is
+the official CelebA training partition; each image is resized so that its
+short side is 64 pixels and centre-cropped to $64\times64$, which preserves
+the aspect ratio, and the FID reference set is the same partition prepared in
+the same way. The last incomplete batch of each epoch is dropped, which gives
+1271 steps per epoch; the CIFAR-10 loader keeps it (391 steps per epoch).
+Only MSE is trained, with five seeds; the pricing test on this dataset
+applies its operators to MSE's samples (Section~\ref{sec:celeba}). The
+spectral statistic uses the same definition on the $64\times64$ grid, with
+the bands again the thirds of the radial bins.
+
+\subsection{DreamBooth}
+\label{app:setup-dreambooth}
+
+DreamBooth \citep{ruiz2023dreambooth} fine-tunes the full U-Net of Stable
+Diffusion~1.5 \citep{rombach2022high} on one subject of the DreamBooth dataset
+(\emph{robot toy}, five instance images) with the instance prompt ``a photo of
+sks robot toy''. The images are resized and centre-cropped to $512\times512$.
+The VAE and the text encoder are frozen, and no prior-preservation loss is
+used. Training runs for 400 steps at batch size 1 with AdamW at a constant
+learning rate of $5\times10^{-6}$, gradient-norm clipping at 1.0 and float16
+mixed precision, under the model's own noise schedule ($T = 1000$,
+scaled-linear $\beta_t$ from $0.00085$ to $0.012$, $\epsilon$-prediction). The
+objectives therefore act on the residual of the four-channel $64\times64$
+latent. Ten objectives are compared: MSE, $L_1$, Huber, Charbonnier, raw SNR
+weighting, Min-SNR-$\gamma$ ($\gamma = 5$), the static wavelet arm ($\alpha = 0.8$,
+$p = 0$), AWWL with its published DreamBooth setting ($\alpha = 0.8$, $p = 2$),
+AWWL normalised to $\sum_b \omega_b = 1$, and the learned weighting (learning
+rate $10^{-3}$), each with five seeds.
+
+Each run generates 20 images for each of three prompts (the subject in a
+cyberpunk neon city, on a beach at sunset, and as a watercolour painting) with
+the pipeline's default PNDM scheduler, 50 steps, classifier-free guidance
+scale 7.5 and image seeds 1 to 20. CLIP score is the cosine similarity between
+the CLIP ViT-B/32 \citep{radford2021learning} embeddings of the prompt and the
+image; subject similarity is the cosine similarity between the embedding of
+the image and the mean embedding of the instance images. Both are averaged
+over the 60 images of a run. Radial spectra of generated and instance images
+are computed after resizing both to $512\times512$, because DFT magnitudes
+scale with the number of pixels and profiles taken at different resolutions
+are not comparable.
+
+\subsection{Gaussian denoising}
+\label{app:setup-restoration}
+
+The denoising task trains the CIFAR-10 U-Net as a one-step restorer: the input
+is a training image corrupted by additive Gaussian noise of standard
+deviation $\sigma \sim \mathcal{U}[0.05, 0.5]$ on the $[-1,1]$ intensity
+scale, clipped to that range, and the target is the clean image. The same
+$\sigma$ drives the band weights of the wavelet objectives and, mapped
+linearly onto the timestep range, the network's time embedding. Six objectives
+are compared with three seeds each: MSE, $L_1$, Charbonnier, the static
+wavelet arm ($\alpha = 0.5$, $p = 0$), AWWL at the balanced setting $\alpha = 0.5$,
+$p = 1$, and AWWL normalised to $\sum_b \omega_b = 1$. Evaluation uses 500
+images drawn from the CIFAR-10 test set, with noise levels evenly spaced over
+$[0.05, 0.5]$ and assigned in random order; the selection and the assignment
+are fixed by one seed and identical for every arm. PSNR uses peak value 1
+after rescaling to $[0,1]$; SSIM
+\citep{wang2004image} uses an $11\times11$ Gaussian window with standard
+deviation 1.5; LPIPS \citep{zhang2018unreasonable} uses the AlexNet backbone.
+NIQE \citep{mittal2013making} is implemented from its definition, with the
+pristine model fitted to the 500 clean evaluation images and the statistics of
+the restored set pooled over all its images, so its values are not comparable
+with NIQE values computed against the standard pristine corpus.
+
+\subsection{Metric implementations and software}
+\label{app:setup-metrics}
+
+FID uses \texttt{clean-fid} in its \texttt{clean} mode, with its port of the
+Inception-V3 network \citep{szegedy2016rethinking} and resizing to
+$299\times299$ inside the library. Inception Score (ten splits) and KID (100
+subsets of \num{1000} images, cubic polynomial kernel, against all reference
+images) come from \texttt{torch-fidelity} \citep{obukhov2020torchfidelity}.
+Precision and recall \citep{kynkaanniemi2019improved} come from
+\texttt{prdc} \citep{naeem2020reliable} with $k = 5$ nearest neighbours, on the
+2048-dimensional pool features of the ImageNet-trained Inception-V3 of
+\texttt{torchvision}, comparing the \num{10000} samples with the first
+\num{10000} training images in sorted file order. The wavelet transforms use
+\texttt{pytorch-wavelets}. The reported numbers were computed with PyTorch
+2.13, \texttt{diffusers} 0.39, \texttt{clean-fid} 0.1.35,
+\texttt{torch-fidelity} 0.4.0, \texttt{prdc} 0.2, \texttt{pytorch-wavelets}
+1.3.0 and \texttt{lpips} 0.1.4.
+
+\subsection{Statistical analysis}
+\label{app:setup-stats}
+
+Table~\ref{tab:families} lists the Holm families. Each family answers one
+question, and each hypothesis belongs to exactly one family. The budget family
+holds only the two 800-epoch contrasts; the 200-epoch operating points shown
+beside them in Table~\ref{tab:budget} are tested in the main, EMA and sampler
+families. The decomposition family tests the timestep-only arm against MSE,
+the effect of AWWL's timestep component, and AWWL against that arm, the effect of adding the frequency shape to the same
+total weight $S(\sigma_t)$. The arm's MRG lies outside every family and is
+reported with its raw $p$ only (Table~\ref{tab:pricing-arms}).
+
+\begin{table}[tbp]
+\centering
+\small
+\caption{Holm families. Each family, and within it each metric, is corrected
+separately; each hypothesis belongs to one family.}
+\label{tab:families}
+\begin{tabular}{@{}l>{\raggedright\arraybackslash}p{0.55\linewidth}rl@{}}
+\toprule
+Family & Hypotheses & Size & Reported in \\
+\midrule
+Main & each arm against MSE, CIFAR-10, epoch 199, DDIM-100 (with MSE + EMA;
+  without AWWL + EMA and the timestep-only arm) & \nFamilyMain
+  & Table~\ref{tab:compare-fid} \\
+EMA & AWWL + EMA against MSE + EMA & 1 & Table~\ref{tab:compare-fid} \\
+Confound & each normalisation control against the unnormalised AWWL with the
+  same detail reduction & \nFamilyConfound & Table~\ref{tab:confound} \\
+Decomposition & timestep-only arm against MSE; AWWL against the timestep-only
+  arm & 2 & Table~\ref{tab:confound} \\
+Extensions & each extension against AWWL with detail bands summed
+  & \nFamilyExtensions & Table~\ref{tab:extensions} \\
+Sampler & static wavelet arm and AWWL against MSE, DDPM-1000, epoch 199 & 2
+  & Table~\ref{tab:sampler} \\
+Budget & AWWL against MSE after 800 epochs, DDIM-100 and DDPM-1000 & 2
+  & Table~\ref{tab:budget} \\
+Pricing & MRG $= 0$ for the transplant of each stably trained arm of the
+  main family and of AWWL + EMA (Section~\ref{sec:worth-arms}) & \nFamilyPricing
+  & Table~\ref{tab:pricing-arms} \\
+DreamBooth & each objective against MSE & 9 & Table~\ref{tab:dreambooth} \\
+Denoising & each objective against MSE & 5 & Table~\ref{tab:restoration} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Pairing follows from the initialisation and data order that seed $k$ fixes
+for every arm (the sampling latents are common to all runs), and it reduces
+variance only if two arms' per-seed outcomes correlate positively. The
+estimated correlation between the per-seed FID of AWWL and of MSE is
+$\rSeedAWWL$ under DDIM-100 and $\rSeedAWWLddpm$ under DDPM-1000; with five pairs each, both are compatible with zero. The paired
+test is exact whatever the correlation. Near zero correlation it has fewer
+degrees of freedom than an unpaired test, and under a negative correlation an
+unpaired test would understate the variance of the difference and so be
+anti-conservative. The paired test is therefore used throughout.
+
+A non-significant difference is read through the effects its interval
+excludes, not as evidence of no effect. At five seeds and the observed
+standard deviation of the paired AWWL$-$MSE differences
+(\sdPairedAWWL~FID), a two-sided paired test at the $0.05$ level has 80\%
+power against a true difference of \mdeAWWL~FID. This describes the resolution
+of the design rather than a prior power calculation, and it is itself
+imprecise, because the standard deviation is estimated on four degrees of
+freedom.
+
+\subsection{Compute}
+\label{app:setup-compute}
+
+Training used NVIDIA RTX 5000 Ada GPUs (32~GB), one run per GPU. The
+\gpuHoursTotal{} GPU-hours of training over \nRunsTotal{} runs divide into
+\gpuHoursCifar{} for the \nRunsCifar{} runs of the CIFAR-10 matrix,
+\gpuHoursLong{} for the \nRunsLong{} four-times-budget runs,
+\gpuHoursCeleba{} for the \nRunsCeleba{} CelebA-64 runs,
+\gpuHoursRestoration{} for the \nRunsRestoration{} denoising runs and
+\gpuHoursDreambooth{} for the \nRunsDreambooth{} DreamBooth runs. Sampling,
+scoring and the pricing passes are not included in these figures.

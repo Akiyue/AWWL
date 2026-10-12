@@ -1,58 +1,70 @@
-\section{The mechanism works}
+\section{Does AWWL change the spectrum?}
 \label{sec:mechanism}
 
-\begin{table}[t]
-\centering
-\caption{Signed deviation from the real radial spectrum in decibels; negative
-means too little energy. The static ablation is indistinguishable from MSE.}
-\label{tab:bands}
-\begin{tabular}{lrrr}
-\toprule
-Configuration & Low & Mid & High \\
-\midrule
-MSE & $-0.36$ & $-0.80$ & $-2.20$ \\
-Static wavelet ($p{=}0$) & $-0.35$ & $-0.79$ & $-2.23$ \\
-Frequency-aware & $-0.31$ & $-0.56$ & $\mathbf{-1.79}$ \\
-\bottomrule
-\end{tabular}
-\end{table}
+Under the DDIM-100 sampler of the main matrix, AWWL changes the statistic $s$
+it names (Eq.~\eqref{eq:statistic}), so precondition P1
+(Section~\ref{sec:pricing-pre}) holds. A band's deficit is the reference
+level minus the samples'; an arm's change is its level minus that of the MSE
+run of the same seed (paired mean over five seeds, with its 95\%
+$t$-interval). MSE's deficit grows with frequency: \deficitLowMSE,
+\deficitMidMSE{} and \deficitHighMSE~dB in the low, mid and high thirds
+(Table~\ref{tab:bands}, Fig.~\ref{fig:spectrum}), so the premise of AWWL
+holds. Estimated from the first \num{2000} files of each directory instead
+(hazard H2, Section~\ref{sec:setup-metrics}), the high-band deficit is
+\deficitHighMSEsubset~dB.
 
-\begin{figure}[t]
-\centering
-\includegraphics[width=0.85\linewidth]{spectrum.png}
-\caption{Deviation from the real spectrum against normalised frequency. The
-MSE and static-wavelet curves coincide across the entire axis: the wavelet
-decomposition on its own changes nothing. Only the time-dependent schedule
-separates from them, and the gap widens with frequency.}
-\label{fig:spectrum}
-\end{figure}
+\input{tables/bands}
 
-Table~\ref{tab:bands} and Figure~\ref{fig:spectrum} establish three things.
+\guardedfigure{0.62}{spectrum.png}{Radial luminance spectrum minus the
+reference's (dB); epoch 199, DDIM-100, mean $\pm 1$ standard deviation over
+five seeds. Shading marks the mid third; beyond the dotted axial Nyquist radius
+lie only corner frequencies.}{fig:spectrum}
 
-The premise holds: the deficit is roughly sixfold worse at high frequency than
-at low. The objective's improvement is largest there in absolute terms
-(\SI{0.41}{\decibel} against \SI{0.05}{\decibel} at low frequency), so the
-correction lands where the method says it should. We state this precisely: the
-improvement is \emph{broadband with a high-frequency tilt}, not an exclusively
-high-frequency correction --- the proportional gain is largest in the mid band,
-and a referee will recompute.
+\paragraph{AWWL's change.}
+AWWL reduces the deficit in every band, by \corrLowAWWL~dB
+$[\corrLowAWWLLo, \corrLowAWWLHi]$, \corrMidAWWL~dB
+$[\corrMidAWWLLo, \corrMidAWWLHi]$ and \corrHighAWWL~dB
+$[\corrHighAWWLLo, \corrHighAWWLHi]$ in the low, mid and high bands, or
+\shareLowAWWL, \shareMidAWWL{} and \shareHighAWWL\% of the respective
+deficit. A broadband change is consistent with the design: the one-level Haar
+detail bands that AWWL up-weights at low noise nominally begin at radius 8,
+inside the mid third. The band means weight the radial bins equally,
+so the corner bins at radii 19--22, beyond the axial Nyquist radius of 16,
+take half the weight of the high-band mean although they hold only \nCoefCorner{} of
+its \nCoefHigh{} coefficients. Weighted by coefficient count, AWWL's
+high-band change is \corrHighWAWWL~dB $[\corrHighWAWWLLo, \corrHighWAWWLHi]$.
 
-The wavelet decomposition contributes nothing. The static ablation, which keeps
-the decomposition and removes only the dependence on $\sigma$, overlaps MSE
-across the whole frequency axis. The temporal schedule is the entire effect.
-The correction also survives the protocol of \S\ref{sec:confound}
-($p = 0.0056$), so it is a genuine frequency effect rather than the timestep
-confound in disguise.
+\paragraph{Band shape or timestep weight.}
+The normalisation controls of Section~\ref{sec:confound}, which remove the
+residual-independent timestep weight $S(\sigma)$ or fix
+$\sum_b \omega_b^2$, keep most of the mid- and high-band change
+(coefficient-weighted high band: \corrHighWSumFixed~dB
+$[\corrHighWSumFixedLo, \corrHighWSumFixedHi]$ with
+$\sum_b \omega_b = \levelSumFixed$, the constant-$S$ arm;
+Table~\ref{tab:confound}), whereas the timestep-only arm, the pixel MSE
+weighted by $S(\sigma)$, moves this statistic by only
+\corrHighWTimestep~dB $[\corrHighWTimestepLo, \corrHighWTimestepHi]$ against
+AWWL's \corrHighWAWWL~dB. AWWL's spectral change thus comes mainly from its
+$\sigma$-dependent band shape, which itself reweights timesteps through the
+residual (Proposition~\ref{prop:confound}(b)), so neither comparison
+isolates a frequency effect.
+Min-SNR-$\gamma$, a timestep reweighting without a frequency term, raises the
+unweighted high-band mean by a similar amount, \corrHighMinSNR~dB, but only
+through the corner bins. Weighted by coefficient count, its high-band change
+is \corrHighWMinSNR~dB $[\corrHighWMinSNRLo, \corrHighWMinSNRHi]$, and at
+radii 15--17 it is $\corrInnerHighMinSNR$~dB
+$[\corrInnerHighMinSNRLo, \corrInnerHighMinSNRHi]$, against
+\corrInnerHighAWWL~dB for AWWL. It leaves the mid band at MSE's level, and
+its change is worth $\valueArmMinSNR$~FID
+$[\valueArmMinSNRLo, \valueArmMinSNRHi]$, a small loss
+(Section~\ref{sec:worth-arms}). A band statistic alone thus does not identify the
+mechanism; the pricing test values the whole profile.
 
-\begin{figure}[t]
-\centering
-\includegraphics[width=\linewidth]{compare.png}
-\caption{Samples from identical initial noise, one row per objective. A
-\SI{0.4}{\decibel} high-frequency change at $32\times32$ is below the visible
-threshold.}
-\label{fig:compare}
-\end{figure}
-
-Finally, the correction is not visible. Figure~\ref{fig:compare} pairs samples
-on their initial latent, so any difference would be attributable to the
-objective; none is apparent.
+\paragraph{Sampler.}
+Under DDPM-1000, MSE's high-band deficit is \deficitHighMSEddpm{} instead of
+\deficitHighMSE~dB, a larger shift than any objective in Table~\ref{tab:bands}
+produces except FFL (Section~\ref{sec:second-member}), and AWWL does not
+reduce it ($\corrHighAWWLddpm$~dB; Table~\ref{tab:bands-ddpm}). P1 therefore
+holds under DDIM-100 only; under DDPM-1000, with almost no change to
+price, the MRG would be about AWWL's whole FID gap, $+\ddpmDAWWL$
+(Section~\ref{sec:sampler}).

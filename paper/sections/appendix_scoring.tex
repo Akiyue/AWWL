@@ -1,0 +1,93 @@
+% Implementation of the pricing test: the statistic, the boost, the scoring
+% path and the status of the preconditions (Table tab:preconditions), moved
+% from or cited by Section~\ref{sec:pricing-test}. No heading: the integrator
+% inputs this file inside Appendix~B (Experimental details), e.g. at the end
+% of the subsection on metric implementations. \label{app:scoring} takes the
+% number of the enclosing (sub)section and is cited from pricing.tex.
+\label{app:scoring}%
+The statistic of the pricing test, Eq.~\eqref{eq:statistic}, is computed on
+the luminance
+$y = 0.299\,x_{\mathrm{R}} + 0.587\,x_{\mathrm{G}} + 0.114\,x_{\mathrm{B}}$ of
+an RGB image $x$ with values in $[0, 255]$ (ITU-R BT.601 weights, unrounded).
+Its 2-D DFT $\hat y = F y$ on the $h \times w$ pixel grid is indexed by $u$ after the
+zero frequency is shifted to $c = (\lfloor h/2 \rfloor, \lfloor w/2 \rfloor)$;
+the integer radius is $r(u) = \lfloor \lVert u - c \rVert_2 \rfloor$, and the
+bins are $U_k = \{u : r(u) = k\}$, $k = 0, \dots, K-1$. Averaging decibels
+rather than power makes $s$ a geometric-mean spectrum, and the normalisation of
+$F$ cancels in every difference used. Because $s$ sees only the luminance, the
+operators impose its change on every colour channel, and a change in chroma is
+neither measured nor imposed separately. The boost is the gain
+$g = 10^{d \varrho / 20}$ of dose $d$ in decibels, with the raised-cosine ramp
+$\varrho = \frac12 - \frac12 \cos\big(\pi \min\{1, \max\{0, (\nu - 0.667)/0.5\}\}\big)$
+in the radius $\nu = \lVert u - c \rVert_2 / (\min(h, w)/2)$, measured in units
+of the axial Nyquist frequency. White noise $\xi$ is drawn independently for
+every pixel and channel and added without rounding.
+
+Every term of Eqs.~\eqref{eq:value}--\eqref{eq:accounting} is scored in
+floating point. The filtered images, clipped to $[0, 255]$ and not rounded,
+enter the `clean' resizer and feature extractor of \texttt{clean-fid}
+\citep{parmar2022aliased} directly: bicubic resizing of each channel to
+$299 \times 299$ in floating point, 2048-dimensional Inception-V3 pool
+features \citep{szegedy2016rethinking}, and the Fr\'echet distance to the
+reference features \citep{heusel2017gans}. FD$_{\text{DINOv2}}$
+(Section~\ref{sec:worth-dino}) replaces the extractor by DINOv2 ViT-L/14
+\citep{oquab2024dinov2}: images are resized bicubically to $224 \times 224$ in
+floating point, normalised with the ImageNet mean and standard deviation, and
+represented by the model's normalised class token, as in
+\citet{stein2023exposing} except that the resize acts on floating-point rather
+than 8-bit images, for original and filtered samples alike. For unmodified samples the path
+reproduces \texttt{clean-fid}'s file-based computation: the baseline FIDs
+agree with those of the training ledger to within \priceIdentityMaxDiff. The
+identity operator used for this check bypasses the filter and the clipping,
+so the filter path at zero change is exercised only by arms whose change is
+close to zero, such as the static weighting of the null control. Runs that
+reproduce an earlier 8-bit measurement round the filtered images, with or
+without a dither of $\pm 0.5$~LSB, to isolate the share of the value due to
+re-quantisation (hazard H1). The test costs one computation of $s$ per set
+and one feature-extraction pass per operator and seed.
+
+Two effects of the 8-bit input remain in the floating-point values. The
+operators act on $B$'s stored 8-bit samples, so a gain $g$ also rescales $B$'s
+own rounding-noise field; in each bin this is equivalent, in power, to
+adding independent noise of $g^2 - 1$ times the rounding variance, a field of
+the kind the white-noise control prices. Its share of $V$ is not separated, and
+it grows with $g^2 - 1$, most for the larger boost doses and the match.
+Clipping, in turn, makes the change measured back after an operator differ
+slightly from the imposed $\delta_i$, most for arms whose change is large;
+Table~\ref{tab:pricing-arms} reports the change measured back.
+
+Table~\ref{tab:preconditions} lists where each precondition of
+Section~\ref{sec:pricing-pre} is checked and whether it holds in the three
+settings.
+
+\begin{table}[tbp]
+\centering
+\small
+\caption{Status of the preconditions of the pricing test. Section: where the
+  CIFAR-10 evidence is; that for CelebA-64 is in Section~\ref{sec:celeba}, that
+  for DreamBooth in Section~\ref{sec:dreambooth}. P3: on CIFAR-10 every
+  spectral operator is a coherent radial gain and only the transplant imposes
+  $\delta_A$; on CelebA-64 the coherent gains and white noise move FID in
+  opposite directions. n/a: needs the AWWL
+  arm, which was not trained on CelebA-64; not run: the check was not
+  performed.}
+\label{tab:preconditions}
+\begin{tabular}{@{}llllll@{}}
+\toprule
+ & Requirement & Section & CIFAR-10 & CelebA-64 & DreamBooth \\
+\midrule
+P0 & no re-quantisation & \ref{sec:worth-curve} & met & met
+  & not met (8-bit) \\
+P1 & $s$ moves as scored & \ref{sec:mechanism} & DDIM-100 only & n/a
+  & met \\
+P2 & $\delta$ measured back & \ref{sec:worth-headline} & met (transplant)
+  & n/a & not run \\
+P3 & several operators & \ref{sec:worth-checks}
+  & coherent gains only & signs differ & boost only \\
+P4 & metric registers $s$ & \ref{sec:worth-curve}
+  & met & met & not met \\
+P5 & no interaction & \ref{sec:worth-checks} & consistent & n/a
+  & not run \\
+\bottomrule
+\end{tabular}
+\end{table}

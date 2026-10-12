@@ -1,0 +1,36 @@
+% Supplementary material for Section~\ref{sec:mechanism} (Does AWWL change the
+% spectrum?). Input under Appendix D (Supplementary results); starts at
+% subsection level. Moved floats keep their labels: tab:bands-ddpm,
+% fig:compare.
+
+\subsection{The spectrum under DDPM-1000, and paired samples}
+\label{app:supp-mechanism}
+
+Table~\ref{tab:bands-ddpm} repeats Table~\ref{tab:bands} for ancestral
+DDPM-1000 sampling of the same weights (Section~\ref{sec:mechanism}). Under
+this sampler the baseline's deficit is smaller in every band, the static
+wavelet arm stays close to the MSE level, as under DDIM-100 ($\corrHighStaticddpm$~dB
+$[\corrHighStaticddpmLo, \corrHighStaticddpmHi]$,
+$p = \corrHighStaticddpmP$), and AWWL's high-band change is a small shift
+towards a larger deficit ($\corrHighAWWLddpm$~dB
+$[\corrHighAWWLddpmLo, \corrHighAWWLddpmHi]$, $p = \corrHighAWWLddpmP$).
+
+\IfFileExists{tables/bands_ddpm1000.tex}{\input{tables/bands_ddpm1000}}{%
+  \begin{table}[tbp]\centering
+  \fbox{\textbf{tables/bands\_ddpm1000.tex not built}}
+  \caption{Not built.}\label{tab:bands-ddpm}
+  \end{table}}
+
+Figure~\ref{fig:compare} pairs uncurated samples of MSE, the static wavelet
+arm and AWWL drawn from the same initial noise. The difference row shows small
+differences spread over the whole image and larger ones concentrated at object
+boundaries and in small structures. Across the three sample rows, no
+systematic difference is apparent on inspection at print size.
+
+\guardedfigure{1.0}{compare.png}{Uncurated samples (indices 0--7) of training
+seed 1 at epoch 199, drawn with DDIM-100 ($\eta = 0$). All rows of a column
+start from the same initial noise, and DDIM with $\eta = 0$ is deterministic
+given that noise, so the images in a column differ only through the training
+objective. The last row is $\lvert \mathrm{AWWL} - \mathrm{MSE} \rvert$,
+averaged over the RGB channels and amplified eight-fold (darker is larger;
+differences of 32 or more grey levels print black).}{fig:compare}

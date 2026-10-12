@@ -1,0 +1,419 @@
+% Propositions and proofs cited from Sections~\ref{sec:background}, \ref{sec:family}
+% and \ref{sec:confound}. Input by appendix.tex under the section heading that
+% carries \label{app:theory}, so this file starts at subsection level. Uses the
+% `proposition' environment and amsthm's `proof', both set up in main.tex.
+
+\subsection{Setting}
+\label{app:theory-setting}
+
+Fix a timestep $t$ and write $\sigma = \sigma_t$. We treat one channel; with
+several channels every quantity below is averaged over channels, which leaves
+the statements unchanged. The residual is $r \in \mathbb{R}^N$. A linear map
+$W : \mathbb{R}^N \to \mathbb{R}^{N'}$ has its coefficients partitioned into $J$
+bands $b \in \mathcal{B}$, with $P_b$ the restriction to the $n_b$ coefficients
+of band $b$ and $\sum_b n_b = N'$. A complex unitary transform such as the DFT
+is covered by the same arguments with the adjoint $W^{*}$ in place of
+$W^\top$. For non-negative weights $\omega_b(\sigma)$
+the per-sample loss of Eq.~\eqref{eq:family} and the pixel mean square are
+\begin{equation}
+  \ell_\sigma(r) = \sum_{b} \frac{\omega_b(\sigma)}{n_b} \lVert P_b W r \rVert_2^2
+                 = r^\top Q_\sigma r,
+  \qquad
+  Q_\sigma = W^\top D_\sigma W,
+  \qquad
+  m(r) = \frac{\lVert r \rVert_2^2}{N},
+  \label{eq:app-loss}
+\end{equation}
+where $D_\sigma$ is diagonal with entry $\omega_b(\sigma)/n_b$ on the
+coefficients of band $b$. For $r \neq 0$ let
+$\rho_b(r) = \operatorname{ms}(P_b W r)/m(r)$ be the mean square of band $b$
+relative to the pixel mean square. If $W^\top W = I$, Eq.~\eqref{eq:parseval}
+gives $\sum_b (n_b/N)\,\rho_b(r) = 1$; for orthogonal $W$ ($N' = N$),
+$\rho_b \equiv 1$ when the residual's
+energy is spread over the coefficients in proportion to band size (as for a
+white residual in expectation).
+
+\subsection{Band weighting leaves the minimiser unchanged}
+\label{app:minimiser}
+
+\begin{proposition}[Population minimiser]
+\label{prop:minimiser}
+Let $W$ be injective, and let $\omega_b(\sigma_t) > 0$ for every band and
+timestep, with the weights depending on $(x_0, \epsilon, t)$ only through $t$.
+For a measurable predictor $f$ let
+$\mathcal{R}(f) = \mathbb{E}_{x_0,\epsilon,t}\big[\ell_{\sigma_t}\big(f(x_t,t) - \epsilon\big)\big]$.
+Then $\mathcal{R}(f) \ge \mathcal{R}(f^\star)$ with
+$f^\star(x_t, t) = \mathbb{E}[\epsilon \mid x_t, t]$, and equality holds only
+if $f = f^\star$ almost everywhere. In particular, every such weighting,
+including the uniform one that gives $\mathcal{L}_{\mathrm{simple}}$, has the
+same minimiser.
+\end{proposition}
+
+\begin{proof}
+For $r \neq 0$,
+$r^\top Q_\sigma r = \sum_b (\omega_b/n_b)\lVert P_b W r\rVert_2^2
+\ge (\min_b \omega_b/n_b)\,\lVert W r \rVert_2^2 > 0$, because $W r \neq 0$;
+so $Q_\sigma$ is positive definite. Fix $(x_t, t)$ and write
+$\mu = f^\star(x_t, t)$ and $y = f(x_t, t)$. Since $Q_{\sigma_t}$, $y$ and
+$\mu$ are functions of $(x_t, t)$ and
+$\mathbb{E}[\epsilon - \mu \mid x_t, t] = 0$, the cross term vanishes and
+\begin{equation*}
+  \mathbb{E}\big[(y-\epsilon)^\top Q_{\sigma_t} (y-\epsilon) \,\big|\, x_t, t\big]
+  = (y-\mu)^\top Q_{\sigma_t} (y-\mu)
+  + \mathbb{E}\big[(\epsilon-\mu)^\top Q_{\sigma_t} (\epsilon-\mu) \,\big|\, x_t, t\big].
+\end{equation*}
+The second term does not depend on $f$ and is finite because
+$\mathbb{E}\lVert\epsilon\rVert^2 < \infty$; the first is non-negative and
+vanishes only at $y = \mu$. Taking the expectation over $(x_t, t)$ completes
+the proof.
+\end{proof}
+
+Three remarks delimit the result. (i) The argument is unchanged if $\ell$ is
+multiplied by a positive timestep weight, so it covers the normalised
+weightings of Section~\ref{sec:confound} and any product of a timestep
+weighting with a band weighting. (ii) What the weighting does change is the
+attained minimum (the second term above) and, when the model class does not
+contain $f^\star$, which approximation is optimal: by the decomposition above,
+the best predictor in a restricted class is the one closest to $f^\star$ in
+the norm $\big(\mathbb{E}[(f - f^\star)^\top Q_{\sigma_t} (f - f^\star)]\big)^{1/2}$,
+which depends on $\omega$. (iii) The proposition does not cover
+weights that depend on $\epsilon$. If the weights are computed from the target,
+as in the spatially adaptive arm of Section~\ref{sec:extensions}, whose map is
+built from the target's coefficients, the loss is a quadratic form
+$Q(\epsilon)$ and its minimiser is the weighted conditional mean
+$\mathbb{E}[Q(\epsilon) \mid x_t, t]^{-1}\,\mathbb{E}[Q(\epsilon)\,\epsilon \mid x_t, t]$.
+If the weights are computed from the residual and detached, as in FFL
+(Eq.~\eqref{eq:ffl}), training does not descend a fixed objective; its
+stationary points satisfy
+$\mathbb{E}\big[F^{*}\operatorname{diag}(w(R))\,R \,\big|\, x_t, t\big] = 0$
+with $R = F(f - \epsilon)$. Because $w$ is even in $R$, the conditional mean
+satisfies this condition when the conditional law of $\epsilon$ is symmetric
+about its mean, but not in general.
+
+\subsection{The timestep component of a band weighting}
+\label{app:confound}
+
+\begin{proposition}[Timestep and shape decomposition]
+\label{prop:confound}
+Let $W$ be orthogonal ($N' = N$ and $W^\top W = I$) and let the weights
+$\omega_b(\sigma) \ge 0$ depend on $\sigma$ only. Write $S(\sigma) = \sum_b \omega_b(\sigma)$ and
+$\delta_b(\sigma) = \omega_b(\sigma) - (n_b/N)\,S(\sigma)$, so that
+$\sum_b \delta_b = 0$. Then:
+\begin{enumerate}
+  \item[(a)] For every residual $r$,
+  \begin{equation}
+    \ell_\sigma(r)
+    = S(\sigma)\, m(r)
+    + \sum_b \delta_b(\sigma)\,\big[\operatorname{ms}(P_b W r) - m(r)\big]
+    = m(r) \sum_b \omega_b(\sigma)\,\rho_b(r) .
+    \label{eq:shape-decomp}
+  \end{equation}
+  The second term vanishes identically when $\omega_b \propto n_b$, and for a
+  given residual whenever $\rho_b(r) = 1$ for every band with
+  $\delta_b \neq 0$.
+  \item[(b)] Let
+  $\bar\rho_b(t) = \mathbb{E}[\operatorname{ms}(P_b W r) \mid t]/\mathbb{E}[m(r) \mid t]$.
+  Then $\mathbb{E}[\ell_{\sigma_t}(r) \mid t] = \Lambda(t)\,\mathbb{E}[m(r) \mid t]$ with
+  \begin{equation}
+    \Lambda(t) = \sum_b \omega_b(\sigma_t)\,\bar\rho_b(t)
+    = S(\sigma_t) + \sum_b \delta_b(\sigma_t)\,\big(\bar\rho_b(t) - 1\big)
+    = \sum_b \frac{N}{n_b}\,\omega_b(\sigma_t)\, e_b(t),
+    \label{eq:eff-weight}
+  \end{equation}
+  where $e_b(t) = (n_b/N)\,\bar\rho_b(t)$ are the residual's band energy
+  fractions at timestep $t$ ($\sum_b e_b = 1$). The effective timestep weight
+  $\Lambda(t)$ is thus a convex combination of the pixel-equivalent weights
+  $(N/n_b)\,\omega_b(\sigma_t)$, and lies between their minimum and maximum.
+  \item[(c)] For AWWL (Eq.~\eqref{eq:audited}; $J = 4$, $n_b = N/4$),
+  $S(\sigma) = (1-\alpha) + (2\alpha-1)\lambda_p(\sigma)$ and
+  \begin{align}
+    \ell_\sigma(r) &= S(\sigma)\, m(r)
+      + \Big(w_{\mathrm{LL}}(\sigma) - \frac{w_{\det}(\sigma)}{3}\Big)
+        \big[\operatorname{ms}(r_{\mathrm{LL}}) - m(r)\big],
+    \label{eq:awwl-decomp}\\
+    \Lambda(t) &= \frac{4}{3}\,w_{\det}(\sigma_t)
+      + \Big(w_{\mathrm{LL}}(\sigma_t) - \frac{w_{\det}(\sigma_t)}{3}\Big)\,\bar\rho_{\mathrm{LL}}(t),
+    \label{eq:awwl-eff}
+  \end{align}
+  with $\bar\rho_{\mathrm{LL}}(t) \in [0, 4]$. The residual-independent weight
+  $S$ is constant in $\sigma$ if and only if $\alpha = 1/2$ (for $p > 0$). For
+  $\alpha \neq 1/2$ and any function $\phi$ of the timestep, the correlation over
+  timesteps satisfies
+  $\operatorname{corr}_t\big(S(\sigma_t), \phi(t)\big)
+  = \operatorname{sign}(2\alpha - 1)\,\operatorname{corr}_t\big(\lambda_p(\sigma_t), \phi(t)\big)$,
+  independently of $\lvert\alpha - 1/2\rvert$.
+  \item[(d)] Rescaling the AWWL weights to a constant total $c$, that is,
+  replacing $\omega_b$ by $\tilde\omega_b = c\,\omega_b/S$, removes the
+  residual-independent timestep weight exactly and leaves
+  $\tilde\Lambda(t) = c + c\,\big(w_{\mathrm{LL}} - w_{\det}/3\big)\big(\bar\rho_{\mathrm{LL}}(t) - 1\big)/S$,
+  evaluated at $\sigma_t$. It equals $c$ at every timestep if and only if, at
+  every timestep, either the approximation band carries a quarter of the
+  residual's energy ($\bar\rho_{\mathrm{LL}}(t) = 1$) or the four per-band
+  weights are equal ($w_{\mathrm{LL}} = w_{\det}/3$, which holds only at
+  $\lambda_p(\sigma) = (1-\alpha)/(1+2\alpha)$).
+\end{enumerate}
+\end{proposition}
+
+\begin{proof}
+(a) Since $W^\top W = I$, Eq.~\eqref{eq:parseval} gives
+$\sum_b n_b \operatorname{ms}(P_b W r) = \lVert r \rVert_2^2 = N m(r)$. Hence
+\[
+  \textstyle\sum_b \delta_b \operatorname{ms}(P_b W r)
+  = \ell_\sigma(r) - (S/N)\sum_b n_b \operatorname{ms}(P_b W r)
+  = \ell_\sigma(r) - S\,m(r),
+\]
+and $\sum_b \delta_b\, m(r) = 0$, which gives the first equality; the second is
+the definition of $\rho_b$. If
+$\omega_b \propto n_b$ then $\delta_b = 0$ for all $b$.
+(b) Take conditional expectations in Eq.~\eqref{eq:shape-decomp} at timestep
+$t$ and divide by $\mathbb{E}[m \mid t]$. The last form uses
+$\omega_b \bar\rho_b = (N/n_b)\,\omega_b\, e_b$; $e_b \ge 0$ and
+$\sum_b e_b = 1$ by Eq.~\eqref{eq:parseval}.
+(c) With four bands of size $N/4$, $\sum_b \operatorname{ms}(r_b) = 4\,m(r)$, so
+$\sum_{b \in \{\mathrm{LH},\mathrm{HL},\mathrm{HH}\}} \big(\operatorname{ms}(r_b) - m\big)
+= -\big(\operatorname{ms}(r_{\mathrm{LL}}) - m\big)$. The three detail bands
+share $\delta_{\det} = w_{\det}/3 - S/4$, and
+$\delta_{\mathrm{LL}} - \delta_{\det} = w_{\mathrm{LL}} - w_{\det}/3$, so the
+second term of Eq.~\eqref{eq:shape-decomp} equals
+$(\delta_{\mathrm{LL}} - \delta_{\det})\big(\operatorname{ms}(r_{\mathrm{LL}}) - m\big)$.
+Substituting $S = w_{\mathrm{LL}} + w_{\det}$ gives the expression for
+$\Lambda$. The bound $\bar\rho_{\mathrm{LL}} \le 4$ follows from
+$\lVert r_{\mathrm{LL}} \rVert^2 \le \lVert r \rVert^2$. $S$ is affine in
+$\lambda_p$ with slope $2\alpha - 1$ by Eq.~\eqref{eq:total}, and $\lambda_p$
+is strictly increasing on $(0,1)$ for $p > 0$; a Pearson correlation is
+invariant under increasing affine maps of either argument and changes sign
+under decreasing ones.
+(d) Replace $\omega_b$ by $c\,\omega_b/S$ in (c).
+\end{proof}
+
+In Eq.~\eqref{eq:shape-decomp} the first term is the pixel MSE weighted by
+$S(\sigma_t)$, a timestep weight that does not depend on the residual. The
+second applies the zero-sum weights $\delta_b$ to the departures of the band
+mean squares from the pixel mean square; it carries the frequency shape of the
+weighting. By Eq.~\eqref{eq:family-x0}, the weight that the objective places on
+the clean-image error at timestep $t$ is $\mathrm{SNR}_t\,\Lambda(t)$. Parts
+(b) and (d) locate the part of the timestep weighting that no rescaling of the
+weights by a function of $\sigma$ fixed in advance removes: the interaction of the zero-sum part $\delta_b$ with the
+residual's band energy fractions, which change with $\sigma_t$
+(Proposition~\ref{prop:residual}).
+
+\subsection{What the optimiser receives}
+\label{app:scale}
+
+\begin{proposition}[Loss scale and gradient scale]
+\label{prop:scale}
+\begin{enumerate}
+  \item[(a)] Consider the AdamW update
+  \begin{equation}
+    \theta_{k+1} = (1 - \eta_k\zeta)\,\theta_k
+      - \eta_k\,\frac{\hat m_k}{\sqrt{\hat v_k} + \varepsilon_{\mathrm{A}}},
+    \label{eq:adamw}
+  \end{equation}
+  where $\eta_k$ is the learning rate, $\zeta$ the decoupled weight decay,
+  $\hat m_k$ and $\hat v_k$ the bias-corrected exponential moving averages of
+  the gradients $g_k$ and of $g_k \odot g_k$, and the square root and division
+  act elementwise. If every gradient is multiplied by a constant $c > 0$, the
+  iterates are those of the unscaled run with $\varepsilon_{\mathrm{A}}$
+  replaced by $\varepsilon_{\mathrm{A}}/c$. With gradient-norm clipping at a
+  threshold $\tau$ applied before the update, the same holds if clipping is
+  inactive on every step of both runs, and the two runs coincide exactly if it
+  is active on every step of both.
+  \item[(b)] For one sample at noise level $\sigma$,
+  $\nabla_\theta \ell_\sigma = \sum_b \omega_b(\sigma)\, q_b$ with
+  $q_b = \nabla_\theta \operatorname{ms}(P_b W r)$. If $\lVert q_b \rVert = G$ for
+  every band, then $\lVert \nabla_\theta \ell_\sigma \rVert \le G\,S(\sigma)$, with
+  equality when the $q_b$ are positively parallel. If in addition
+  $\langle q_b, q_c \rangle \ge 0$ for all $b, c$, then
+  $\lVert \nabla_\theta \ell_\sigma \rVert \ge G\,\big(\sum_b \omega_b(\sigma)^2\big)^{1/2}$,
+  with equality when the $q_b$ are mutually orthogonal.
+  \item[(c)] Let $W$ be orthogonal ($N' = N$, $W^\top W = W W^\top = I$). The
+  output-space band gradients
+  $h_b = \nabla_{\hat\epsilon} \operatorname{ms}(P_b W r) = (2/n_b)\, W^\top P_b^\top P_b W r$
+  are mutually orthogonal, so
+  \begin{equation}
+    \lVert \nabla_{\hat\epsilon}\, \ell_\sigma \rVert_2^2
+    = \sum_b \Big(\frac{2\,\omega_b(\sigma)}{n_b}\Big)^2 \lVert P_b W r \rVert_2^2 ,
+    \label{eq:gradnorm}
+  \end{equation}
+  and for $J$ bands of equal size with $\rho_b(r) = 1$,
+  $\lVert \nabla_{\hat\epsilon}\, \ell_\sigma \rVert_2 = (2\sqrt{J}/N)\,\lVert r \rVert_2\,\big(\sum_b \omega_b^2\big)^{1/2}$.
+  For every $W$, the component of $\nabla_{\hat\epsilon}\, \ell_\sigma$ along
+  the pixel-MSE gradient $\nabla_{\hat\epsilon}\, m$ has coefficient
+  \begin{equation}
+    \frac{\langle \nabla_{\hat\epsilon}\, \ell_\sigma, \nabla_{\hat\epsilon}\, m \rangle}
+         {\lVert \nabla_{\hat\epsilon}\, m \rVert_2^2}
+    = \frac{\ell_\sigma(r)}{m(r)} = \sum_b \omega_b(\sigma)\,\rho_b(r),
+    \label{eq:mse-component}
+  \end{equation}
+  which equals $S(\sigma)$ when $\rho_b(r) = 1$ for every band.
+  \item[(d)] For $\omega \in [0,\infty)^J$ with $S = \sum_b \omega_b$,
+  \begin{equation}
+    S^2/J \;\le\; \textstyle\sum_b \omega_b^2 \;\le\; S^2 ,
+    \label{eq:cs-bounds}
+  \end{equation}
+  with equality on the left if and only if the weights are equal, and on the
+  right if and only if at most one weight is non-zero. Holding $S$ fixed
+  therefore leaves $\sum_b \omega_b^2$ free within a factor $J$, and holding
+  $\sum_b \omega_b^2$ fixed leaves $S$ free within a factor $\sqrt{J}$.
+\end{enumerate}
+\end{proposition}
+
+\begin{proof}
+(a) $\hat m_k$ is linear in $g_1, \dots, g_k$ and $\hat v_k$ in
+$g_1 \odot g_1, \dots, g_k \odot g_k$, so they scale by $c$ and $c^2$, and
+$c\,\hat m_k/(c\sqrt{\hat v_k} + \varepsilon_{\mathrm{A}})
+= \hat m_k/(\sqrt{\hat v_k} + \varepsilon_{\mathrm{A}}/c)$. The weight-decay term
+does not involve the gradient, and the claim follows by induction on $k$.
+Clipping multiplies $g$ by $\min(1, \tau/\lVert g \rVert)$; if it is inactive on
+every step it changes nothing, and if it is active on every step both runs
+receive $\tau\, g/\lVert g \rVert$, which does not depend on $c$.
+(b) The upper bound is the triangle inequality. For the lower bound,
+$\lVert \sum_b \omega_b q_b \rVert^2
+= G^2 \sum_b \omega_b^2 + \sum_{b \neq c} \omega_b \omega_c \langle q_b, q_c \rangle
+\ge G^2 \sum_b \omega_b^2$, since $\omega \ge 0$.
+(c) $\nabla_{\hat\epsilon}\, \ell_\sigma = 2 Q_\sigma r = \sum_b \omega_b h_b$. For
+$b \neq c$,
+$\langle h_b, h_c \rangle \propto r^\top W^\top P_b^\top P_b\, W W^\top P_c^\top P_c W r = 0$,
+because $W W^\top = I$ and $P_b P_c^\top = 0$; and
+$\lVert h_b \rVert^2 = (4/n_b^2)\lVert P_b W r \rVert^2$, because $W^\top$ and
+$P_b^\top$ preserve norms. With $n_b = N/J$ and
+$\lVert P_b W r \rVert^2 = \lVert r \rVert^2/J$, Eq.~\eqref{eq:gradnorm} gives the
+stated norm. Finally $\nabla_{\hat\epsilon}\, m = 2r/N$, and
+$\langle 2 Q_\sigma r, 2r/N \rangle / \lVert 2r/N \rVert^2
+= N\, r^\top Q_\sigma r / \lVert r \rVert^2 = \ell_\sigma(r)/m(r)$.
+(d) The left inequality is the Cauchy--Schwarz inequality
+$(\sum_b 1 \cdot \omega_b)^2 \le J \sum_b \omega_b^2$. The right one follows
+from $S^2 = \sum_b \omega_b^2 + \sum_{b \neq c} \omega_b \omega_c$ with every cross
+product non-negative, and it is an equality exactly when every cross product
+vanishes.
+\end{proof}
+
+Part (c) is the orthogonal case of part (b): in output space the band
+gradients are orthogonal, and with equal band energies the gradient norm scales
+with $(\sum_b \omega_b^2)^{1/2}$. The parameter gradient is their image under
+the transposed network Jacobian, which can align them; in the extreme case the
+images are parallel and the norm scales with $S$. When the images have equal
+norms and non-negative inner products (the assumptions of part (b)), the
+per-timestep gradient contribution therefore lies between the two cases, and
+the two normalisations,
+$S$ held fixed and $\sum_b \omega_b^2$ held fixed, are the natural bounding
+controls: the first fixes the contribution in the parallel case (and, in output
+space, the component along the pixel-MSE gradient), the second fixes it in the
+orthogonal case. By part (d) no rescaling fixes both unless the weights are
+uniform, and both statements assume $\rho_b = 1$, the case in which the
+residual-dependent term of Proposition~\ref{prop:confound} vanishes. By part
+(a), neither control depends on the value of the constant it holds fixed,
+except through $\varepsilon_{\mathrm{A}}$ and clipping; only the variation of
+the weights across timesteps and bands matters.
+
+For AWWL at $\alpha = 0.2$, $p = 1$ on the CIFAR-10 schedule, holding $S$
+fixed leaves $\sum_b \omega_b^2$ varying by a factor of $4.00 = J$ over the
+training timesteps. Both bounds of Eq.~\eqref{eq:cs-bounds} are approached:
+the left one at $\lambda_p(\sigma) = (1-\alpha)/(1+2\alpha)$, that is
+$\sigma = 4/7$, where the four per-band weights are equal, and the right one as
+$\sigma \to 1$, where all weight moves to the approximation band.
+
+\subsection{The residual spectrum under a Gaussian model}
+\label{app:residual}
+
+\begin{proposition}[Residual of the optimal predictor]
+\label{prop:residual}
+Let $x_0 \sim \mathcal{N}(0, C)$ with $C = U \operatorname{diag}(P)\, U^\top$ for
+an orthonormal basis $U$. For a stationary (circulant) covariance, $U$ can be
+taken to be the real Fourier basis and $P$ is the power spectrum. Let
+$\hat\epsilon = \mathbb{E}[\epsilon \mid x_t]$ be the optimal predictor at
+timestep $t$ (Proposition~\ref{prop:minimiser}). Then the coordinates of
+$U^\top(\hat\epsilon - \epsilon)$ are independent, with variances
+\begin{equation}
+  v_t(u) = \frac{\bar\alpha_t P(u)}{\bar\alpha_t P(u) + \sigma_t^2} .
+  \label{eq:gaussian-residual}
+\end{equation}
+For two coordinates with $P(u) > P(u') > 0$, the ratio $v_t(u)/v_t(u')$
+increases strictly from $1$ to $P(u)/P(u')$ as $\mathrm{SNR}_t$ decreases from
+$\infty$ to $0$.
+\end{proposition}
+
+\begin{proof}
+Write $z = U^\top x_0$, $\tilde\epsilon = U^\top \epsilon$ and
+$y = U^\top x_t = \sqrt{\bar\alpha_t}\, z + \sigma_t \tilde\epsilon$. Because $U$ is
+orthonormal, $\tilde\epsilon \sim \mathcal{N}(0, I)$, and $z$ and $\tilde\epsilon$ are independent with
+independent coordinates, so the problem decouples across coordinates. For one
+coordinate, $(\tilde\epsilon_u, y_u)$ is jointly Gaussian with
+$\operatorname{Var}(y_u) = \bar\alpha_t P(u) + \sigma_t^2$ and
+$\operatorname{Cov}(\tilde\epsilon_u, y_u) = \sigma_t$, so
+$\mathbb{E}[\tilde\epsilon_u \mid y] = \sigma_t\, y_u/(\bar\alpha_t P(u) + \sigma_t^2)$ and
+the residual variance is
+$1 - \sigma_t^2/(\bar\alpha_t P(u) + \sigma_t^2) = v_t(u)$; each residual
+coordinate depends only on $(z_u, \tilde\epsilon_u)$, hence independence. With
+$s = 1/\mathrm{SNR}_t = \sigma_t^2/\bar\alpha_t$,
+$v_t(u)/v_t(u') = \big(P(u)/P(u')\big)\,\big(P(u') + s\big)/\big(P(u) + s\big)$,
+whose derivative in $s$ has the sign of $P(u) - P(u') > 0$; it equals $1$ at
+$s = 0$ and tends to $P(u)/P(u')$ as $s \to \infty$.
+\end{proof}
+
+For natural images $P$ decreases with frequency, so the optimal predictor's
+residual is nearly white at low noise ($v_t \to 1$) and shifts its energy
+towards low frequencies as the noise level grows. The normalised residual
+spectra $v_t/\sum_u v_t(u)$ are ordered in the likelihood-ratio sense in $P$
+(for $\sigma_{t'} > \sigma_t$ the ratio $v_{t'}(u)/v_t(u)$ increases with
+$P(u)$), so the share of residual energy in any band whose squared frequency
+response is an increasing function of $P$ grows with $\sigma_t$. The Haar
+approximation band is not exactly of this form, because its response is not a
+function of radial frequency alone, but its response is concentrated at the
+low frequencies where a natural-image spectrum is largest; evaluating
+$\bar\rho_{\mathrm{LL}}(t)$ directly for $P(u) \propto \lvert u \rvert^{-2}$ on
+the CIFAR-10 schedule gives a monotone increase from $1$ at the lowest noise
+level. In Proposition~\ref{prop:confound} this makes $\Lambda(t)$ depend on the
+timestep even when $S$ is held fixed. How far a trained model's residual
+follows this pattern is an empirical question.
+
+\subsection{Gradient-norm bounds}
+\label{app:gradnorm}
+
+The two controls of Section~\ref{sec:confound-controls} hold different
+quantities fixed because the loss scale and the gradient scale of a band
+weighting differ. For one sample,
+$\nabla_\theta \ell_\sigma = \sum_b \omega_b(\sigma)\, q_b$, with $q_b$ the
+parameter gradient of the mean square of band $b$. If the $q_b$ have a common
+norm $G$ and non-negative inner products, Proposition~\ref{prop:scale}(b)
+gives
+\begin{equation}
+  G \Big(\sum_b \omega_b(\sigma)^2\Big)^{1/2}
+  \;\le\; \lVert \nabla_\theta \ell_\sigma \rVert
+  \;\le\; G\, S(\sigma).
+  \label{eq:gradscale}
+\end{equation}
+The upper bound holds with equality when the band gradients are parallel, the
+lower when they are orthogonal, as the output-space band gradients are
+(Proposition~\ref{prop:scale}(c)). Holding $S$ fixed therefore fixes the
+per-timestep gradient weight in the parallel case and, for residuals with
+equal band energies, the output-space component along the pixel-MSE gradient
+(Eq.~\eqref{eq:mse-component}); holding $\sum_b \omega_b^2$ fixed fixes it in
+the orthogonal case. By Eq.~\eqref{eq:cs-bounds} with $J = 4$ bands, fixing
+either quantity leaves the other free within a factor of $\sqrt{J} = 2$ in
+norm, and both limits are approached on the CIFAR-10 schedule
+(Fig.~\ref{fig:gradient-scale}; the points at which they are reached are given
+at the end of Appendix~\ref{app:scale}). Neither control is therefore the
+stronger: each fixes one end of Eq.~\eqref{eq:gradscale}. The first control
+multiplies the AWWL loss by $c/S(\sigma)$ and the second by
+$\big(\levelSqFixed / \sum_b \omega_b(\sigma)^2\big)^{1/2}$. Both statements
+about the gradient weight assume $\rho_b(r) = 1$; for other residuals the
+residual-dependent term of Proposition~\ref{prop:confound} remains, and
+neither control fixes the effective timestep weight $\Lambda(t)$.
+
+\guardedfigure{1.0}{gradient_scale.png}{%
+  What each control holds fixed, for the released form of AWWL at
+  $\alpha = 0.2$, $p = 1$, with per-band weights
+  $\omega_b = (w_{\mathrm{LL}}, w_{\det}/3, w_{\det}/3, w_{\det}/3)$ as in
+  the panel titles. (a) The total
+  $S = \sum_b \omega_b$, which sets the loss scale at each timestep and the
+  gradient weight when the band gradients are parallel. (b)
+  $\sum_b \omega_b^2$, which sets the squared gradient weight when the band
+  gradients are orthogonal with equal norms (Eq.~\eqref{eq:gradscale}). Each
+  curve is divided by AWWL's mean of the same quantity over the training
+  timesteps (\wTotalMean{} in (a), \wSqMean{} in (b)). Solid: AWWL; dotted:
+  total fixed at \levelSumFixed; dash-dotted: sum of squares fixed at
+  \levelSqFixed. Fixing either quantity leaves the other varying, by a factor
+  of $4$ in (b) (of $2$ in its square root) and of $2$ in (a). Horizontal
+  axes: training timestep $t$, sampled uniformly; top axes:
+  $\sigma_t$.}{fig:gradient-scale}

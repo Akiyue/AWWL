@@ -1,0 +1,232 @@
+\section{The pricing test}
+\label{sec:pricing-test}
+\label{sec:pricing-protocol}
+
+The pricing test splits an objective's effect on a metric into the value of
+its change in a statistic and the cost of all else it alters, by imposing that
+change on the baseline's samples (Fig.~\ref{fig:teaser}(a)).
+
+\subsection{Definition}
+\label{sec:pricing-def}
+
+Let $B$ and $A$ be sets of $n$ samples from a baseline model and from a model
+trained with the objective under test, drawn with the same sampler and
+sampling seed, and let $M(X)$ be a metric that scores a set $X$ against a
+reference set $R$, lower being better (FID throughout). The objective claims to
+change a statistic $s(X) \in \mathbb{R}^K$ of a set of images and achieves
+$\delta_A = s(A) - s(B)$. An operator $T$ (not the number of timesteps of
+Section~\ref{sec:background}) acts on each image of a set, and $T_\delta$
+denotes an operator constructed so that $s(T_\delta(X)) = s(X) + \delta$. The
+value of an operator at the operating point $X$, the mechanism residual gap
+(MRG) and the accounting that links them are
+\begin{linenomath}
+\begin{align}
+  V(T; X) &= M(X) - M\big(T(X)\big), \label{eq:value}\\
+  \mathrm{MRG} &= M(A) - M\big(T_{\delta_A}(B)\big), \label{eq:mrg}\\
+  D = M(A) - M(B) &= \mathrm{MRG} - V, \qquad V = V(T_{\delta_A}; B),
+  \label{eq:accounting}
+\end{align}
+\end{linenomath}
+where $D$ is the metric gap and $V$, the value (or \emph{price}) of the
+objective's change, is what imposing that change on the baseline's samples is
+worth in $M$ ($V > 0$ means that the change lowers $M$, and $D > 0$ that $A$
+is worse than $B$); the \emph{price curve} is the value as a function of the change
+an operator produces. Equation~\eqref{eq:accounting} is an identity for any
+operator; the preconditions of Section~\ref{sec:pricing-pre} give its terms
+their meaning. The MRG, $D + V$, is the cost of everything the objective
+alters besides $s$, per-image, anisotropic and phase changes included, so it
+measures how much of the effect the stated mechanism fails to explain, not
+what explains it. A positive MRG means that the objective is worse than the
+baseline carrying the same change, not that this cost exceeds what the change
+earns (that is $D > 0$); a negative MRG means that the objective gains more
+than its change explains. The value is measured at a trained model's
+operating point, not on real images, where the metric's first-order response
+vanishes in the population limit.
+
+\subsection{Statistic, operators and scoring}
+\label{sec:pricing-ops}
+
+\paragraph{Statistic.}
+With $\hat y$ the centred 2-D DFT of the luminance $y$ of an image $x$ and
+$U_k$ the frequencies $u$ at integer radius $r(u) = k$ from the zero
+frequency, the statistic is the geometric-mean radial spectrum
+\begin{equation}
+  s_k(X) = \frac{1}{|X|} \sum_{x \in X} \frac{1}{|U_k|}
+           \sum_{u \in U_k} 20 \log_{10} \lvert \hat y(u) \rvert
+  \quad \text{(dB)},
+  \label{eq:statistic}
+\end{equation}
+computed on all $n$ samples and all \num{\nRefImages} reference images
+(Appendix~\ref{app:scoring}). The bands are the three index thirds of the
+bins, on $32 \times 32$ images radii $0$--\bandLowMax{} (low),
+\bandMidMin--\bandMidMax{} (mid) and \bandHighMin--\bandHighMax{} (high), and
+a band value $\bar s_\beta$ is the unweighted mean of its bins. The axial
+Nyquist radius is $16$, so the high band lies mostly in the diagonal corners
+of the spectrum; its four outermost bins, with \nCoefCorner{} of its
+\nCoefHigh{} coefficients, carry half the weight of the band value, a choice
+on which $V$ and the MRG do not depend. The high-band deficit of $X$ is
+$\bar s_{\mathrm{high}}(R) - \bar s_{\mathrm{high}}(X)$.
+
+\paragraph{Operators.}
+A spectral operator multiplies the centred DFT of each colour channel by one
+real, positive, radially symmetric gain $g$ for all images and channels of a
+set, $T_g(x)_c = \operatorname{Re} F^{-1}(g \odot F x_c)$, and leaves phases,
+orientation and the spread of profiles across images untouched. Since the
+luminance is linear in the channels, the gain
+$g_\delta(u) = 10^{\delta_{r(u)}/20}$ moves $s$ by exactly $\delta$ before
+clipping; it imposes the luminance change on every channel, and in bin~0 it
+rescales mean brightness. The \emph{transplant} $T_{\delta_i}$, with
+$\delta_i = s(A_i) - s(B_i)$ for the runs of seed $i$, is the canonical
+operator because it reproduces the achieved change in every bin, not because
+it is its only realisation; the \emph{reverse transplant} $T_{-\delta_i}$
+removes the same change from $A_i$. The \emph{boost}, a raised-cosine
+high-frequency gain of dose $d$~dB, is the instrument for the price curve;
+its ramp begins at two thirds of the axial Nyquist frequency, inside the mid
+band, so it also raises the upper mid-band bins slightly. The \emph{match}
+$T_\delta$, $\delta = s(R) - s(B_i)$, removes the mean radial deficit in
+every bin, a scale reference rather than an upper bound
+(Section~\ref{sec:second-operator}). \emph{Band-restricted} transplants and
+matches set $\delta$ to zero outside chosen bands, so the value of one band
+is its effect with the others at the baseline's level. \emph{White noise},
+uniform within $\pm 0.5$ or $\pm 1$ grey level per pixel and channel (at
+$\pm 0.5$ the distribution of 8-bit rounding error), is the control for P0.
+Outputs are clipped to $[0, 255]$, not rounded, and scored in floating point
+with the resizer and feature extractor of \texttt{clean-fid}
+\citep{parmar2022aliased} (Appendix~\ref{app:scoring}).
+
+\subsection{Estimation and decision rule}
+\label{sec:pricing-est}
+
+Seed $i = 1, \dots, I$ fixes the initialisation and data order of both arms,
+and all runs share one sampling seed, so $B_i$ and $A_i$ differ by the
+objective alone (the two arms trained with an exponential moving average of
+the weights, EMA, priced against MSE without it, also by weight averaging;
+Section~\ref{sec:worth-arms}). The per-seed $D_i$, $V_i$ and
+$\mathrm{MRG}_i$, with $D_i = \mathrm{MRG}_i - V_i$ exactly, are estimated by
+their means with 95\% $t$-intervals and tested by two-sided paired
+$t$-tests; since $\delta_i$ comes from the pair it is applied to, the
+intervals include the uncertainty in the achieved change. When several
+objectives are priced, the verdict rests on the Holm-adjusted $p$-values for
+$\mathrm{MRG} = 0$ within the declared family (Section~\ref{sec:protocol}),
+reported with the raw ones. The test of $\mathrm{MRG} = 0$ compares $A_i$
+with $T_{\delta_i}(B_i)$, without $M(B_i)$, and is more precise than a test of
+$D$ against the margin $-\bar V$ when
+$\operatorname{Cov}(D_i, V_i) < -\mathrm{Var}(V_i)/2$, as $M(B_i)$ enters
+$D_i$ and $V_i$ with opposite signs. An interval that contains zero bounds the
+MRG and does not show that it is zero.
+
+\begin{algorithm}[tbp]
+\caption{The pricing test (same $n$ and $R$, unquantised scoring).}
+\label{alg:pricing}
+\begin{algorithmic}[1]
+\Require seed pairs $(B_i, A_i)_{i=1}^{I}$; reference $R$; statistic $s$;
+  metric $M$; declared family
+\Ensure intervals and $p$-values of $\bar V$, $\overline{\mathrm{MRG}}$ and
+  $\bar V_A - \bar V$; verdict; $V^\ast$
+\For{$i = 1, \dots, I$}
+  \State $\delta_i \gets s(A_i) - s(B_i)$ on all $n$ samples
+    \Comment{P1}
+  \State $B_i' \gets T_{\delta_i}(B_i)$, $A_i' \gets T_{-\delta_i}(A_i)$,
+    unrounded; check $s(B_i') \approx s(A_i)$ per bin
+    \Comment{P0, P2}
+  \State $V_i \gets M(B_i) - M(B_i')$; \
+    $\mathrm{MRG}_i \gets M(A_i) - M(B_i')$; \
+    $V_{A,i} \gets M(A_i') - M(A_i)$
+\EndFor
+\State paired $t$-tests of $V_i$, $\mathrm{MRG}_i$ and $V_{A,i} - V_i$
+  \Comment{P5}
+\State price curve of the boost on $B$; white noise; other operators
+  \Comment{P4, P0, P3}
+\State verdict at $p < 0.05$, Holm-adjusted if several objectives: MRG
+  $> 0$, $A$ falls short of the value of its change; MRG $< 0$, $A$ gains more
+  than its change is worth; otherwise unresolved
+\State tipping point of the identifying assumption:
+  $V^\ast \gets -D_{\mathrm{lo}}$
+\end{algorithmic}
+\end{algorithm}
+
+\subsection{Preconditions and controls}
+\label{sec:pricing-pre}
+
+Six preconditions give $V$ and the MRG their meaning;
+Table~\ref{tab:preconditions} lists where each is checked and whether it
+holds. As $\mathrm{MRG}_i = D_i + V_i$ with $D_i$ fixed by the arms, an upward
+bias in $V$ produces a false positive, a shortfall the objective does not
+have, and a downward bias a false negative.
+\begin{description}
+  \setlength{\itemsep}{1pt}\setlength{\parskip}{0pt}
+  \item[P0] \emph{No re-quantisation.} Rounding to 8 bits adds a nearly white
+    error field, strongest relative to image spectra in the high band. Its
+    effect on the metric, hazard H1 (Section~\ref{sec:worth-curve}), biases
+    $V$ upwards, so operators are scored in floating point; a gain still
+    rescales $B$'s rounding noise.
+  \item[P1] \emph{The objective changes the statistic it names, under the
+    evaluation protocol}: $s$ is fixed before seeing what moved, and
+    $\delta_A$ is measured on the samples that $M$ scores. For AWWL this
+    holds under 100-step DDIM sampling \citep{song2021denoising} but not
+    under 1000-step ancestral sampling (Section~\ref{sec:mechanism}).
+  \item[P2] \emph{$\delta$ is measured on $A$, applied to $B$ and measured
+    back} in every bin of the luminance statistic: the transplant satisfies
+    this up to clipping, the boost only in the high-band mean.
+  \item[P3] \emph{More than one operator.} Operators that impose the same
+    $\delta$ can differ in what else they change (phase coherence, per-image
+    spread, chroma), so $V$ is specific to the operator. All spectral
+    operators here are coherent: each multiplies every image's spectrum by
+    the same deterministic radial gain and so keeps its phases, and only the
+    transplant imposes $\delta_A$. White noise adds incoherent energy
+    (random phases, independent across pixels and images), which the metric
+    can value far more per decibel of change in $s$
+    (Section~\ref{sec:worth-checks}); a mismatch with training can therefore
+    bias $V$ either way, and side effects such as ringing bias it downwards.
+  \item[P4] \emph{The metric registers $s$}: the price curve is not flat at
+    the operating point; otherwise $V \approx 0$ cannot separate a worthless
+    change from an invisible one (Section~\ref{sec:dreambooth}).
+  \item[P5] \emph{No interaction}: removing the change from $A$'s samples
+    costs what adding it to $B$'s earns,
+    $V_A = M(T_{-\delta_A}(A)) - M(A) \approx V$, judged by the paired
+    difference. Otherwise Eq.~\eqref{eq:accounting} admits more than one
+    split, and a change worth less at $A$ than at $B$ biases $V$ upwards.
+\end{description}
+
+Two controls run through Algorithm~\ref{alg:pricing} unchanged. The positive
+control prices the gain of longer training, which targets nothing spectral,
+and must return a negative MRG; since $\mathrm{MRG} = D + V$, it fails only
+if the transplant is worth at least the whole training gain, so it excludes
+only a gross upward bias in $V$. The null control prices a static band
+weighting that leaves $s$ essentially unchanged, so $V$ must be close to zero
+and the MRG equal to the arm's FID gap. When $|V|$ is small, as in both
+controls, $\mathrm{MRG} \approx D$, so they check the verdict's direction and
+the accounting, not the identifying assumption that $M$ values an
+operator-made change as it would the same change made by training. A
+planted-mechanism control tests that assumption directly: a baseline trained
+on data that carry $\delta_A$ acquires the change through training alone and
+must return an MRG of zero. Where no such arm is trained, a sensitivity
+analysis reports how far the assumption may fail. If the training-made change is worth a constant
+$V_{\mathrm{train}}$, the cost outside the change, $D + V_{\mathrm{train}}$,
+keeps its uncorrected 95\% interval above zero whenever $V_{\mathrm{train}}$ exceeds the
+tipping point $V^\ast = -D_{\mathrm{lo}}$ ($D_{\mathrm{lo}}$ the lower bound
+of $D$'s interval), i.e.\ exceeds the fraction $V^\ast / V$ of the
+operator's value (Section~\ref{sec:worth-checks}).
+
+\subsection{Mediation reading}
+\label{sec:pricing-reading}
+
+In mediation analysis \citep{robins1992identifiability,pearl2001direct}, the
+objective is the treatment, $s$ the mediator and $M$ the outcome, with the
+training seed as the unit and $s$ and $M$ functionals of its sample set. With
+$M(z, v)$ the metric of samples from objective $z \in \{0, 1\}$ (baseline,
+objective under test) with statistic $v$, and $s_z$ the statistic that $z$
+produces, $M(T_{\delta_A}(B))$ estimates $M(0, s_1)$ and
+$M(T_{-\delta_A}(A))$ estimates $M(1, s_0)$. The MRG is then analogous to the
+total direct effect $M(1, s_1) - M(0, s_1)$
+\citep{robins1992identifiability}, and $-V$ to the pure indirect effect
+$M(0, s_1) - M(0, s_0)$. The analogy is not an equivalence, since an operator
+counterfactual is not a potential outcome of a trained model. It rests on
+three assumptions: (i)~the operator sets the mediator of $B$ to $s_1$ and
+changes nothing else that $M$ registers (P0, P2); (ii)~the identifying
+assumption, untested but addressed by the sensitivity analysis; (iii)~no
+treatment--mediator interaction, under which the total direct effect equals
+the natural direct effect $M(1, s_0) - M(0, s_0)$ \citep{pearl2001direct};
+their difference, $V - V_A$, is what P5 measures. As the mediator is set by
+intervention, (i) and (ii) replace the usual assumption of no unmeasured
+mediator--outcome confounding.

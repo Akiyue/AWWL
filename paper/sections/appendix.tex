@@ -1,0 +1,150 @@
+% Appendices. main.tex inputs this file after the references, following
+% \startappendices. Sections are lettered (Appendix A, B, ...); a \ref to any
+% label here returns the letter alone, so the text cites them as
+% Appendix~\ref{app:theory}. The files input below start at subsection level.
+%
+%   A  Proofs of the analytic results   appendix_theory (with app:gradnorm)
+%   B  Experimental details             appendix_setup, appendix_scoring
+%   C  Pricing and comparison tables    generated tables moved from the text
+%   D  Supplementary results            supp_audit, supp_mechanism,
+%                                       supp_confound, supp_generality
+% Tables and figures are numbered per appendix (Table C.1, Fig. D.1), as
+% \startappendices in main.tex arranges.
+
+% Most generated tables here are about two thirds of a page tall: too tall to
+% share a page with text, and below the main text's float-page threshold
+% (0.80, main.tex), so they would wait for the next \FloatBarrier. At 0.70
+% each forms a float page of its own as soon as it is reached.
+\renewcommand{\floatpagefraction}{0.70}
+
+\section{Proofs of the analytic results}\label{app:theory}
+\IfFileExists{sections/appendix_theory.tex}{\input{sections/appendix_theory}}{%
+  \todo{sections/appendix\_theory.tex has not been written yet.}}
+
+\FloatBarrier
+\section{Experimental details}\label{app:setup}
+\IfFileExists{sections/appendix_setup.tex}{\input{sections/appendix_setup}}{%
+  \todo{sections/appendix\_setup.tex has not been written yet.}}
+
+% appendix_scoring.tex has no heading of its own; its \label{app:scoring}
+% takes the number of this subsection.
+\subsection{Implementation of the pricing test}
+\IfFileExists{sections/appendix_scoring.tex}{\input{sections/appendix_scoring}}{%
+  \todo{sections/appendix\_scoring.tex has not been written yet.}}
+
+\FloatBarrier
+\section{Pricing and comparison tables}\label{app:tables}
+This appendix collects the generated tables behind the pricing test and the
+five-seed comparison. Each is generated from the run ledgers by the scripts in
+the repository, and its caption states how its entries are computed,
+including the test and the correction family behind any $p$-value.
+
+Table~\ref{tab:price-curve} gives the value of the unquantised high-band
+boost at each dose on MSE's CIFAR-10 samples (Section~\ref{sec:worth-curve})
+and the prices of the boost and of the radial match on CelebA-64
+(Section~\ref{sec:celeba}). Table~\ref{tab:operators} lists each operator
+applied to MSE's samples with its value and the high-band deficit it leaves,
+including the transplant of AWWL's change and the 8-bit variants behind
+hazard H1 (Section~\ref{sec:worth}). Table~\ref{tab:pricing-arms} gives the
+high-band change, gap, value and MRG of each of the \nFamilyPricing{} arms of
+the pricing family, priced against MSE, which Fig.~\ref{fig:pricing-arms}
+plots (Section~\ref{sec:worth-arms}). Table~\ref{tab:worth} applies the
+$+0.41$~dB high-band boost to the samples of MSE and of AWWL, the secondary
+check of precondition P5; the main check, the reverse transplant, is
+reported in Section~\ref{sec:worth-checks}.
+
+Table~\ref{tab:features} repeats the pricing test in DINOv2 features
+(Section~\ref{sec:worth-dino}) beside the same quantities in FID.
+Table~\ref{tab:compare-fid} gives the paired comparison with MSE on FID that
+Fig.~\ref{fig:effects} plots (Section~\ref{sec:compare}), with the raw,
+Holm-corrected and Wilcoxon $p$-values of every arm, and
+Table~\ref{tab:compare-other} repeats it on Inception Score, KID, precision
+and recall, with the Holm correction applied within each metric.
+On Inception Score AWWL does not differ from MSE, and every objective that
+differs after correction scores lower. On KID neither AWWL nor
+Min-SNR-$\gamma$ nor FFL differs from MSE, although the latter two are worse
+on FID. Precision is the only metric on which any objective improves on MSE
+after correction (Min-SNR-$\gamma$ and the learned weighting), and on recall
+both of those objectives are worse than MSE after correction, so their gain
+in precision comes with a loss of coverage. Table~\ref{tab:full} lists the
+mean and sample standard deviation of all five metrics for every objective of
+the five-seed comparison, from the same runs as the paired tables.
+
+% The tables follow in the order the text above cites them. Most are about
+% two thirds of a page tall, too tall to share a page with text, so they are
+% input after the prose rather than between its sentences, which would leave
+% part-empty text pages. Each generated table keeps a placeholder that
+% carries its label, as the section files do, so a missing file shows in the
+% PDF rather than breaking every reference to it.
+\IfFileExists{tables/price_curve.tex}{\input{tables/price_curve}}{%
+  \begin{table}[tbp]\centering
+  \fbox{\textbf{tables/price\_curve.tex not built}}
+  \caption{Not built.}\label{tab:price-curve}
+  \end{table}}
+\IfFileExists{tables/operators.tex}{\input{tables/operators}}{%
+  \begin{table}[tbp]\centering
+  \fbox{\textbf{tables/operators.tex not built}}
+  \caption{Not built.}\label{tab:operators}
+  \end{table}}
+\IfFileExists{tables/pricing_arms.tex}{\input{tables/pricing_arms}}{%
+  \begin{table}[tbp]\centering
+  \fbox{\textbf{tables/pricing\_arms.tex not built}}
+  \caption{Not built.}\label{tab:pricing-arms}
+  \end{table}}
+\IfFileExists{tables/worth.tex}{\input{tables/worth}}{%
+  \begin{table}[tbp]\centering
+  \fbox{\textbf{tables/worth.tex not built}}
+  \caption{Not built.}\label{tab:worth}
+  \end{table}}
+\IfFileExists{tables/features.tex}{\input{tables/features}}{%
+  \begin{table}[tbp]\centering
+  \fbox{\textbf{tables/features.tex not built}}
+  \caption{Not built.}\label{tab:features}
+  \end{table}}
+\IfFileExists{tables/compare_fid.tex}{\input{tables/compare_fid}}{%
+  \begin{table}[tbp]\centering
+  \fbox{\textbf{tables/compare\_fid.tex not built}}
+  \caption{Not built.}\label{tab:compare-fid}
+  \end{table}}
+\IfFileExists{tables/compare_other.tex}{\input{tables/compare_other}}{%
+  \begin{table}[tbp]\centering
+  \fbox{\textbf{tables/compare\_other.tex not built}}
+  \caption{Not built.}\label{tab:compare-other}
+  \end{table}}
+\IfFileExists{tables/full.tex}{\input{tables/full}}{%
+  \begin{table}[tbp]\centering
+  \fbox{\textbf{tables/full.tex not built}}
+  \caption{Not built.}\label{tab:full}
+  \end{table}}
+
+\FloatBarrier
+\section{Supplementary results}\label{app:supp}
+This appendix gives the details, tables and figures that support the main
+text but are not needed to follow it, in the order of the sections they
+supplement. Appendices~\ref{app:supp-replication}--\ref{app:supp-extensions}
+supplement the audit of Section~\ref{sec:audit} with the replication details,
+the implementation dependence of KID, convergence, the sampler and training
+budget, and the extensions of the weighting.
+Appendix~\ref{app:supp-mechanism} repeats the band analysis of
+Section~\ref{sec:mechanism} under DDPM-1000 and shows paired samples.
+Appendix~\ref{app:supp-confound} reports a further normalisation control for
+Section~\ref{sec:confound}. Appendices~\ref{app:supp-dreambooth}
+and~\ref{sec:restoration} give the DreamBooth table and the
+Gaussian-denoising experiment of Section~\ref{sec:generality}.
+
+% Each file starts at subsection level and keeps the labels of the floats it
+% carries; supp_generality.tex also carries tab:restoration, so no separate
+% denoising subsection is input here.
+\IfFileExists{sections/supp_audit.tex}{\input{sections/supp_audit}}{%
+  \todo{sections/supp\_audit.tex has not been written yet.}}
+\FloatBarrier
+\IfFileExists{sections/supp_mechanism.tex}{\input{sections/supp_mechanism}}{%
+  \todo{sections/supp\_mechanism.tex has not been written yet.}}
+\FloatBarrier
+\IfFileExists{sections/supp_confound.tex}{\input{sections/supp_confound}}{%
+  \todo{sections/supp\_confound.tex has not been written yet.}}
+% No barrier here: the summed-shape table may float to the top of the next
+% page, beside the DreamBooth text, instead of leaving a part-empty page.
+\IfFileExists{sections/supp_generality.tex}{\input{sections/supp_generality}}{%
+  \todo{sections/supp\_generality.tex has not been written yet.}}
+\FloatBarrier

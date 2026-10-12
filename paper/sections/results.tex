@@ -1,95 +1,180 @@
-\section{Results}
+\section{Auditing AWWL}
+\label{sec:audit}
 \label{sec:results}
 
-All tables in this section are generated directly from the results ledger by
-\texttt{scripts/make\_tables.py}; none of the numbers are transcribed. Arms
-averaged over fewer than five seeds carry a superscript.
+This section audits AWWL on CIFAR-10. Unless stated otherwise, runs are
+evaluated at epoch~199 with DDIM-100 and \num{10000} samples, and
+differences from MSE are paired by seed with 95\% $t$-intervals; supporting
+material is in Appendix~\ref{app:supp}.
 
-% Generated tables. \IfFileExists keeps the draft building on a machine that
-% has the manuscript but not the sweep output.
-\IfFileExists{tables/full.tex}{\input{tables/full}}{%
-  \begin{table}[t]\centering
-  \fbox{\parbox{0.8\linewidth}{\centering\vspace{4mm}
-  \textbf{tables/full.tex not built}\\[1mm]
-  run \texttt{python scripts/make\_tables.py}\vspace{4mm}}}
-  \caption{Full results across objectives and metrics.}\label{tab:full}
-  \end{table}}
+\subsection{Replication of the published results}
+\label{sec:replication}
 
-% The fallback carries the label as well as the box: without it every \ref to
-% the table dangles, and a dangling reference is easy to stop noticing.
-\IfFileExists{tables/compare_fid.tex}{\input{tables/compare_fid}}{%
-  \begin{table}[t]\centering
-  \fbox{\parbox{0.8\linewidth}{\centering\vspace{4mm}
-  \textbf{tables/compare\_fid.tex not built}\\[1mm]
-  run \texttt{python scripts/make\_tables.py}\vspace{4mm}}}
-  \caption{Paired comparison against MSE on FID.}\label{tab:compare-fid}
-  \end{table}}
+\input{tables/replication}
 
-\guardedfigure{0.92}{effect_sizes.png}{%
-  Paired-by-seed difference from the MSE baseline on FID, with \SI{95}{\percent}
-  intervals; filled markers survive Holm correction. The ordering is the
-  result: the closer a variant comes to being purely a frequency weighting, the
-  further right it sits. Nothing lands left of the line.}{fig:effects}
+The baseline reproduces; the wavelet objectives do not. The conference paper
+\citep{thao2026awwl} reports one run per objective, sampled with ancestral
+DDPM-1000 and without EMA, in which AWWL has the highest Inception Score and
+an FID level with the baseline's, and the static wavelet arm has the lowest
+FID. Table~\ref{tab:replication} sets these FID values beside five-seed
+replications sampled with DDPM-1000, as published, and with DDIM-100
+(Inception Score in Table~\ref{tab:replication-details}). Under DDPM-1000
+the replicated MSE mean lies within one seed standard deviation of the
+published value ($\pubOffsetSDMSE$~SD), whereas those of the static wavelet
+arm and AWWL lie \pubOffsetSDStatic{} and \pubOffsetSDAWWL~SD above
+theirs, and paired by seed both arms are significantly worse than MSE. The
+published FID differences lie outside the 95\% prediction interval for one
+further paired run ($\pubDFIDAWWL$ against
+$[\piFIDAWWLDdpmLo, \piFIDAWWLDdpmHi]$ for AWWL), so seed variation cannot
+account for them, though it can for AWWL's published Inception Score gain,
+which lies inside its interval (Appendix~\ref{app:supp-replication}). No Inception Score difference is
+significant under either sampler, so neither wavelet objective improves
+significantly on MSE on either metric.
 
-Table~\ref{tab:full} reports every objective on every metric;
-Table~\ref{tab:compare-fid} gives the paired comparison against MSE, and
-Fig.~\ref{fig:effects} shows the same comparison as effect sizes. Three
-readings matter.
+The objective audited here is the released implementation. The conference
+paper writes the detail term as a sum over the three detail bands (its Eq.~7;
+Eq.~\eqref{eq:summed} here), whereas the released code that produced its
+results averages them (Eq.~\eqref{eq:audited}), the form used for every AWWL
+result in this paper. Trained as written, AWWL with detail bands summed is
+worse than MSE by $+\dEqSeven$~FID (Holm $p = \dEqSevenHolm$;
+Table~\ref{tab:compare-fid}), and although it triples the ratio of detail to
+approximation weight, its high-band change is smaller than that of the
+averaged form ($+\corrHighEqSeven$ against $+\corrHighAWWL$~dB;
+Table~\ref{tab:bands}). A reimplementation from the published equation
+therefore yields a different, worse objective.
 
-\paragraph{The published objective is not better on any metric.}
-Its FID, Inception Score and KID all sit on the wrong side of the baseline, and
-none of the three differences clears significance. The point estimates are
-consistent with each other in sign, which is worth more than any of them
-individually: three metrics computed from two different feature pipelines agree
-on the direction.
+\subsection{Five-seed comparison}
+\label{sec:compare}
 
-\paragraph{The ablations that were supposed to isolate the mechanism make it
-worse, significantly.} Both normalised variants and the literal reading of the
-published equation are significantly worse than MSE after correction, while the
-published form itself is not distinguishable from MSE. The ordering is
-informative: the closer the objective gets to being \emph{purely} a frequency
-weighting, the worse it performs. What keeps the published form competitive is
-the timestep reweighting it performs incidentally (\S\ref{sec:confound}).
+\guardedfigure{0.8}{effect_sizes.png}{%
+  Paired-by-seed FID difference from MSE (arm $-$ MSE; positive is worse),
+  CIFAR-10, epoch~199, DDIM-100, with unadjusted 95\% $t$-intervals. Filled
+  markers: $p < 0.05$ after Holm correction over the \nFamilyMain{} arms of
+  the main family (Table~\ref{tab:compare-fid}); the last row, AWWL + EMA
+  against MSE + EMA, is a family of its own, and $^{\dagger}$the
+  timestep-only arm forms a two-test family with the contrast of AWWL
+  against it (Section~\ref{sec:confound}). The dotted line marks AWWL with
+  detail bands summed, the parent with which Table~\ref{tab:extensions}
+  compares every extension. Arrows mark arms beyond the axis, with their
+  mean difference printed. Colours and marker shapes identify arms, as in
+  Figs.~\ref{fig:pricing-arms} and~\ref{fig:db-tradeoff}; only filling carries
+  significance.}{fig:effects}
 
-\paragraph{Seed variance dominates the differences the literature reports.}
-The standard deviation of FID across five seeds of an identical configuration
-is \num{0.21} for the baseline. Improvements reported in this area are
-routinely smaller than that. Any single-run comparison at this scale is
-uninformative regardless of which way it happens to fall, which is the
-methodological point of \citet{bouthillier2021accounting} instantiated for
-diffusion training.
+No objective in the matrix of \nArmsMatrix{} configurations (MSE, the
+\nFamilyMain{} arms of the main family, AWWL + EMA and the timestep-only arm)
+and \nRunsMatrix{} runs has a significantly lower FID than MSE
+(Fig.~\ref{fig:effects}), and only MSE + EMA has a negative point estimate
+($\dMSEema$ $[\dMSEemaLo, \dMSEemaHi]$, three seeds). On the other four
+metrics (Table~\ref{tab:compare-other}) the only differences in an
+objective's favour that survive correction are gains in precision, by
+Min-SNR-$\gamma$ and the learned weighting, and both lose recall
+significantly.
 
-\subsection{Convergence}
+AWWL's FID exceeds that of MSE by $+\dAWWL$ $[\dAWWLLo, \dAWWLHi]$ (raw
+$p = \dAWWLP$; Holm $p = \dAWWLHolm$ over the \nFamilyMain{} arms of the main
+family). Read as a bound, the interval excludes any mean difference below
+$\dAWWLLo$~FID, so an improvement larger than that is ruled out; it does not
+exclude a harm of moderate size, since at five seeds the test detects a true
+difference of \mdeAWWL~FID with 80\% power (Section~\ref{sec:setup-stats}). No
+other metric favours AWWL: Inception Score, KID and precision do not differ
+from those of MSE even before correction, and recall is lower at nominal
+significance only (raw $p = \dRecAWWLP$, Holm $p = \dRecAWWLHolm$). Against
+MSE + EMA, AWWL + EMA is behind by $+\dEMApair$~FID ($p = \dEMApairP$);
+three seeds give no sign that weight averaging alters the comparison, though
+they cannot exclude it. The intermediate checkpoints of the same runs (epochs 39 to 159;
+Appendix~\ref{app:supp-convergence}) give no evidence that AWWL reaches a
+given quality with less training: no difference favours it significantly.
 
-The natural fallback for an objective that does not improve final quality is
-that it reaches a given quality sooner. It does not: FID is worse at every
-evaluated checkpoint (\num{59.9} against \num{52.4} at epoch~39, \num{36.9}
-against \num{33.9} at epoch~79, and so on to epoch~199). The gap narrows as
-training proceeds but never closes or reverses
-(Fig.~\ref{fig:convergence}).
+Of the \nFamilyMain{} arms of the main family, all except Huber, the static
+wavelet arm, AWWL and MSE + EMA are significantly worse than MSE after Holm
+correction, among them $L_1$, Charbonnier, Min-SNR-$\gamma$, the family's
+second member, Focal Frequency Loss (FFL; Section~\ref{sec:second-member}),
+the four normalisation controls (Section~\ref{sec:confound}), AWWL with
+detail bands summed and every extension (Section~\ref{sec:extensions}). Three
+arms did not train stably; their rows record a failed optimisation, not an
+effect size: raw SNR weighting, whose weight is unbounded as
+$t \to 0$ (Section~\ref{sec:notation}), GradNorm balancing and the
+three-level decomposition (Appendix~\ref{app:supp-extensions}). Outside the
+main family, the timestep-only arm (Section~\ref{sec:confound}) is also worse
+($+\dTimestep$~FID, Holm $p = \dTimestepHolm$ in its own two-test family).
 
-\guardedfigure{1.0}{convergence.png}{%
-  FID through training. \emph{Left:} absolute values, which establish only that
-  every arm converged --- over \num{200} epochs FID falls by tens of points
-  while the arms separate by roughly one, so on this axis they are one band.
-  \emph{Right:} the same data differenced within seed, which is where the
-  effect is legible. The gap is present from the first evaluated checkpoint and
-  narrows without closing.}{fig:convergence}
+\subsection{Sensitivity to the sampler}
+\label{sec:sampler}
 
-\subsection{Exponential moving averaging}
+The sampler reverses no comparison and widens AWWL's gap. The conference
+paper sampled with DDPM-1000 and the matrix uses DDIM-100 to keep
+\nRunsMatrix{} evaluations affordable, so MSE, the static wavelet arm and AWWL
+were also sampled with DDPM-1000 from the same weights and sampling seed
+(Table~\ref{tab:replication}; KID in Table~\ref{tab:sampler}). FID falls for
+every arm, least for AWWL (by \dropAWWL{} against \dropMSE{} for MSE), so
+AWWL's gap grows from $+\dAWWL$ to $+\ddpmDAWWL$ and the static wavelet arm,
+not significantly different from MSE under DDIM-100, becomes significantly
+worse (Section~\ref{sec:replication}); KID agrees for AWWL (Holm
+$p = \ddpmDKIDAWWLHolm$), and Inception Score separates neither arm. Under
+DDPM-1000 AWWL's high-band change also nearly vanishes and changes sign
+($\corrHighAWWLddpm$ against $+\corrHighAWWL$~dB;
+Section~\ref{sec:mechanism}). DDIM-100 is therefore the more favourable of the
+two operating points to AWWL, and the primary matrix does not understate its
+effect.
 
-EMA is reported as its own configuration because it is standard practice and
-the published runs omit it, so mixing the two would confound the comparison.
-It shifts both arms by less than the seed variance and leaves their ordering
-unchanged, which is expected: at a decay of \num{0.9999} over
-\num{78200} steps the shadow copy averages roughly the last \num{10000} steps,
-by which point the iterate is moving slowly.
+\subsection{Four times the training budget}
+\label{sec:budget}
 
-\IfFileExists{tables/compare_is.tex}{\input{tables/compare_is}}{%
-  \begin{table}[t]\centering
-  \fbox{\parbox{0.8\linewidth}{\centering\vspace{4mm}
-  \textbf{tables/compare\_is.tex not built}\\[1mm]
-  run \texttt{python scripts/make\_tables.py}\vspace{4mm}}}
-  \caption{Paired comparison against MSE on Inception Score.}
-  \label{tab:compare-ismean}
-  \end{table}}
+A budget four times as long gives AWWL no advantage over MSE, although three
+seeds cannot resolve the gap. The 200-epoch recipe has about a tenth of the
+optimiser steps of the original DDPM recipe \citep{ho2020denoising}, and the high-frequency deficit
+of diffusion samples has been read as a symptom of under-training
+(Section~\ref{sec:related-spectral}); an objective that targets the deficit
+might then pay only near convergence. MSE and AWWL were retrained for 800
+epochs (\num{312800} steps; three seeds each, EMA with decay \num{0.9999}, the
+cosine schedule stretched to the run; Appendix~\ref{app:setup-budget}), which
+lowers the FID of MSE with EMA from \budFIDMSEShortEmaDdim{} to
+\budFIDMSELongDdim{} (DDIM-100). AWWL's point estimates remain behind MSE
+under both samplers, but neither gap is significant even before correction
+(Table~\ref{tab:budget}), and the DDIM-100 test has only \budPowerLong\%
+power against a true gap of 0.3~FID; Inception Score and KID do not separate
+the arms either. These data show no advantage for AWWL but do not establish
+that its disadvantage persists. Nor does longer training close the deficit:
+while FID improves, MSE's high-band deficit grows, end against end, by
+\trajEndToEnd~dB (Table~\ref{tab:deficit-budget}).
+
+The step count alone does not set the operating point. At the same
+\num{78200} steps, the epoch-199 checkpoints of the 800-epoch runs carry EMA
+and are taken at about 85\% of the peak learning rate, whereas the matrix's
+main arms have no EMA and a rate annealed to zero. Even against the matrix's
+MSE + EMA, the MSE checkpoint has a lower FID and a smaller high-band deficit
+(\trajDefMSEOneNinetyNine{} against \trajDefMSEend{}~dB), and its FID is
+lowest at epoch~\longBestEpochMSE{}, rising as the rate decays
+(Table~\ref{tab:deficit-budget}). The comparison is descriptive
+(Appendix~\ref{app:setup-budget}), but the matrix's FID level and the deficit
+AWWL targets depend on where the schedule ends, not only on its length.
+
+\subsection{Extensions of the weighting}
+\label{sec:extensions}
+
+None of the seven arms that implement the extensions proposed in the
+conference paper improves on MSE (Fig.~\ref{fig:effects}) or on the parent
+with which each is compared. Each was trained at one untuned configuration
+(Appendix~\ref{app:setup-arms}) to test whether AWWL's shortfall is specific
+to its two-parameter schedule. Against AWWL with detail bands summed, the
+parent of the per-sub-band, spatially adaptive and learned-basis arms, and
+with Holm correction over the seven extensions
+(Table~\ref{tab:extensions}), the per-sub-band schedules have no detectable
+effect (Holm $p = \dSubbandVsParentHolm$), whereas spatial adaptation and the
+learned basis cost a further $+\dSpatialVsParent$ and $+\dLiftingVsParent$~FID
+(Holm $p = \dSpatialVsParentHolm$ and $\dLiftingVsParentHolm$). These two
+arms and the all-axes arm cannot test their axis as built (the spatial map
+is computed from the noise target, and the lifting filters are trained on
+the loss they define; Appendix~\ref{app:setup-arms}), so their costs
+describe these implementations only. For every priced extension the value of the spectral change is small beside the FID gap to
+MSE, which is therefore almost entirely MRG (Table~\ref{tab:pricing-arms}).
+The learned weighting, an uncertainty weighting \citep{kendall2018multi}
+conditioned on $\sigma_t$ with its total left free, becomes a steep timestep
+schedule: each band weight is driven towards the inverse of that band's loss,
+which for $\epsilon$-prediction is smallest at high noise, and in every
+seed the summed weight at $t = 1000$ is \num{\learnedSumRatioMin} to
+\num{\learnedSumRatioMax} times that at $t = 1$,
+with the HH weight there up to \learnedHHLLMax{} times the LL weight. This is
+the timestep confound of Section~\ref{sec:confound} in extreme form, and the
+arm is $+\dLearned$~FID worse than MSE (Holm $p \dLearnedHolm$). Seven
+untuned configurations do not show that no band weighting could help.

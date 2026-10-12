@@ -44,7 +44,7 @@ Check the GPUs are visible, then that the suite passes:
 
 ```bash
 python -c "import torch; print(torch.cuda.device_count())"   # expect 2
-pytest -q                                                    # expect 163 passed
+pytest -q                                                    # expect 321 passed
 ```
 
 ### If the install fails at import
@@ -71,7 +71,10 @@ appears after the run finishes and affects nothing.
 python scripts/verify_loss_math.py --out runs/loss_math_report.md
 ```
 
-This needs no GPU and settles three things:
+This needs no GPU and settles five things. The first three concern the
+audited objective; checks 4 and 5 extend the analysis to a second published
+member, and check 5 is the one that changed a conclusion in the draft --- see
+below.
 
 1. **Parseval.** Confirms that for `db1` the four sub-band errors carry exactly
    the pixel MSE, so AWWL is a *reallocation* of a fixed error budget over
@@ -107,6 +110,35 @@ This needs no GPU and settles three things:
    want opposite timestep emphasis for reasons unrelated to resolution — and
    with two data points, resolution and training regime are perfectly
    confounded anyway. Tier 2 separates them.
+
+4. **Parseval on the Fourier basis.** The same identity for the other
+   transform the family uses, exact to machine precision. It matters because
+   the draft stated the reallocation argument as a property of an *orthonormal
+   wavelet* basis, which reads as a property of that choice. It is not — any
+   unitary transform gives it — and stating the condition as unitarity is what
+   makes the claim reach the Fourier half of the family. Two things break it,
+   both worth naming in the paper: a biorthogonal or learned basis is not
+   unitary, and boundary padding adds coefficients.
+
+5. **The confound in an error-keyed weighting.** Whether a member with no `σ`
+   in it escapes check 3. Focal Frequency Loss keys its weights on the current
+   error, so the expectation is that it does. Half right: per-sample
+   normalisation makes its total gradient magnitude *exactly* invariant to the
+   residual's scale — the part check 3's protocol has to impose by hand. But
+   the total is not invariant to the residual's spectral **shape**, and
+   spectral shape is what varies across the schedule. So it imposes a timestep
+   reweighting too, as an emergent consequence rather than by design.
+
+   This changed a conclusion in the draft. The confound is a property of
+   frequency-weighted objectives broadly, not of one formula's algebra — and
+   worse, the remedy does not transfer: holding `Σw` fixed needs a parameter
+   separating shape from total, and an error-keyed weighting has none. Such
+   members admit only their unweighted limit as a control, so a positive
+   result from one could not be credited to the frequency axis it names.
+
+   Measured on synthetic residuals, so it says what each objective *does* with
+   a given residual, not how far a trained model's residual actually travels.
+   The second needs the sweep.
 
 ---
 
@@ -286,6 +318,35 @@ every row, so `awwl stats` never has to parse a directory name, and two
 workers can write concurrently without a lock.
 
 ---
+
+## 5b. Sweeps added after Phase 0 reported
+
+Phase 0's own tiers are complete. Three manifests were added afterwards, each
+answering one objection a reader of the draft would raise. They are
+independent of each other and of Phase 0; run them in whatever order the
+cards free up.
+
+```bash
+awwl pipeline run -m configs/pipeline/converged.yaml     --gpus 0,1
+awwl pipeline run -m configs/pipeline/phase0.yaml        --gpus 0,1   # min_snr, focal_frequency
+awwl pipeline run -m configs/pipeline/dreambooth_seeds.yaml --gpus 0,1  # min_snr
+```
+
+| Arm | Cost | The objection it closes |
+|---|---|---|
+| `min_snr`, DreamBooth | **23 min** | The paper's only significant positive result sits on `snr_weighted`, which is the *raw* ratio and diverges on CIFAR-10. Without a properly clamped Min-SNR beside it, that result cannot be attributed to the timestep axis rather than to the pathology. |
+| `min_snr`, CIFAR-10 | 14 GPU-h | Shows Min-SNR trains where raw SNR craters, so the divergence is the weighting's and not the implementation's. |
+| `focal_frequency`, CIFAR-10 | 14 GPU-h | A second *published* member of the family. Two of its properties are already settled analytically (`verify_loss_math.py` checks 4-5); this is the empirical half, and until it runs the paper has no family-level empirical claim. |
+| `converged` | 66 GPU-h | The baseline sits at FID 16.5 against 3.17 published, and the draft's own related-work section cites under-convergence as the competing explanation for a high-frequency deficit. 800 epochs with EMA, MSE vs the audited objective, 3 seeds. |
+
+Two things to know before reading `converged`:
+
+* Its epoch-199 checkpoint is **not** comparable to Phase 0's epoch 199. The
+  LR schedule is a cosine over the whole run, so at that step a 200-epoch run
+  is annealed to zero while an 800-epoch run is at 0.85 of peak. Compare
+  end-to-end: epoch 799 there against epoch 199 here.
+* Check the MSE-to-MSE version first. It prices the budget change on its own,
+  before any objective comparison is layered on top.
 
 ## 6. What Phase 0 does *not* cover
 

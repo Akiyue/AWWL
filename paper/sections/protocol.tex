@@ -1,67 +1,98 @@
-\section{Experimental protocol}
+\section{Experimental setup}
 \label{sec:protocol}
 
-The protocol is stated in full because the study's conclusions are negative,
-and a negative result is only as good as the reader's ability to see what would
-have shown a positive one.
-
-\subsection{Replication and variance}
-
-Every configuration is trained with five seeds. We report mean $\pm$ standard
-deviation with a \SI{95}{\percent} confidence interval, and compare with a
-paired-by-seed $t$-test under Holm--Bonferroni correction across the comparison
-family. The seed controls initialisation, data order and sampling noise
-together, so a pair of runs differs in everything a practitioner would leave to
-chance.
-
-Pairing matters more than the test. The standard deviation of FID across five
-seeds of an identical configuration is \num{0.21}; most differences this
-literature reports are smaller than that. An unpaired comparison at $N=5$ has
-almost no power against effects of that size, while pairing removes the seed's
-own contribution and leaves the difference under test.
-
-We also report a Wilcoxon signed-rank test, but as a direction check only. Its
-smallest attainable two-sided $p$ is $2/2^{N} = \num{0.0625}$ at $N=5$: no
-rank-based test on five pairs can clear $\alpha = \num{0.05}$ however large the
-effect. Where the two disagree in \S\ref{sec:generality} they are not in
-conflict --- the second is at its floor. Reporting it without that caveat would
-invite the reader to treat a floor as evidence of absence.
+Appendix~\ref{app:setup} gives every setting (Table~\ref{tab:setup}), arm
+(Table~\ref{tab:arms}) and Holm family (Table~\ref{tab:families}), and the
+recipes for CelebA-64, DreamBooth \citep{ruiz2023dreambooth} with Stable
+Diffusion~1.5 \citep{rombach2022high} and denoising.
 
 \subsection{Training}
+\label{sec:setup-training}
 
-CIFAR-10 at $32\times32$, \num{200} epochs, batch size \num{128}, AdamW with a
-cosine schedule and \num{500} warm-up steps: \num{78200} optimiser steps per
-run. The recipe is the published one and is held identical across arms; only
-the objective changes. Exponential moving averaging is reported as its own
-configuration rather than mixed in, because the published runs omit it and
-mixing the two would confound the comparison with a second change.
+All arms on CIFAR-10 \citep{krizhevsky2009learning} share the recipe of the
+code released with the conference paper \citep{thao2026awwl} and, apart from
+the two EMA arms, differ only in the objective. The denoiser is a DDPM-style
+U-Net \citep{ho2020denoising}, the \texttt{UNet2DModel} of \texttt{diffusers},
+with channels 128, 256, 256 and 256, two residual blocks per level, one
+self-attention layer (in the $4\times4$ bottleneck only), no dropout and
+34.4~million parameters. The process has $T = 1000$ steps with $\beta_t$
+linear from $10^{-4}$ to $0.02$ and $\epsilon$-prediction
+(Eq.~\eqref{eq:simple}). Training uses AdamW \citep{loshchilov2019decoupled}
+at learning rate $2\times10^{-4}$ with 500 warm-up steps and cosine decay,
+batch size 128 and float16 mixed precision, for 200 epochs (\num{78200}
+steps). Exponential moving averaging (EMA, decay 0.9999)
+\citep{polyak1992acceleration}, which the published runs omit, enters the
+200-epoch matrix only as two separate arms. Training seeds 1 to 5 fix the
+initialisation and the data order, and seed $k$ of an arm is paired with seed
+$k$ of the arm it is compared with. All checkpoints are sampled from one
+sampling seed, so every interval describes training variance conditional on
+one draw of initial latents.
 
-Objectives carrying learnable parameters --- the uncertainty-conditioned
-weighting and the GradNorm balancer --- place them in their own optimiser group
-with their own learning rate. Without this they stay frozen at initialisation
-and the run silently degenerates into a fixed-weight objective, which looks
-like a working experiment and tests nothing.
+The arms (Table~\ref{tab:arms}) are MSE, three other pixel losses, two
+timestep reweightings (Section~\ref{sec:notation}), FFL, AWWL with its static
+($p = 0$) and summed-detail (Eq.~\eqref{eq:summed}) variants, four
+normalisation controls, AWWL's timestep component alone (the timestep-only
+arm; Section~\ref{sec:confound}), MSE and AWWL with EMA, and seven extensions
+(Section~\ref{sec:extensions}). The EMA pair, the learned basis and the
+all-axes combination have three seeds; the conference paper's VGG loss is
+omitted (Appendix~\ref{app:setup-arms}). Three settings depart from the
+matrix: 800 epochs with EMA (MSE and AWWL, three seeds), DDPM-1000 sampling
+(MSE, the static wavelet arm and AWWL) and CelebA \citep{liu2015deep} at
+$64\times64$ (MSE, five seeds).
 
 \subsection{Sampling and metrics}
+\label{sec:setup-metrics}
 
-Sampling uses DDIM \citep{song2021denoising} with \num{100} steps and
-\num{10000} samples per checkpoint, with the sampling seed fixed across arms so
-a comparison differs by the trained model alone. FID is computed with
-\texttt{clean-fid} \citep{parmar2022aliased}, which fixes the resizing and
-quantisation discrepancies that make FID values incomparable between codebases;
-Inception Score and KID come from \texttt{torch-fidelity}. \S\ref{sec:replication}
-explains why we do not report a bespoke KID estimator.
+Each evaluated checkpoint generates \num{10000} samples with DDIM
+\citep{song2021denoising} (100 steps, $\eta = 0$), stored as 8-bit PNG. The
+main operating point is epoch 199, the last of the 200 epochs counted from
+zero; MSE, the static wavelet arm and AWWL are also evaluated at epochs 39,
+79, 119 and 159. FID \citep{heusel2017gans} is computed with \texttt{clean-fid}
+\citep{parmar2022aliased} in \texttt{clean} mode against all
+\num{\nRefImages} training images. FID from \num{10000} samples is biased
+upward relative to FID-50k by a generator-dependent amount
+\citep{chong2020effectively}, which need not cancel between arms, and
+absolute values are not comparable with FID-50k values in the literature.
+Inception Score \citep{salimans2016improved}, Kernel Inception Distance
+(KID) \citep{binkowski2018demystifying}, precision and recall
+\citep{kynkaanniemi2019improved} are reported alongside FID
+(Table~\ref{tab:full}; Appendix~\ref{app:setup-metrics}), and the pricing
+test is repeated in DINOv2 features (Section~\ref{sec:worth-dino}). Operator
+outputs of the pricing test are scored in floating point, without rounding to
+8 bits (hazard H1, Section~\ref{sec:worth-curve}). The
+spectral statistic $s$ (Eq.~\eqref{eq:statistic}) is computed on all samples
+and reference images, not on the first files of a directory listing, a
+subset that is neither random nor portable (hazard H2,
+Section~\ref{sec:mechanism}).
 
-Spectra are radial FFT profiles in decibels ($20\log_{10}|F|$), averaged over
-images, with both sides resized to a common resolution before profiling. The
-resize is not cosmetic: FFT magnitude scales with pixel count, so profiles
-taken at different resolutions differ by tens of dB from image size alone. We
-report this because a first attempt at the DreamBooth comparison omitted it and
-produced a \SI{26}{\decibel} deficit that was almost entirely that offset.
+\subsection{Statistical analysis}
+\label{sec:setup-stats}
 
-\subsection{What is released}
+Comparisons report the mean paired difference over seeds with its 95\%
+Student-$t$ interval and the two-sided paired $t$-test, which is exact
+whatever the correlation between arms (Appendix~\ref{app:setup-stats});
+``$\pm$'' is the sample standard deviation across seeds. The Wilcoxon
+signed-rank test \citep{wilcoxon1945individual} checks the direction only:
+its smallest two-sided $p$, $2/2^{n}$, is $0.0625$ for five pairs and $0.25$
+for three, so any smaller $p$, including every significant result at three
+seeds, rests on the $t$ model. Holm--Bonferroni correction
+\citep{holm1979simple} is applied within fixed families, one per question
+(Table~\ref{tab:families}), and raw and corrected $p$ are both reported. Each
+hypothesis belongs to one family: the budget family holds only the two
+800-epoch contrasts, and the timestep-only arm has a two-test family of its
+own (the arm against MSE, and AWWL against the arm). The families are fixed
+in the analysis code, so a corrected $p$ does not depend on which runs have
+finished; they were set during the analysis, not before it. AWWL's MRG
+(Eq.~\eqref{eq:mrg}), the headline quantity, is corrected over the
+\nFamilyPricing{} arms of the pricing family, and its FID gap to MSE over the
+\nFamilyMain{} arms of the main family.
+Convergence, band-wise, operator and positive-control results carry
+intervals and uncorrected $p$ (for the null control, in the pricing
+family, also Holm-adjusted $p$). An unresolved (non-significant) difference is read
+through the effects its interval excludes; at five seeds and the spread of the
+AWWL$-$MSE differences, a paired test has 80\% power against a true FID
+difference of about \mdeAWWL{} (Appendix~\ref{app:setup-stats}).
 
-Tables and figures are generated from the results ledger by scripts in the
-repository; no number in this paper is transcribed by hand. The ledger records
-one row per evaluated checkpoint with the configuration that produced it, so a
-reader can recompute every comparison, including the ones we do not make.
+Every table and measured number is generated by scripts from the run ledgers,
+released with the code (Data availability); an AI coding assistant wrote the
+code under the authors' supervision.

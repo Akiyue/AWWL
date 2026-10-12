@@ -384,7 +384,9 @@ awwl/
 │   └── cli.py               # train | infer | eval | eval-samples |
 │                            # prepare-data | pipeline | stats
 ├── scripts/
-│   └── verify_loss_math.py  # CPU checks of Parseval / eq.(7) / the alpha confound
+│   └── verify_loss_math.py  # CPU checks: Parseval on both bases, eq.(7) vs
+│                            # the code, and the alpha confound -- including
+│                            # its recurrence in an error-keyed weighting
 ├── docs/PHASE0.md           # How to run the replication, and how to read it
 ├── tests/                   # CPU tests (~30 s)
 ├── assets/prompts/          # The three paper prompts
@@ -403,10 +405,21 @@ Every baseline in Tables 1–2 ships in [`src/awwl/losses/`](src/awwl/losses/):
 | Charbonnier            | `charbonnier`       | `analytic.py::charbonnier_loss`              |
 | Perceptual (VGG)       | `perceptual`        | `perceptual.py::PerceptualLoss`              |
 | Variational Lower Bound| `vlb`               | `analytic.py::vlb_loss`                      |
-| SNR-Weighted (Min-SNR) | `snr_weighted`      | `analytic.py::snr_weighted_loss`             |
+| SNR-Weighted (raw)     | `snr_weighted`      | `analytic.py::snr_weighted_loss`             |
+| Min-SNR-γ              | `min_snr`           | `analytic.py::min_snr_loss`                  |
+| Focal Frequency Loss   | `focal_frequency`   | `focal_frequency.py::FocalFrequencyLoss`     |
 | KL on x₀               | `kl_x0`             | `analytic.py::kl_loss_x0`                    |
 | Static Wavelet (p=0)   | `adaptive_wavelet`<br>+ `power=0.0` | `adaptive_wavelet.py::AdaptiveWaveletLoss` |
 | **AWWL (Ours)**        | `adaptive_wavelet`  | `adaptive_wavelet.py::AdaptiveWaveletLoss`   |
+
+> **`snr_weighted` is not Min-SNR.** It applies the raw ratio
+> `ᾱₜ/(1-ᾱₜ)`, unclamped. On the linear schedule these configs use that peaks
+> at 9997 and spans eight orders of magnitude, putting 95% of the gradient
+> mass in the lowest 5% of timesteps — which is why the arm diverges when it
+> has to train from scratch (FID 325 ± 15) and is survivable only on a short
+> fine-tune. `min_snr` is Hang et al.'s clamp, `min(SNR, γ)/SNR`, bounded by
+> 1. The row kept the ambiguous name "SNR-Weighted (Min-SNR)" here long
+> enough for the manuscript to cite Hang et al. for the wrong one.
 
 ## Tests + lint
 

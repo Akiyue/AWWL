@@ -1,0 +1,75 @@
+% Supplementary results for Section~\ref{sec:generality}. Input under
+% Appendix D (Supplementary results, \label{app:supp}); starts at subsection
+% level, as the other appendix inputs do. It carries tab:dreambooth,
+% sec:restoration, fig:restoration and tab:restoration, so the Gaussian-denoising
+% subsection of appendix.tex (\label{app:tables-restoration}, which also inputs
+% tables/restoration) must be removed when this file is input.
+
+\subsection{DreamBooth: means and ranks}
+\label{app:supp-dreambooth}
+
+Table~\ref{tab:dreambooth} gives the mean, the rank and the Holm-corrected
+$p$-value of each objective on both metrics of the DreamBooth experiment of
+Section~\ref{sec:dreambooth}; Fig.~\ref{fig:db-tradeoff} plots the same runs
+as paired differences from MSE. The two rankings are nearly the reverse of
+each other, so the objectives trade prompt agreement against subject
+fidelity, and none is better than MSE on both metrics. For the one difference
+that survives correction, raw SNR weighting on CLIP score, the Wilcoxon
+signed-rank test gives $p = \dbWilcoxonClipRawSNR$, the smallest value that
+test can return with five pairs.
+
+\IfFileExists{tables/dreambooth.tex}{\input{tables/dreambooth}}{%
+  \begin{table}[tbp]\centering
+  \fbox{\parbox{0.8\linewidth}{\centering\vspace{4mm}
+  \textbf{tables/dreambooth.tex not built}\\[1mm]
+  run \texttt{python scripts/make\_tables.py}\vspace{4mm}}}
+  \caption{DreamBooth, five seeds per objective.}\label{tab:dreambooth}
+  \end{table}}
+
+\subsection{Gaussian denoising}
+\label{sec:restoration}
+
+A frequency-aware objective might pay where the target has image structure and
+the metrics score the output directly. We train the objectives as direct
+denoisers (not diffusion models) on CIFAR-10 with $\sigma \in [0.05, 0.5]$
+drawn per image, three seeds of 100 epochs, scored on 500 test images by
+PSNR, SSIM \citep{wang2004image}, LPIPS \citep{zhang2018unreasonable} and a
+NIQE-feature distance \citep{mittal2013making} whose pristine model is fitted
+on the clean test images (Appendix~\ref{app:setup-restoration}). The three wavelet
+arms (AWWL; AWWL, $\sum_b \omega_b = 1$; static wavelet, $p = 0$) apply AWWL's
+weighting with the degradation level as $\sigma$ at $\alpha = 1/2$, with
+$p = 1$ except in the static wavelet arm. The total weight $S$
+of Eq.~\eqref{eq:total} is then constant, so the weighting has no
+residual-independent noise-level component (Proposition~\ref{prop:confound}),
+and normalising the weights to sum to 1 only doubles them.
+
+\guardedfigure{1.0}{restoration_null.png}{%
+  Gaussian denoising on CIFAR-10 ($\sigma \in [0.05, 0.5]$, 500 test images,
+  degradation shared across arms): paired difference from MSE in (a) PSNR,
+  (b) SSIM, (c) LPIPS and (d) the NIQE-feature distance ($\Delta$NIQE), mean
+  of three seeds with paired 95\% $t$-intervals. Hollow: no difference
+  survives Holm correction within any metric; two intervals exclude zero
+  before correction (Charbonnier on PSNR; AWWL, $\sum_b \omega_b = 1$, on the
+  NIQE-feature distance). Wavelet arms use $\alpha = 1/2$ and $p = 1$, except
+  the static wavelet arm ($p = 0$).}{fig:restoration}
+
+\IfFileExists{tables/restoration.tex}{\input{tables/restoration}}{%
+  \begin{table}[tbp]\centering
+  \fbox{\textbf{tables/restoration.tex not built}}
+  \caption{Not built.}\label{tab:restoration}
+  \end{table}}
+
+No arm differs from MSE after Holm correction (Fig.~\ref{fig:restoration},
+Table~\ref{tab:restoration}); the smallest raw $p$ over the four metrics is
+\restMinP{} (\restMinPHolm{} after correction). The wavelet arms lean towards
+lower PSNR and better LPIPS and NIQE-feature distance, the direction of the
+perception--distortion trade-off \citep{blau2018perception}, by amounts that
+three seeds do not resolve. The 95\% interval of AWWL on PSNR,
+$[\restDPSNRAWWLLo, \restDPSNRAWWLHi]$~dB, excludes a gain above
+\restDPSNRAWWLHi~dB. On the half of the test images with the lowest noise
+levels, all three wavelet arms have lower PSNR than MSE, with intervals that
+exclude zero before correction; for AWWL the difference is
+$\restDPSNRlowAWWL$~dB $[\restDPSNRlowAWWLLo, \restDPSNRlowAWWLHi]$ (raw
+$p = \restDPSNRlowAWWLP$, $p_{\mathrm{Holm}} = \restDPSNRlowAWWLHolm$). This
+task was not priced: whether LPIPS and the NIQE-feature distance register the
+high band at 32 pixels (precondition P4) is untested.

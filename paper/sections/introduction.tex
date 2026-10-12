@@ -1,44 +1,149 @@
 \section{Introduction}
 \label{sec:intro}
 
-Samples from diffusion models are spectrally deficient, and measurably so. On
-CIFAR-10 the radial power spectrum of DDPM samples sits \SI{0.36}{\decibel}
-below that of real images at low frequency and \deficitHigh~\si{\decibel} below
-at high frequency---a sixfold tilt with frequency
-(\S\ref{sec:mechanism}). The observation is not new
-\citep{durall2020watch,dzanic2020fourier,schwarz2021frequency}, and it has
-motivated a family of training objectives that weight wavelet or Fourier
-sub-bands of the loss, often on a schedule tied to the diffusion noise level
-\citep{jiang2021focal,phung2023wavelet,huang2024wavedm}.
+Many training objectives are designed around a mechanism: they are meant to
+improve a model by changing a named property of what it produces.
+Frequency-aware losses for diffusion models are a clear case. Generated images
+deviate from real ones in their high-frequency spectra
+\citep{durall2020watch,dzanic2020fourier,frank2020leveraging,schwarz2021frequency},
+and diffusion models in particular under-represent high spatial frequencies
+\citep{ricker2024towards,yang2023diffusion}. Objectives that reweight the
+diffusion loss across Fourier or wavelet components aim to correct this
+deficit: by the current spectral error \citep{jiang2021focal}, inversely to
+the spectrum magnitude \citep{yang2023diffusion}, on a schedule tied to the
+noise level \citep{thao2026awwl}, or through auxiliary spectral terms
+\citep{chandran2026spectral}.
 
-The premise is sound. This paper asks whether the remedy works, and---when it
-does not---why, in terms precise enough to apply to the family rather than to
-one implementation.
+Such objectives are evaluated by training them and comparing a metric with
+that of a baseline, which shows whether an objective helps but not whether
+its mechanism accounts for the result. An objective can change the statistic
+it names while its effect on the metric arises through other channels, and
+ablations vary the strength of a mechanism without measuring its value in the
+metric; failing to identify the source of an empirical gain is a recurring
+weakness of machine-learning research \citep{lipton2019troubling}. For
+objectives motivated by a statistic of their output, the source can be
+measured directly.
+
+\paragraph{The pricing test.}
+We propose a test that does so (Section~\ref{sec:pricing-test}). Let $B$
+and $A$ be samples of a baseline model and of a model trained with the
+objective under test, $M$ a metric (lower is better) and $s$ the statistic
+that the objective claims to change. The test measures the change
+$\delta_A = s(A) - s(B)$ that training achieved, imposes it on the baseline's
+own samples with an operator $T_{\delta_A}$, and scores the result
+(Fig.~\ref{fig:teaser}(a)). The value $V = M(B) - M(T_{\delta_A}(B))$ is
+what the change is worth in $M$, and the mechanism residual gap
+$\mathrm{MRG} = M(A) - M(T_{\delta_A}(B))$, a signed quantity, is the
+metric of the trained objective minus that of the baseline carrying the same
+change; with $D = M(A) - M(B)$ the observed gap, $\mathrm{MRG} = D + V$
+exactly. A positive MRG means that what the objective alters besides $s$
+costs the metric on balance, which does not imply $D > 0$; a negative MRG
+means that the objective gains more than its change in $s$ is worth. The
+split is analogous to the separation of direct and indirect effects in
+mediation analysis \citep{robins1992identifiability,pearl2001direct}
+(Section~\ref{sec:pricing-reading}). Its central identifying assumption is
+that an operator imposing a change in $s$ moves $M$ as much as training that
+produced the same change would, and six preconditions
+(Section~\ref{sec:pricing-pre}) make its terms interpretable, among them that
+the metric registers $s$ and that filtered images are scored without
+re-quantisation. The value of a given change needs only the baseline's
+samples; the MRG adds the objective, trained at the seeds of the comparison.
+
+\guardedfigure{1.0}{teaser.png}{%
+  The pricing test and its verdict on CIFAR-10. (a)~The change $\delta_A$ in
+  the spectral statistic $s$ between the objective's samples $A$ and the
+  baseline's samples $B$ is imposed on $B$ by the operator
+  $T_A = T_{\delta_A}$, giving the value $V$ and the MRG, a signed difference.
+  (b)~FID relative to $M(B)$, paired by training seed (lower is better), with
+  paired 95\% $t$-intervals. Left: AWWL against MSE (five seeds, epoch 199,
+  DDIM-100); the MRG has raw $p = \mrgMainP$ and Holm $p = \mrgArmAWWLHolm$
+  over the \nFamilyPricing{} priced configurations. Right: the positive
+  control, MSE with weight averaging at epoch 399 of an 800-epoch run, its
+  FID optimum ($A$), against its epoch-199 checkpoint ($B$; three seeds;
+  Section~\ref{sec:worth-checks}).}{fig:teaser}
+
+Two controls check the test (Section~\ref{sec:worth-checks}): longer
+training, which targets nothing spectral, returns a significantly negative
+MRG, and a static band weighting that barely changes the spectrum returns a
+value near zero and an MRG close to its FID gap. As $|V|$ is small in both,
+$\mathrm{MRG} \approx D$, so the controls check the direction of the verdict
+and the accounting, not the identifying assumption. A third control tests
+that assumption directly: MSE trained on images that carry AWWL's spectral
+change acquires the change through training and returns an MRG of
+$\mrgPlanted$ $[\mrgPlantedLo, +\mrgPlantedHi]$, as the test requires when the
+assumption holds (Section~\ref{sec:worth-planted}).
+
+\paragraph{What the test finds.}
+We apply the test to Adaptive Weight Wavelet Loss (AWWL)
+\citep{thao2026awwl}, a wavelet band weighting that depends on the noise
+level, introduced in our conference paper. The metric is the Fr\'echet Inception
+Distance (FID) \citep{heusel2017gans}, the baseline the mean-squared-error
+(MSE) objective, and each trained configuration (an arm) has five seeds
+(three for four arms) on CIFAR-10, sampled with 100-step DDIM
+\citep{song2021denoising}. No arm has a significantly lower FID than MSE
+(Section~\ref{sec:audit}). AWWL's spectral change is worth
+$V = \priceTransplantValue$~FID, and the value sits at mid radial
+frequencies, the lower part of the range that AWWL up-weights, not at the
+highest, where the baseline's deficit is largest. AWWL trails the baseline
+carrying that change by $\mathrm{MRG} = \mrgMain$~FID (raw $p = \mrgMainP$),
+a result that does not survive Holm correction across the \nFamilyPricing{}
+priced arms ($p = \mrgArmAWWLHolm$; the verdict depends on the family), and its net gap to MSE is not resolved
+(Section~\ref{sec:worth}).
+Trained without the other, AWWL's timestep schedule and frequency shape at
+constant total weight are each significantly worse than MSE, by
+\dTimestep{} and \dSumFixed~FID, and partly cancel when combined, so how
+AWWL's cost divides between them depends on the order; the shape produces
+most of the spectral change, and fixing the total weight leaves the
+effective timestep weight free (Section~\ref{sec:confound}). Across arms,
+corrected MRG and FID-gap verdicts coincide, and every priced arm worse than
+MSE, frequency-aware or not, has a positive MRG; the test adds the
+decomposition, what each change is worth, not a more powerful test of the
+gap (Section~\ref{sec:worth-arms}). Repeated in DINOv2 features, the test
+resolves AWWL's gap to MSE and finds its spectral change worth nothing, so the
+verdict does not rest on Inception features (Section~\ref{sec:worth-dino}).
+
+Two results bear on evaluation beyond this objective. White noise within
+$\pm0.5$ least significant bit (LSB) lowers the baseline's FID by
+\priceNoiseHalfValue, so re-quantising filtered samples to 8~bits inflates
+their value; on held-out real images the same noise does not lower FID, at
+$\pm1$~LSB it raises it, and in DINOv2 features it raises the distance
+(Sections~\ref{sec:worth-curve} and~\ref{sec:worth-dino}). On CelebA-64,
+whose baseline has as large a high-band deficit as CIFAR-10's, spectral
+corrections applied as a fixed radial gain raise FID; the two settings differ
+in data, resolution, operating point and training steps, which the
+experiment does not separate (Section~\ref{sec:celeba}).
 
 \paragraph{Contributions.}
 \begin{enumerate}
-  \item An analytic characterisation of the objective family: on an
-    orthonormal basis, sub-band weighting reallocates a fixed error budget and
-    adds no information (\S\ref{sec:family}).
-  \item A confound in the standard weighting, which is simultaneously a
-    timestep reweighting, and a protocol that separates the two
-    (\S\ref{sec:confound}).
-  \item A five-seed audit showing the mechanism works while every metric
-    stays flat (\S\ref{sec:replication}, \S\ref{sec:mechanism}).
-  \item A direct measurement of what the correction is worth, and the finding
-    that the trained objective falls \shortfall~FID short of it
-    (\S\ref{sec:worth}).
-  \item Two measurement hazards that each reversed a conclusion mid-study and
-    that generalise beyond this paper (\S\ref{sec:replication},
-    \S\ref{sec:worth}).
+  \item A pricing test: what a change in an output statistic is worth, and
+    where, from baseline samples alone, and an exact split of an objective's
+    gap into that value and a residual (Section~\ref{sec:pricing-test}).
+  \item A five-seed audit of AWWL: its conference results do not replicate,
+    its printed equation differs from its code, and no objective improves
+    significantly on MSE in FID (Section~\ref{sec:audit}).
+  \item The test across \nFamilyPricing{} arms, separating what each spectral
+    change is worth, and a two-by-two design crossing AWWL's timestep
+    schedule with its frequency shape (Sections~\ref{sec:worth}
+    and~\ref{sec:confound}).
+  \item The limits of the test: a price that changes sign on CelebA-64,
+    metrics that do not register the statistic in DreamBooth, and
+    re-quantisation as a hazard (Sections~\ref{sec:worth-curve}
+    and~\ref{sec:generality}).
 \end{enumerate}
 
-\paragraph{Relation to a prior conference version.}
-The objective audited here was introduced in a conference paper by a subset of
-the present authors \citep{thao2026awwl}, which reported gains on CIFAR-10 and
-on subject-driven fine-tuning from single runs. This paper is not an extension
-of that work in the usual sense: it re-evaluates those claims under seed
-replication and does not reproduce them. We report the disagreement in full,
-including two measurement errors of our own that had to be corrected before the
-comparison could be trusted.
-\todo{confirm the target venue's policy on extensions that revise a prior result}
+\paragraph{Relation to the conference version.}
+AWWL was introduced by the present authors, with two further co-authors, in the proceedings of CITA 2026
+\citep{thao2026awwl}, which reported single-run gains on CIFAR-10 and in
+DreamBooth fine-tuning. The present paper is not an extended version of that
+paper: its subject is the pricing test, which the conference paper does not
+contain, and AWWL is the case to which the test is applied. No experiment,
+table or figure of the conference paper is reused; the overlap is confined to
+the definition of AWWL (Section~\ref{sec:family-awwl}) and to the published
+results, which Table~\ref{tab:replication} quotes in order to test them.
+
+Section~\ref{sec:related} reviews related work and
+Section~\ref{sec:background} the objective family;
+Sections~\ref{sec:pricing-test} and~\ref{sec:protocol} define the test and
+the setup, Sections~\ref{sec:audit} to~\ref{sec:confound} audit AWWL and
+price its change, Section~\ref{sec:generality} examines the reach of the test
+and Section~\ref{sec:discussion} discusses the results and their limits.

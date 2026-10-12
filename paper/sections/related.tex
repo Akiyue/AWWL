@@ -1,147 +1,210 @@
 \section{Related work}
 \label{sec:related}
 
-Four lines of work converge on the question this paper asks: whether a
-measurable spectral correction translates into a measurable improvement.
+This paper asks what a measured spectral change is worth in FID at the
+operating point of the model that achieves it. Five lines of work bear on the
+question, and each subsection below ends with how the present work relates to
+its line.
 
-\subsection{Spectral characterisation of generative models}
+\subsection{Spectral behaviour of generative models}
+\label{sec:related-spectral}
 
-Generated images differ from real ones in their Fourier statistics, and the
-difference is systematic. \citet{durall2020watch} traced a high-frequency
-deficit in GAN samples to the up-convolution operators in the decoder;
-\citet{dzanic2020fourier} showed the discrepancy is consistent enough across
-architectures to serve as a detection signal, and \citet{chandrasegaran2021closer}
-examined how much of it is intrinsic to the model rather than an artefact of
-the last upsampling layer. \citet{wang2025spectral} supply the account of why
-the deficit exists in the first place: solving the gradient-flow dynamics of a
-denoiser yields an inverse-variance spectral law in which a Fourier mode's
-learning time scales as $\tau \propto \lambda^{-1}$, so low-variance fine
-detail is acquired orders of magnitude later than coarse structure. A
-high-frequency deficit is therefore what an under-converged diffusion model
-should look like, which is a competing explanation any frequency-aware
-objective has to displace rather than assume. \citet{schwarz2021frequency} isolated generator and
-discriminator separately and found the bias is not one effect: upsampling
-operators bias the generator's spectrum, but checkerboard artefacts alone do
-not explain the discrepancy, and the discriminator's difficulty is with
-frequencies of \emph{low magnitude} rather than with high frequencies as such.
+Generated images differ systematically from real ones in their Fourier
+statistics. For generative adversarial networks (GANs), the high-frequency
+discrepancy has been used to detect generated images, traced to the
+generator's upsampling operators and removed by architectural or training
+changes
+\citep{durall2020watch,dzanic2020fourier,frank2020leveraging,schwarz2021frequency,chandrasegaran2021closer,jung2021spectral}.
+Diffusion models also underestimate high frequencies.
+\citet{ricker2024towards} attribute this gap to the training objective, which
+is the premise that frequency-aware objectives act on;
+\citet{yang2023diffusion} find that different frequency components are
+recovered at different timesteps; and \citet{corvi2023detection} characterise
+their forensic traces, including in the Fourier domain.
 
-This literature establishes the phenomenon and, largely implicitly, a
-motivation: because the spectrum is wrong, correcting it should help. That
-implication is rarely tested directly, and it is what \S\ref{sec:worth} puts a
-number on.
+A second reading attributes the deficit to under-training.
+\citet{wang2025spectral} solve the gradient-flow dynamics of linear and
+convolutional linear denoisers and find that the time a Fourier mode takes to
+reach its target variance scales inversely with that variance, so that
+low-variance fine detail is learned last. They confirm the law in U-Nets built
+from multilayer perceptrons and report that convolutional U-Nets depart from
+it. Our backbone is a convolutional U-Net, so the theory motivates, but does
+not settle, this reading. Section~\ref{sec:budget} reports, descriptively,
+that over a fourfold budget (with weight averaging enabled) the baseline's FID
+improves while its high-band deficit grows.
+
+This literature motivates frequency-aware objectives by an implication that it
+seldom tests: if the spectrum is wrong, correcting it should improve the
+samples as the metric scores them. The pricing test measures it directly, by
+applying the correction to a baseline's own samples.
+
+\subsection{Loss weighting across noise levels}
+\label{sec:related-timestep}
+
+Frequency and noise level are coupled in diffusion. Natural-image spectra
+decay with frequency whereas isotropic Gaussian noise is flat, so each noise
+level acts as a soft low-pass cutoff: high frequencies are submerged first in
+the forward process and resolved last in the reverse process
+\citep{rissanen2023generative,hoogeboom2023blurring,dieleman2024spectral,falck2025fourier}.
+The correspondence has also been used to shape the noise and its schedule
+\citep{jiralerspong2025shaping,esteves2026spectrally}. A weighting defined
+over frequency therefore acts in part as a weighting over noise levels.
+Section~\ref{sec:confound} shows how this coupling enters AWWL, and
+Section~\ref{sec:confound-family} that a weighting keyed on the error's
+spectrum inherits it.
+
+The parameterisation already fixes an implicit weighting. The $\epsilon$-MSE
+is an $x_0$-MSE weighted by the signal-to-noise ratio
+\citep{kingma2021variational,salimans2022progressive}, and the residual on
+which a frequency-aware objective acts is a scaled clean-image error, with
+image structure, rather than white noise (Eq.~\eqref{eq:residual}). Explicit
+schemes act on this axis: \citet{nichol2021improved} importance-sample
+timesteps by loss magnitude, P2 weighting \citep{choi2022perception}
+emphasises the noise levels at which perceptually rich content forms, and
+Min-SNR\nobreakdash-$\gamma$ \citep{hang2023efficient} weights the $x_0$-error of each
+timestep by $\min(\mathrm{SNR}_t, \gamma)$. EDM \citep{karras2022elucidating}
+separates the loss weighting from the noise-level distribution and the
+preconditioning, EDM2 \citep{karras2024analyzing} learns the weighting in the
+manner of multi-task uncertainty weighting \citep{kendall2018multi}, and the
+appropriate schedule shifts towards higher noise as resolution grows
+\citep{chen2023importance,hoogeboom2023simple}. On the theoretical side, a
+weighting that does not increase with log-SNR makes the weighted loss the
+evidence lower bound (ELBO) of Gaussian-noise-augmented data
+\citep{kingma2023understanding}. \citet{kumar2025loss} compare such objectives
+empirically, and the Soft-Min-SNR weight of \citet{li2026smoothed} matches
+Min-SNR-$\gamma$ at leading order, which makes Min-SNR-$\gamma$ a principled
+reference curve.
+
+The total weight of a sub-band weighting is a function of the noise level, and
+hence a weighting of the kind \citet{kingma2023understanding} analyse. For
+AWWL \citep{thao2026awwl} it is anti-correlated with Min-SNR-$\gamma$ at the
+CIFAR-10 setting ($r = \rSMinSNRCifar$) and correlated with it at the
+DreamBooth setting ($r = +\rSMinSNRDB$; Section~\ref{sec:confound}). The
+redistribution across bands at a fixed noise level is not covered by that
+account; its closest principled counterpart is the frequency-dependent forward
+process of \citet{hoogeboom2023blurring}, which changes the process rather
+than the loss. The multi-task view also supplies alternatives to hand-designed
+band weights, uncertainty weighting \citep{kendall2018multi} and GradNorm
+\citep{chen2018gradnorm}, which Section~\ref{sec:extensions} evaluates across
+sub-bands. Its uncertainty-weighted arm extends the EDM2 weighting to one
+weight per band and so learns a noise-level schedule and a band split
+together.
 
 \subsection{Frequency-aware objectives and architectures}
+\label{sec:related-objectives}
 
-Two families respond to the observation. The first modifies the
-\emph{objective}. Focal Frequency Loss \citep{jiang2021focal} weights Fourier
-components by how badly they are currently reconstructed, dynamically
-emphasising the hard ones. Wavelet variants replace the Fourier basis with a
-multi-resolution one, gaining spatial localisation: WaveDM \citep{huang2024wavedm}
-applies wavelet supervision to restoration, and the objective audited here
-weights wavelet sub-bands on a schedule tied to $\sigma_t$.
+Several objectives reweight the loss across frequency. Focal Frequency Loss
+(FFL) \citep{jiang2021focal}, a term added to spatial losses for
+reconstruction and synthesis, weights each Fourier component by the magnitude
+of its current error, normalised per sample, and has no noise-level schedule.
+\citet{yang2023diffusion} weight a distillation loss inversely to spectrum
+magnitude to promote high-frequency recovery, and AWWL weights the one-level
+wavelet sub-bands of the $\epsilon$-residual on a schedule tied to $\sigma_t$.
+Section~\ref{sec:second-member} trains FFL alone on the $\epsilon$-residual,
+in place of the MSE, as a second member of the family: by keying the weight on
+the error rather than on a schedule, it departs furthest from AWWL while
+keeping its premise.
 
-The second modifies the \emph{architecture} or the sampling path. WaveDiff
-\citep{phung2023wavelet} moves the diffusion process itself into the wavelet
-domain, primarily for speed; FreeU \citep{si2024freeu} rebalances the
-backbone and skip contributions inside the U-Net at inference, and
-\citet{yu2025frequency} rescale wavelet sub-bands during sampling to mitigate
-exposure bias, and \citet{oh2026attention} edit cross-attention logits in the
-Fourier domain at inference, one level deeper again. All three change the
-frequency content of samples without touching training, which makes them the
-closest relatives of the measurement in \S\ref{sec:worth} --- though there the
-operation is used to price a mechanism rather than to improve one.
-\citet{jiralerspong2025shaping} take a third route, shaping the frequency
-content through the noising operator itself.
+The closest contemporary relative of AWWL is the work of
+\citet{chandran2026spectral}, who add Fourier and wavelet losses to the
+diffusion objective while briefly fine-tuning pretrained EDM checkpoints. On
+class-conditional CIFAR-10 they find every variant within the standard
+deviation of the EDM baseline, in agreement with Section~\ref{sec:results},
+where AWWL shows no gain on unconditional CIFAR-10. On AFHQv2 and
+FFHQ at $64\times64$ they report reductions of \numrange{0.02}{0.07}~FID on
+baselines of \numrange{2.04}{2.56} over three seeds, whereas the change
+published for AWWL was $\pubDFIDAWWL$~FID on a baseline of \pubFIDMSE{}, from
+a single run \citep{thao2026awwl}. Effects of this size must first be settled
+against seed variance (Section~\ref{sec:protocol}); at $64\times64$,
+Section~\ref{sec:celeba} computes the value side of the pricing test for a
+baseline, but AWWL was not trained at that resolution
+(Section~\ref{sec:limitations}).
 
-A recent comparative study of diffusion objectives \citep{kumar2025loss}
-unifies several losses under the variational bound; frequency-weighted
-objectives sit outside that unification, since their weights are not derived
-from the bound but chosen to target a statistic of the output.
+Methods that change the representation or the process rather than the loss,
+such as wavelet-domain diffusion for sampling speed \citep{phung2023wavelet}
+or restoration \citep{huang2024wavedm} and wavelet score-based models that
+factorise the distribution across scales \citep{guth2022wavelet}, lie outside
+the audited family. Their stated aims are efficiency or conditional
+restoration rather than a named change to a statistic of the output, so the
+pricing test does not apply to them without a further specification of that
+statistic.
 
-The family remains active. \citet{chandran2026spectral} add differentiable
-Fourier \emph{and} wavelet losses to diffusion training as soft inductive
-biases for frequency balance --- the closest contemporary sibling of the
-objective we audit --- and report their largest gains on higher-resolution
-unconditional data, where fine structure is hardest to model. That is worth
-noting twice: it is independent support for the resolution caveat we state in
-\S\ref{sec:limitations}, and it is a prediction the test of \S\ref{sec:worth}
-could settle directly.
+\subsection{Post-hoc spectral correction and metric sensitivity}
+\label{sec:related-metrics}
 
-Reported gains in this family are typically small in absolute terms. The
-improvements in \citet{chandran2026spectral} range from \num{0.02} to
-\num{0.07} FID against baselines near \num{1.8}--\num{2.5}, averaged over three
-seeds; those in the objective we audit are of comparable relative size. Our
-results suggest that at that scale the question of whether an effect is present
-at all requires the seed variance to be quantified first, and that even a
-genuine spectral correction can be outweighed by what obtaining it costs.
+Spectral operations on images are established as methods. Post-processing has
+been used to make the spectra of generated images mimic real ones and so evade
+spectrum-based detectors \citep{dzanic2020fourier,dong2022think}. At inference
+time, FreeU \citep{si2024freeu} rebalances backbone and skip-connection
+features inside the U-Net, \citet{yu2025frequency} regulate wavelet sub-band
+energy during sampling to mitigate exposure bias, and \citet{oh2026attention}
+modulate cross-attention in the Fourier domain. The pricing test uses the same
+kind of operation as a measurement: it applies to the baseline's finished
+samples the change that the trained objective achieves, and reads the result
+as the value of that change.
 
-\subsection{Timestep reweighting}
+Whether such a change registers depends on the metric. FID moves substantially
+under resizing and compression \citep{parmar2022aliased}, so it registers
+low-level changes of the kind a spectral operator makes. It is also biased at
+finite sample size by a model-dependent amount \citep{chong2020effectively},
+and it is strongly affected by ImageNet class information and can be reduced
+substantially without any gain in perceived quality
+\citep{kynkaanniemi2023role}. \citet{stein2023exposing} find that the standard
+metrics rank diffusion models against GANs in ways human raters do not
+reproduce, and recommend DINOv2 features in place of Inception-V3.
+\citet{jayasumana2024rethinking} propose the CLIP-based maximum mean
+discrepancy (CMMD), and \citet{barratt2018note} catalogue the failure modes of
+the Inception Score. \citet{heusel2017gans} calibrated FID by applying large
+disturbances to real images, starting from the metric's minimum.
 
-A parallel line reweights the loss across the noise schedule rather than across
-frequency. \citet{nichol2021improved} resample timesteps by loss magnitude;
-P2 \citep{choi2022perception} up-weights the region of the schedule where
-perceptually relevant content is formed; Min-SNR \citep{hang2023efficient}
-treats the schedule as a multi-task problem and clamps the per-timestep weight
-by signal-to-noise ratio; \citet{karras2022elucidating} recast the whole design
-space, weighting included, and \citet{kingma2021variational} derive a weighting
-from the variational bound. \citet{li2026smoothed} unify the family from a
-divergence-modification view and give an explicit cross-walk to Min-SNR, which
-is what makes it meaningful to say a schedule \emph{is} a member of it rather
-than merely correlated with one.
+Two consequences follow for pricing. First, FID can move without a change in
+perceived quality, so the value of a change is its worth in the metric, not a
+demonstrated gain in quality. The pricing test inherits the metric's validity
+rather than establishing it, and one of its preconditions is that the metric
+registers the statistic at all (Section~\ref{sec:pricing-pre}). Second, a
+calibration at the metric's minimum measures a different quantity from the
+value at a trained model's operating point. On held-out CIFAR-10 test images,
+whose FID against the training set is \realTestFID{}, white noise of $\pm0.5$~LSB
+does not lower FID (value $\realNoiseHalfValue$) and noise of $\pm1$~LSB
+raises it ($\realNoiseOneValue$), in single measurements. Applied to the baseline's
+samples, $\pm0.5$~LSB is worth $+\priceNoiseHalfValue$
+(Section~\ref{sec:worth}). The pricing test therefore measures the value at
+the operating point (Section~\ref{sec:pricing-def}).
 
-These two axes --- frequency and timestep --- are usually presented as
-orthogonal. \S\ref{sec:confound} shows they are not orthogonal in the
-formulation we audit: its frequency parameter simultaneously imposes a timestep
-schedule correlated with Min-SNR at $|r| = 0.82$, so a result attributed to
-frequency balance may belong to the other axis entirely. The multi-task framing
-also supplies the natural alternative to hand-designed weights --- uncertainty
-weighting \citep{kendall2018multi} and GradNorm \citep{chen2018gradnorm} --- which
-\S\ref{sec:generality} evaluates.
+\subsection{Attribution of empirical gains}
+\label{sec:related-attribution}
 
-\subsection{What the metrics can see}
+Failure to identify the sources of empirical gains is a recurring weakness of
+machine-learning scholarship \citep{lipton2019troubling}. Controlled
+re-evaluations often find claimed improvements smaller than reported or absent
+\citep{melis2018state,lucic2018gans,musgrave2020metric}, and benchmark
+conclusions frequently do not survive accounting for sources of variance,
+seeds among them \citep{bouthillier2021accounting}. For FID,
+\citet{dufour2026fid} find across several hundred networks that retraining
+with a different seed moves FID $3.2\times$ more than redrawing samples, and
+recommend treating gaps below roughly \SI{1.3}{\percent} as inconclusive.
+This, with guidance on power, interval estimation and significance testing at
+small seed counts \citep{colas2018many,agarwal2021deep,dror2018hitchhiker},
+informs the protocol of Section~\ref{sec:protocol}.
 
-A separate literature questions whether these metrics register what we assume.
-\citet{barratt2018note} catalogued the Inception Score's failure modes;
-\citet{chong2020effectively} showed FID is biased at finite sample size in a way
-that depends on the model being evaluated; \citet{kynkaanniemi2023role}
-demonstrated that FID responds strongly to the ImageNet class distribution of
-the generated set, a property unrelated to image quality; and
-\citet{stein2023exposing} found that the standard metrics rank diffusion models
-against GANs in ways human raters do not reproduce.
+In several areas a training-time intervention is expected to outperform a
+post-hoc counterpart that targets the same quantity. Examples are temperature
+scaling for calibration \citep{guo2017calibration}, post-hoc logit adjustment
+for long-tailed recognition, which \citet{menon2021long} present alongside its
+loss-based equivalent, and post-processing of a trained predictor to meet a
+fairness criterion \citep{hardt2016equality}. Closer to the present setting,
+\citet{kynkaanniemi2023role} change a statistic of a generated set after the
+fact, by resampling it to match class histograms, and read the response of
+FID. The accounting identity of the pricing test is an analogue of the
+separation of direct from indirect effects in causal mediation analysis
+\citep{robins1992identifiability,pearl2001direct};
+Section~\ref{sec:pricing-reading} states the correspondence and its
+assumptions.
 
-Our contribution to this line is quantitative and specific: we measure how much
-FID moves for a known spectral perturbation, and find that the answer depends
-by more than an order of magnitude on whether the calibration is performed at
-the metric's minimum or at a model's actual operating point
-(\S\ref{sec:worth}).
-
-\subsection{Replication and variance}
-
-Finally, the practice this paper follows. \citet{bouthillier2021accounting}
-showed that benchmark conclusions in machine learning frequently do not survive
-proper accounting for sources of variance, seeds among them, and recommend
-reporting comparisons with the variance made explicit.
-
-\citet{dufour2026fid} put a number on it for exactly our setting. Across
-several hundred networks trained on class-conditional ImageNet at
-$256\times256$, retraining under an identical recipe with a different seed
-moves FID $3.2\times$ more than redrawing samples from a fixed network, and
-the coefficient of variation stays inside a \SIrange{1}{2}{\percent} band
-regardless of model size or compute. They recommend treating any FID gap below
-roughly \SI{1.3}{\percent} as inconclusive and reporting an error bar over
-training seeds.
-
-The agreement with our own measurement is worth stating because nothing about
-it was arranged: our five-seed standard deviation of \num{0.21} at a baseline
-FID of \fidMSE{} is a coefficient of variation of \SI{1.14}{\percent}, inside
-their band, obtained on a different architecture, dataset and resolution. Two
-independent estimates of how much a training seed is worth agreeing to within
-a few tenths of a percent is the strongest evidence available that the quantity
-is a property of diffusion training rather than of either setup. Differences of
-the size routinely reported in the frequency-aware literature sit at or below
-it, which is the methodological premise of \S\ref{sec:protocol}.
-
-The 2026 sweep found no work that prices a training objective's stated
-mechanism against a post-processed baseline, which remains this paper's
-methodological contribution. Every cited entry has been verified against the
-publisher or arXiv record.
+Relative to each of these lines the pricing test is narrower and more
+specific. It prices a mechanism that the objective itself states, in the
+reported metric, at the model's operating point, using the baseline's own
+samples. It does not establish that the metric is valid, and it applies only
+to objectives that name the statistic they intend to change. To our knowledge,
+no prior work prices an objective's stated output statistic by applying an
+operator to the baseline's own samples.

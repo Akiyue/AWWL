@@ -1,31 +1,28 @@
-Diffusion models under-produce high spatial frequencies, and a growing family
-of training objectives sets out to correct this by weighting wavelet or Fourier
-sub-bands of the loss. We audit one such objective over five seeds and find
-that although it does exactly what it claims---closing \correction~dB of a
-\deficitHigh~dB high-frequency deficit on CIFAR-10---it is no better than plain
-MSE on FID, Inception Score or KID, and slightly worse on all three.
-
-We then quantify what that correction should have been worth. Applying the
-identical correction to the baseline's own samples as a Fourier post-process
-improves FID by $\boostValue \pm \boostCI$, so the trained objective ends
-\shortfall~FID short of what its own mechanism predicts: it buys a real
-spectral improvement and pays for it several times over elsewhere. A twenty-line
-post-process on the baseline outperforms the trained objective by that same
-margin.
-
-On a second task---subject-driven fine-tuning of a latent diffusion model---the
-same accounting is starker still: the objective corrects
-\dbCorrection~\si{\decibel}, three times what it corrects on CIFAR-10, and a
-post-process removing the deficit entirely changes the CLIP metrics by two
-orders of magnitude less than the seed variance. The correction is real,
-larger, and worth nothing those metrics can register.
-
-We further show that the published weighting conflates frequency balance with a
-Min-SNR-style timestep reweighting ($|r| = 0.82$); isolating the frequency
-component while holding the gradient budget fixed makes results significantly
-worse ($+1.34$~FID, $p = 0.003$). Finally we report two measurement hazards that
-reversed conclusions during this study: a hand-written KID estimator that
-inverted the sign of the only positive result, and the observation that
-calibrating metric sensitivity on real images measures it at a minimum where it
-is quadratically insensitive, understating operating-point sensitivity roughly
-thirtyfold.
+% Abstract: one paragraph, at most 245 words after macro expansion. Every
+% number is a macro from generated/numbers.tex. Numbers kept here: the value
+% V, the MRG with raw and Holm p, the two single-component costs of the
+% two-by-two design and the noise value; intervals and the rest are in the body.
+Objectives built around a mechanism, such as frequency-aware diffusion losses,
+are judged by comparing trained models, which shows whether they help, not
+what the mechanism is worth. Our pricing test imposes a trained
+objective's change in an output statistic on baseline samples: the metric
+improvement is the change's value $V$, and the mechanism residual gap (MRG),
+the objective's metric minus the filtered baseline's, equals $D + V$ for the
+observed gap $D$. Controls check the verdict's sign, and a planted-mechanism control its
+identifying assumption. On CIFAR-10, no
+configuration has a significantly lower Fr\'echet Inception Distance (FID)
+than the mean-squared-error baseline. The spectral change of Adaptive Weight
+Wavelet Loss (AWWL), introduced in our conference paper, is worth
+\priceTransplantValue{}~FID, mostly at mid radial frequencies rather than
+where the deficit peaks. AWWL's MRG is \mrgMain{}~FID (raw
+$p = \mrgMainP$, Holm $p = \mrgArmAWWLHolm$ over \nFamilyPricing{}
+configurations). Trained alone, its timestep schedule and, at constant total
+weight, its frequency shape each raise FID significantly ($+\dTimestep$,
+$+\dSumFixed$) and partly cancel when combined; the shape produces most of
+the spectral change. Across configurations, corrected MRG and FID-gap
+verdicts coincide: the test adds a decomposition, not statistical power.
+White noise within half an 8-bit step lowers the baseline's FID by
+\priceNoiseHalfValue{}, though not that of held-out real images, so
+re-quantising filtered samples overvalues them. In DINOv2 features AWWL's gap
+is resolved, its change is worth nothing, and noise raises the distance. On CelebA-64, correcting a high-frequency
+deficit of the same size raises FID.

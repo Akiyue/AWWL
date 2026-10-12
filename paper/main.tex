@@ -1,107 +1,244 @@
-% Frequency-aware diffusion losses: what a spectral correction is worth.
+% Pricing the Mechanism: manuscript for Neurocomputing (Elsevier).
 %
-% Deliberately plain `article` rather than a venue template. The target venue
-% is not settled, and swapping \documentclass late is far cheaper than
-% unpicking a template's own section and float conventions from the prose.
-% To move to LNCS: change the class, replace \maketitle's block, keep sections.
+% Build:  bash paper/build.sh      (tectonic; or: latexmk -pdf main.tex)
 %
-% Build:  bash paper/build.sh      (or: latexmk -pdf main.tex)
+% Class: elsarticle, 3p layout. Its 468pt (16.45 cm) text width is close to
+% the 16 cm width the figures are authored at, so a full-width figure prints at
+% 1.03 times its authored size. The class notes that 3p is a camera-ready
+% layout; `preprint' gives the plain one-column submission layout if the
+% journal asks for it.
 
-\documentclass[11pt,a4paper]{article}
+\documentclass[3p,11pt,a4paper]{elsarticle}
 
-\usepackage[utf8]{inputenc}
+\usepackage[utf8]{inputenc}   % for pdfLaTeX (Editorial Manager); XeTeX ignores it
 \usepackage[T1]{fontenc}
-\usepackage[margin=2.5cm]{geometry}
 \usepackage{amsmath,amssymb}
+\usepackage{amsthm}           % proof environment (with end mark) and theorem styles
 \usepackage{graphicx}
 \usepackage{booktabs}
+% elsarticle sets a table's caption above it with no space below
+% (\belowcaptionskip is 0pt), so the top rule touched the caption's last line.
+\setlength{\abovetopsep}{4pt}
 \usepackage{siunitx}
 \usepackage{xcolor}
-\usepackage[numbers,sort&compress]{natbib}
+\usepackage{lineno}           % line numbers for review, switched on below
+% lineno numbers the lines of a paragraph that runs into a display only when
+% the display is wrapped in linenomath. It wraps \[ and equation itself but not
+% amsmath's other environments, so a paragraph ending in equation* or align
+% lost its numbers (the proofs of Appendix A). lineno 5 patches them with
+% \linenomathpatchAMS; older copies (tectonic's bundle has v4.41) are patched
+% here in the same way. The explicit linenomath wrappers in the section files
+% are then redundant but harmless: \linenomath acts only once when nested.
+\makeatletter
+\ifdefined\linenomathpatchAMS
+  \linenomathpatchAMS
+\else
+  \newcommand*\awwl@lnpatch[1]{%
+    \expandafter\let\csname awwl@ln@#1\expandafter\endcsname\csname #1\endcsname
+    \expandafter\let\csname awwl@ln@end#1\expandafter\endcsname
+      \csname end#1\endcsname
+    \renewenvironment{#1}%
+      {\linenomath\csname awwl@ln@#1\endcsname}%
+      {\csname awwl@ln@end#1\endcsname\endlinenomath}}
+  \awwl@lnpatch{equation*}%
+  \awwl@lnpatch{align}\awwl@lnpatch{align*}%
+  \awwl@lnpatch{alignat}\awwl@lnpatch{alignat*}%
+  \awwl@lnpatch{flalign}\awwl@lnpatch{flalign*}%
+  \awwl@lnpatch{gather}\awwl@lnpatch{gather*}%
+  \awwl@lnpatch{multline}\awwl@lnpatch{multline*}%
+\fi
+\makeatother
+% Pseudocode (Algorithm~\ref{...}). algorithm.sty loads float.sty, and both
+% must come before hyperref: hyperref tests for float when it loads and only
+% then anchors float captions correctly.
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+% elsarticle loads natbib itself (numeric); options go through \biboptions.
+\biboptions{sort&compress}
 \usepackage[hidelinks]{hyperref}
+% PDF metadata, set explicitly: left to itself hyperref would build the author
+% string from the \author commands, whose \corref marks are not allowed in a
+% PDF string. Keep in step with the frontmatter below.
+\hypersetup{%
+  pdftitle={Pricing the Mechanism: What a Spectral Correction Is Worth in
+            Diffusion Training},
+  pdfauthor={Do Thi Phuong Thao, Tran Huy Hoang Son, Tran Ngoc Duc Anh,
+             Nguyen Van An},
+  pdfkeywords={Diffusion models; Frequency-aware loss; Fr\'echet Inception
+               Distance; Loss weighting; Evaluation methodology; Negative
+               results}}
+
+% algorithmicx restarts its line counter in every algorithmic environment
+% without telling hyperref, so the line anchors of a second algorithm would
+% repeat the first's (pdfTeX "destination with the same identifier"). Number
+% the environments and make each line anchor unique.
+\makeatletter
+\newcounter{algorithmicH}
+\let\awwl@algorithmic\algorithmic
+\def\algorithmic{\stepcounter{algorithmicH}\awwl@algorithmic}
+\def\theHALG@line{ALG@line.\arabic{algorithmicH}.\arabic{ALG@line}}
+\makeatother
 
 \graphicspath{{figures/}}
 
-% Numbers that appear in more than one place. Defining them once means a
-% re-run updates every mention, rather than leaving one stale figure in the
-% abstract to be found by a referee.
-\newcommand{\deficitHigh}{2.22}          % MSE high-band deficit, dB
-\newcommand{\correction}{0.42}           % AWWL's spectral correction, dB
-\newcommand{\boostValue}{0.346}          % FID gained by applying it post hoc
-\newcommand{\boostCI}{0.015}
-\newcommand{\shortfall}{0.79}            % FID short of its own prediction
-\newcommand{\fidMSE}{18.460}
-\newcommand{\fidAWWL}{18.901}
-\newcommand{\fidMSEboost}{18.114}
-\newcommand{\fidAWWLboost}{18.568}
+% Float placement. LaTeX's defaults are conservative, and with this many
+% figures and tables they overflow: a float that cannot be placed
+% blocks every later float of its class, so the queue drains at the end of the
+% document. elsarticle does not change these parameters, so the values below
+% apply unchanged. Defaults are in the comments. `floatpagefraction' must stay
+% below `topfraction' or LaTeX will build float-only pages in preference to
+% placing floats on text pages. At 0.70 a table and a figure that together
+% filled three quarters of a page were set as a float-only page with a quarter
+% of it blank (the band table and spectrum figure of sections/mechanism.tex);
+% at 0.80 they share pages with text. The appendices,
+% whose generated tables are two thirds of a page tall and cannot share a page
+% with text, set it back to 0.70 (sections/appendix.tex).
+\renewcommand{\topfraction}{0.85}          % 0.7
+\renewcommand{\bottomfraction}{0.70}       % 0.3
+\renewcommand{\textfraction}{0.15}         % 0.2
+\renewcommand{\floatpagefraction}{0.80}    % 0.5
+\setcounter{topnumber}{4}                  % 2
+\setcounter{bottomnumber}{3}               % 1
+\setcounter{totalnumber}{6}                % 3
 
-% DreamBooth pricing (\S\ref{sec:generality}). The correction is three times
-% larger here than on CIFAR-10 and worth nothing the metrics can register.
-\newcommand{\dbDeficitMSE}{2.75}         % MSE high-band deficit, dB
-\newcommand{\dbDeficitAWWL}{1.50}        % the audited objective's, dB
-\newcommand{\dbCorrection}{1.25}         % what the objective corrects, dB
-\newcommand{\dbResidual}{0.25}           % deficit left after the post-process
+% Keep a float inside the section that introduces it.
+\usepackage[section]{placeins}
 
-% Open questions, visible in the draft and impossible to forget at submission.
+% Statements proved in Appendix~\ref{app:theory} and cited from the main text.
+\newtheorem{proposition}{Proposition}
+\newtheorem{lemma}[proposition]{Lemma}
+\newtheorem{corollary}[proposition]{Corollary}
+\theoremstyle{remark}
+\newtheorem{remark}[proposition]{Remark}
+\theoremstyle{plain}
+
+% Every measured number in the text is a macro written by
+% scripts/make_numbers.py; no number is set by hand in this file.
+% (\InputIfFileExists is \IfFileExists{...}{\input{...}}{} in one command.)
+\InputIfFileExists{generated/numbers.tex}{}{}
+
+% Open items, printed in colour so none reaches a submitted PDF unnoticed.
 \newcommand{\todo}[1]{\textcolor{red}{\textbf{[TODO: #1]}}}
 \newcommand{\pending}[1]{\textcolor{blue}{\textbf{[PENDING: #1]}}}
 
 % A figure that degrades to a visible placeholder rather than a build failure,
 % so the manuscript compiles on a machine that has the text but not the sweep
-% output. The label is carried by both branches: a missing figure must not
-% silently turn every \ref to it into a dangling one.
+% output. The label is carried by both branches, so a missing figure does not
+% turn every \ref to it into a dangling one. A vector copy (same name, .pdf)
+% is preferred when present, as Elsevier's artwork guidelines ask; the raster
+% named in the call is the fallback.
 % #1 width fraction  #2 file  #3 caption  #4 label
+\makeatletter
 \newcommand{\guardedfigure}[4]{%
-  \begin{figure}[t]\centering
+  \begin{figure}[tbp]\centering
+  \filename@parse{#2}\edef\gf@vector{\filename@base.pdf}%
+  \IfFileExists{figures/\gf@vector}{\includegraphics[width=#1\linewidth]{\gf@vector}}{%
   \IfFileExists{figures/#2}{\includegraphics[width=#1\linewidth]{#2}}{%
     \fbox{\parbox{0.8\linewidth}{\centering\vspace{6mm}
     % \detokenize so a filename containing an underscore prints as text
     % instead of failing the build with "Missing $ inserted".
     \textbf{\detokenize{figures/#2} not built}\\[1mm]
-    run \texttt{awwl figures}\vspace{6mm}}}}
+    run \texttt{awwl figures}\vspace{6mm}}}}}%
   \caption{#3}\label{#4}
   \end{figure}}
 
-\title{Frequency-Aware Diffusion Losses Pay More Than They Buy}
+% Run-in paragraph headings. elsarticle appends a full stop to every
+% \paragraph title, while the section files write their titles with their own
+% punctuation ("\paragraph{Metric scope.}"), which printed "scope..". Add the
+% stop only when the title does not already end in punctuation, judged by the
+% space factor the last character left (the test amsthm uses).
+\def\els@addstop{\ifhmode\ifnum\spacefactor>\@m\else.\fi\else.\fi}
+\def\els@aparagraph[#1]#2{\elsparagraph[#1]{#2\els@addstop}}
+\def\els@bparagraph#1{\elsparagraph*{#1\els@addstop}}
 
-% Taken from the CITA 2026 version. Authorship of this paper is a decision for
-% the group, not a default: it revises a prior result, and who takes
-% responsibility for that is worth deciding explicitly rather than inheriting.
-\author{%
-  Do Thi Phuong Thao\thanks{Faculty of Information Technology, Hanoi
-  University, Vietnam. \texttt{thaodtp\_fit@hanu.edu.vn}}
-  \and Tran Ngoc Duc Anh\footnotemark[1]
-  \and Nguyen Van An\footnotemark[1]
-  \and Le Quang Ngoc\footnotemark[1]
-  \and Tran Huy Hoang Son\footnotemark[1]
-  \and Nguyen Quoc Huy\thanks{Hanoi Architectural University, Vietnam.}%
-}
-\date{Draft --- \today}
+% Appendices. elsarticle's \appendix sets \thesection to "Appendix~A", which
+% it prints in the heading and returns from every \ref, so text written as
+% Appendix~\ref{app:theory} would read "Appendix Appendix A". Keep the
+% "Appendix A." heading and make \ref return the letter alone (A, A.1, ...);
+% the text therefore writes Appendix~\ref{app:...}.
+% elsarticle restarts equation numbers in each appendix but lets tables and
+% figures run on from the main text (Table B.14); Elsevier numbers them per
+% appendix (Table A.1, B.1, ...). hyperref's patched \@addtoreset makes the
+% anchors unique (table.B.1), so the restart does not clash with Table 1.
+\newcommand{\startappendices}{%
+  \appendix
+  \setcounter{table}{0}\setcounter{figure}{0}%
+  \@addtoreset{table}{section}\@addtoreset{figure}{section}%
+  \renewcommand{\thesection}{\Alph{section}}%
+  \def\@seccntformat##1{\csname app@prefix@##1\endcsname
+    \csname the##1\endcsname\@seccntDot\hskip 0.5em}%
+  \def\app@prefix@section{\appendixname}}
+\makeatother
+
+\journal{Neurocomputing}
 
 \begin{document}
-\maketitle
+
+\begin{frontmatter}
+
+% The title breaks after the colon rather than leaving its last word alone on
+% the second line; ties keep each author's name on one line.
+\title{Pricing the Mechanism:\\ What a Spectral Correction Is Worth in
+       Diffusion Training}
+
+\author[hanu]{Do~Thi~Phuong~Thao\corref{cor1}}
+\ead{thaodtp\_fit@hanu.edu.vn}
+\author[hanu]{Tran~Huy~Hoang~Son}
+\author[hanu]{Tran~Ngoc~Duc~Anh}
+\author[hanu]{Nguyen~Van~An}
+\cortext[cor1]{Corresponding author.}
+
+\affiliation[hanu]{organization={Faculty of Information Technology, Hanoi University},
+                   city={Hanoi},
+                   country={Vietnam}}
 
 \begin{abstract}
 \input{sections/abstract}
 \end{abstract}
 
+\begin{keyword}
+Diffusion models \sep
+Frequency-aware loss \sep
+Fr\'echet Inception Distance \sep
+Loss weighting \sep
+Evaluation methodology \sep
+Negative results
+\end{keyword}
+
+\end{frontmatter}
+
+\linenumbers
+
+% The test is defined before the case study that applies it: the setting
+% (background and the objective family), the test and the setup, then the
+% audit of one objective. family.tex, replication.tex, extensions.tex and
+% limitations.tex were merged into background, results and discussion, and
+% the files removed (tests/test_manuscript.py keeps them out).
 \input{sections/introduction}
 \input{sections/related}
 \input{sections/background}
-\input{sections/family}
-\input{sections/confound}
+\input{sections/pricing}
 \input{sections/protocol}
-\input{sections/replication}
 \input{sections/results}
 \input{sections/mechanism}
 \input{sections/worth}
-\input{sections/extensions}
+\input{sections/confound}
 \input{sections/generality}
 \input{sections/discussion}
-\input{sections/limitations}
 \input{sections/conclusion}
 
-\bibliographystyle{plainnat}
+% Elsevier's end matter: after the conclusion, immediately above the
+% references.
+\input{sections/declarations}
+
+% elsarticle-num-names rather than elsarticle-num: both number the list in
+% order of first citation, but only the -names variant gives natbib the
+% author names that \citet prints (elsarticle-num prints "(author?) [n]").
+\bibliographystyle{elsarticle-num-names}
 \bibliography{refs}
+
+\IfFileExists{sections/appendix.tex}{%
+  \startappendices
+  \input{sections/appendix}}{}
 
 \end{document}
