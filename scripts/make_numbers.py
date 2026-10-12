@@ -301,6 +301,30 @@ def main_matrix(M: Macros) -> list[dict]:
     return rows
 
 
+
+_DERIVED_CACHE = RUNS / "pricing" / "cache" / "derived.json"
+
+
+def _derived(key: str, compute):
+    """A value computed from data outside the repository, cached in derived.json.
+
+    Computed when its inputs exist (and the cache updated); read back from the
+    released cache when they do not, so the paper rebuilds from a clone.
+    """
+    import json as _json
+
+    cache = _json.loads(_DERIVED_CACHE.read_text()) if _DERIVED_CACHE.exists() else {}
+    try:
+        value = compute()
+    except Exception:  # pragma: no cover - inputs absent
+        value = None
+    if value is not None and value != 0:
+        cache[key] = value
+        _DERIVED_CACHE.parent.mkdir(parents=True, exist_ok=True)
+        _DERIVED_CACHE.write_text(_json.dumps(cache, indent=1, sort_keys=True))
+        return value
+    return cache.get(key)
+
 def learned_weighting(M: Macros) -> None:
     """The trained awwl_learned weights at the two ends of the schedule."""
     M.section("The learned (sigma-conditioned uncertainty) weighting at the end of training")
@@ -328,6 +352,11 @@ def learned_weighting(M: Macros) -> None:
             hhll.append(float(w[hh].reshape(2)[1] / w[ll].reshape(2)[1]))
     except Exception as exc:  # pragma: no cover
         print(f"learned weighting unavailable: {exc}")
+    if sums:
+        _derived("learnedWeighting", lambda: {"sums": sums, "hhll": hhll})
+    else:
+        cached = _derived("learnedWeighting", lambda: None) or {}
+        sums, hhll = cached.get("sums", []), cached.get("hhll", [])
     src = ("runs/phase0/awwl_learned_s{1..5}/state/<last step>/loss.pt, UncertaintyWeighting(conditioned) "
            "raw weights at t = 1 and t = 1000 of the linear schedule")
     M.add("learnedSumRatioMin", num(min(sums), 0) if sums else None,
@@ -536,7 +565,8 @@ def spectral(M: Macros, compute: bool, workers: int) -> None:
     for name, value in (("bandLowMax", l1), ("bandMidMin", m0), ("bandMidMax", m1),
                         ("bandHighMin", h0), ("bandHighMax", h1)):
         M.add(name, str(value), "band_deviations: radii of the three equal index thirds of the profile")
-    M.add("nRefImages", str(mb._count_images(mb.REAL)), "data/cifar10_train_png: reference images")
+    n_ref = _derived("nRefImages", lambda: mb._count_images(mb.REAL))
+    M.add("nRefImages", str(n_ref) if n_ref else None, "data/cifar10_train_png: reference images")
     arms = [a for a, _ in mb.ARMS]
     devs = mb.deviations(mb.ddim(), arms, mb.SEEDS, ref, compute=compute, workers=workers)
     src = "runs/pricing/cache/cifar10/profiles/*_ep199.npy vs ref_profile.npy"
