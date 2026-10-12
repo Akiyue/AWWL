@@ -28,6 +28,14 @@ runs/**
 !runs/*/*/
 !runs/*/*/config.json
 runs/smoke/**
+# The radial spectral profiles the band tables and spectral macros are computed
+# from (a few hundred kB), so the paper can be rebuilt without the samples. The
+# reference feature caches (several GB) stay out.
+!runs/pricing/cache/*.json
+!runs/pricing/cache/*/
+!runs/pricing/cache/*/ref_profile.npy
+!runs/pricing/cache/*/profiles/
+!runs/pricing/cache/*/profiles/*.npy
 # 2 GB of downloaded and re-encoded datasets. Every one is rebuilt by
 # `awwl prepare-data`, and the 163 MB CIFAR tarball is not covered by the
 # *.png rule below, so it was one `git add -A` away from the history.
