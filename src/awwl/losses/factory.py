@@ -31,7 +31,16 @@ _KNOWN: tuple[str, ...] = (
     "kl_x0",
     "vlb",
     "snr_weighted",
+    "min_snr",
+    # The timestep component of AWWL on its own: MSE reweighted per sample by
+    # the published total weight S(sigma) = w_LL + w_det, with no frequency
+    # shape. By Proposition 2 of the paper, AWWL = S * MSE + a zero-sum shape
+    # term, so this arm and AWWL differ by the shape term alone.
+    "awwl_timestep",
     "perceptual",
+    # A second independently published member of the frequency-aware family,
+    # so the paper's family-level claims rest on more than one instance.
+    "focal_frequency",
     "adaptive_wavelet",
     # Extension losses. All share one implementation
     # (:class:`GeneralizedWaveletLoss`) and differ only in the weighting
@@ -68,9 +77,14 @@ _LOSS_BODY_KEYS = frozenset(
         "spatial",
         "normalize_weights",
         "normalize_scale",
+        "normalize_order",
         "gradnorm",
         "gradnorm_asymmetry",
         "snr_gamma",
+        "ffl_alpha",
+        "log_matrix",
+        "batch_matrix",
+        "ave_spectrum",
         "lifting_kernel_size",
         "learnable_basis",
     }
@@ -88,7 +102,7 @@ def get_loss_function(
     Args:
         name: Any entry of :func:`known_losses` — the nine published
             objectives plus the ``wavelet_*`` extension family.
-        noise_scheduler: Required for ``vlb``, ``snr_weighted``,
+        noise_scheduler: Required for ``vlb``, ``snr_weighted``, ``min_snr``,
             ``adaptive_wavelet`` and every ``wavelet_*`` loss. Must expose
             ``alphas_cumprod``.
         **kwargs: Per-loss hyperparameters, normally the whole ``loss:``
@@ -191,6 +205,62 @@ def get_loss_function(
             )
 
         return _snr
+
+    if name == "focal_frequency":
+        from awwl.losses.focal_frequency import FocalFrequencyLoss
+
+        ffl = FocalFrequencyLoss(
+            alpha=float(kwargs.get("ffl_alpha", 1.0)),
+            log_matrix=bool(kwargs.get("log_matrix", False)),
+            batch_matrix=bool(kwargs.get("batch_matrix", False)),
+            ave_spectrum=bool(kwargs.get("ave_spectrum", False)),
+        )
+
+        def _ffl(model_pred: torch.Tensor, target: torch.Tensor, *, timesteps=None) -> torch.Tensor:
+            # Its weights come from the error, not from sigma, so it ignores
+            # the timestep the trainer passes every objective.
+            del timesteps
+            return ffl(model_pred, target)
+
+        _ffl.module = ffl  # type: ignore[attr-defined]
+        return _ffl
+
+    if name == "awwl_timestep":
+        if noise_scheduler is None:
+            raise ValueError("awwl_timestep requires noise_scheduler")
+        schedule = AdaptiveWaveletLoss(
+            alpha=float(kwargs.get("alpha", 0.8)),
+            power=float(kwargs.get("power", 2.0)),
+            weighting=str(kwargs.get("weighting", "normalized")),  # type: ignore[arg-type]
+        )
+
+        def _awwl_timestep(
+            model_pred: torch.Tensor, target: torch.Tensor, *, timesteps: torch.Tensor
+        ) -> torch.Tensor:
+            alphas_cumprod = noise_scheduler.alphas_cumprod.to(model_pred.device)
+            sigmas = torch.sqrt(1.0 - alphas_cumprod[timesteps])
+            parts = schedule.weights_at(sigmas)
+            total = (parts["w_ll"] + parts["w_det"]).to(model_pred.dtype).view(-1, 1, 1, 1)
+            return (total * (model_pred - target).pow(2)).mean()
+
+        _awwl_timestep.schedule = schedule  # type: ignore[attr-defined]
+        return _awwl_timestep
+
+    if name == "min_snr":
+        if noise_scheduler is None:
+            raise ValueError("min_snr requires noise_scheduler")
+        gamma = float(kwargs.get("snr_gamma", 5.0))
+
+        def _min_snr(
+            model_pred: torch.Tensor, target: torch.Tensor, *, timesteps: torch.Tensor
+        ) -> torch.Tensor:
+            return analytic.min_snr_loss(
+                model_pred, target,
+                alphas_cumprod=noise_scheduler.alphas_cumprod, timesteps=timesteps,
+                gamma=gamma,
+            )
+
+        return _min_snr
 
     # Stateless point-wise losses.
     pointwise: dict[str, Callable[[torch.Tensor, torch.Tensor], torch.Tensor]] = {

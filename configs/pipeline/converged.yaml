@@ -1,0 +1,82 @@
+# Does the null survive a converged baseline?
+#
+# The one open threat to the paper's central claim that costs less than two
+# days. See configs/finetune_converged.yaml for why it matters: the
+# manuscript's premise is a spectral deficit, and its own related-work
+# section cites the competing explanation that such a deficit is what an
+# under-converged diffusion model looks like. At 200 epochs the baseline sits
+# at FID 16.5 (DDPM-1000) against 3.17 published, so the objection has room.
+#
+# Two arms only -- MSE and the audited objective -- because the question is
+# not "which objective wins at convergence" but "does the 200-epoch answer
+# hold at 800". Three seeds rather than five for the same reason: a reversal
+# large enough to matter shows at three, and no headline number comes from
+# here.
+#
+# Run (repeatable -- resumes):
+#   awwl pipeline run -m configs/pipeline/converged.yaml --gpus 0,1
+#
+# Then, at the shared checkpoint and at the end:
+#   awwl stats -l runs/converged/results.jsonl --metric fid --epoch 799 --baseline mse
+#   awwl stats -l runs/converged/results.jsonl --metric fid --curve
+#
+# And the budget question on its own, MSE against MSE across the two sweeps:
+#   awwl stats -l runs/converged/results.jsonl --metric fid --epoch 799
+#   awwl stats -l runs/phase0/results.jsonl    --metric fid --epoch 199
+#
+# Read epoch 799 as the result and epoch 199 as a curve point, not as a
+# control. A cosine LR schedule spans the whole run, so at step 78 200 these
+# runs sit at 0.85 of peak LR while phase0's are annealed to zero: same step,
+# different schedules, not comparable. End-against-end -- 799 here against
+# phase0's 199 -- is the comparison that holds, and the MSE-to-MSE version of
+# it is the one to check first, since it prices the budget change on its own
+# before any objective is compared.
+#
+# Cost: 6 training runs at ~7.2 h -> ~43 GPU-hours, plus 12 samplings at
+# ~6 min. Roughly 0.9 days on two cards, 1.9 on one. The runs are
+# torch.compiled (see configs/finetune_converged.yaml); uncompiled the
+# same sweep is ~64 GPU-hours.
+
+name: converged
+base_config: configs/finetune_converged.yaml
+output_root: ./runs/converged
+ledger: ./runs/converged/results.jsonl
+real_images: ./data/cifar10_train_png
+
+defaults:
+  seeds: [1, 2, 3]
+
+  # 199 to compare against phase0 at the same point, 799 for the question
+  # this manifest exists to ask. The intermediate checkpoints are kept by
+  # save_model_epochs=100 and can be added later without retraining.
+  eval_epochs: [199, 799]
+
+  sample:
+    # Identical to phase0 and celeba64 so the FIDs are comparable across all
+    # three: FID depends on the sampler and the sample count, and a table
+    # that mixes them is not a table.
+    num_samples: 10000
+    sampler: ddim
+    steps: 100
+    batch_size: 256
+    seed: 12345
+
+experiments:
+
+  - group: mse
+    tier: 1
+    overrides:
+      loss.name: mse
+
+  - group: awwl
+    tier: 1
+    overrides:
+      loss.name: adaptive_wavelet
+      loss.alpha: 0.2
+      loss.power: 1.0
+      loss.wavelet_type: db1
+
+  # Deliberately absent: static_wavelet, the confound variants, and every
+  # extension. If the null reverses here, the next question is which of them
+  # reverses with it -- and that is a second sweep to authorise once this one
+  # has an answer, not 60 runs to spend before it does.

@@ -7,6 +7,11 @@ fid_is:
   num_samples: 10000
   batch_size: 128
   num_inference_steps: 1000
-  real_folder: ../AWWL-Diff/cifar10_train_ref
+  # The reference set this repo builds with `awwl prepare-data`. This used
+  # to point at ../AWWL-Diff/, a sibling checkout that only existed on the
+  # machine the original runs were made on: anyone else got an empty
+  # reference and a FID that failed with "need at least one array to
+  # concatenate" rather than a missing-path error.
+  real_folder: ./data/cifar10_train_png
   out_folder: ./runs/eval/fid_is/generated
   log_file: ./runs/eval/fid_is/results.txt

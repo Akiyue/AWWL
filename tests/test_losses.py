@@ -205,3 +205,159 @@ def test_factory_forwards_the_new_options():
     pred = torch.randn(2, 3, 32, 32, requires_grad=True)
     out = loss_fn(pred, torch.randn(2, 3, 32, 32), timesteps=torch.randint(0, 1000, (2,)))
     assert torch.isfinite(out)
+
+
+# --------------------------------------------------------------------------- #
+# Min-SNR-γ is a different objective from raw SNR weighting.
+#
+# These pin the distinction the manuscript turns on: §generality's only
+# positive result was attributed to Min-SNR-γ (Hang et al., 2023) while the
+# sweep ran ``snr_weighted``, which is the *unclamped* schedule. Nothing but a
+# test stops that conflation recurring, because both names read the same.
+# --------------------------------------------------------------------------- #
+
+
+def test_min_snr_is_not_raw_snr():
+    """The two SNR losses must not be interchangeable."""
+    torch.manual_seed(0)
+    pred = torch.randn(4, 3, 8, 8)
+    target = torch.randn(4, 3, 8, 8)
+    timesteps = torch.tensor([10, 200, 500, 900])
+    scheduler = _StubScheduler()
+
+    raw = get_loss_function("snr_weighted", noise_scheduler=scheduler)
+    clamped = get_loss_function("min_snr", noise_scheduler=scheduler)
+    assert not torch.isclose(
+        raw(pred, target, timesteps=timesteps),
+        clamped(pred, target, timesteps=timesteps),
+    )
+
+
+def test_min_snr_weight_is_bounded_by_one():
+    """``min(SNR, γ)/SNR`` is unity below the clamp and decays above it.
+
+    Raw SNR is unbounded at the low-noise end — which is why it diverges in
+    training — so this is the property that separates them.
+    """
+    from awwl.losses.weighting import min_snr_weight
+
+    sigmas = torch.linspace(0.01, 0.999, 200)
+    weights = min_snr_weight(sigmas, gamma=5.0)
+    assert torch.all(weights <= 1.0 + 1e-6)
+    assert torch.all(weights > 0.0)
+    # High noise (low SNR) is left alone; low noise is damped.
+    assert weights[-1] > weights[0]
+    assert torch.isclose(weights[-1], torch.tensor(1.0), atol=1e-3)
+
+
+def test_min_snr_gamma_is_configurable():
+    """A larger γ clamps later, so it must weight low-noise steps more."""
+    scheduler = _StubScheduler()
+    torch.manual_seed(0)
+    pred = torch.randn(4, 3, 8, 8)
+    target = torch.randn(4, 3, 8, 8)
+    timesteps = torch.tensor([5, 10, 20, 40])  # low-noise end, where γ bites
+
+    small = get_loss_function("min_snr", noise_scheduler=scheduler, snr_gamma=1.0)
+    large = get_loss_function("min_snr", noise_scheduler=scheduler, snr_gamma=20.0)
+    assert large(pred, target, timesteps=timesteps) > small(pred, target, timesteps=timesteps)
+
+
+# ------------------------------------------------- the two normalisation orders
+#
+# `\S confound`'s protocol holds the summed band weight fixed, which controls
+# the loss. The optimiser sees the gradient, and for L = sum_b w_b ||r_b||^2
+# that scales with sum_b w_b^2: the weights enter squared. The two are
+# different controls, and the manuscript needs both named correctly.
+
+
+def _schedule_sigmas(n: int = 1000) -> torch.Tensor:
+    from diffusers import DDPMScheduler
+
+    return torch.sqrt(1.0 - DDPMScheduler(num_train_timesteps=n).alphas_cumprod).view(-1, 1, 1, 1)
+
+
+def test_order_one_flattens_the_sum_but_not_its_square():
+    """The existing protocol, and the gap it leaves.
+
+    This is the measurement the paper now reports rather than assuming: the
+    arm called 'summed weight held fixed' does exactly that, and leaves the
+    gradient scale varying fourfold across the schedule.
+    """
+    from awwl.losses.weighting import RationalWeighting
+
+    sig = _schedule_sigmas()
+    w = RationalWeighting(
+        alpha=0.2, power=1.0, normalize=True, normalize_scale=0.5, normalize_order=1.0
+    )(sig)
+    total = sum(w.values()).flatten()
+    squares = sum(v**2 for v in w.values()).flatten()
+
+    assert torch.allclose(total, torch.full_like(total, 0.5), atol=1e-4)
+    assert float(squares.max() / squares.min()) > 3.5
+
+
+def test_order_two_flattens_the_gradient_scale_instead():
+    """The stronger control: sum_b w_b^2 fixed, the loss scale free to vary."""
+    from awwl.losses.weighting import RationalWeighting
+
+    sig = _schedule_sigmas()
+    target = 0.2454  # the published weighting's own mean sum w^2
+    w = RationalWeighting(
+        alpha=0.2, power=1.0, normalize=True, normalize_scale=target, normalize_order=2.0
+    )(sig)
+    squares = sum(v**2 for v in w.values()).flatten()
+    total = sum(w.values()).flatten()
+
+    assert torch.allclose(squares, torch.full_like(squares, target), rtol=1e-4)
+    # and the thing the other order pins is now the one that moves
+    assert float(total.max() / total.min()) > 1.5
+
+
+def test_normalize_order_rejects_anything_else():
+    """A typo must not silently fall through to one of the two behaviours."""
+    from awwl.losses.weighting import RationalWeighting
+
+    with pytest.raises(ValueError, match="normalize_order"):
+        RationalWeighting(alpha=0.2, power=1.0, normalize=True, normalize_order=1.5)
+
+
+def test_awwl_timestep_is_the_timestep_part_of_awwl():
+    """``awwl_timestep`` is S(sigma) * MSE, the timestep term of Proposition 2.
+
+    For a residual whose four one-level Haar bands carry the same mean square,
+    the shape term of the decomposition vanishes and AWWL's loss must equal
+    the timestep-only loss exactly; for a residual concentrated in one band
+    they must differ. This pins the new arm to the decomposition the paper
+    uses to interpret it.
+    """
+    import numpy as np
+    import pywt
+    import torch
+    from diffusers import DDPMScheduler
+
+    from awwl.losses.factory import get_loss_function
+
+    sched = DDPMScheduler(num_train_timesteps=1000)
+    kw = dict(alpha=0.2, power=1.0, wavelet_type="db1", levels=1, weighting="normalized")
+    awwl = get_loss_function("adaptive_wavelet", noise_scheduler=sched, normalize_weights=False,
+                             detail_reduction="mean", **kw)
+    step = get_loss_function("awwl_timestep", noise_scheduler=sched, **kw)
+
+    rng = np.random.RandomState(0)
+
+    def residual(scales):
+        bands = [rng.randn(3, 16, 16) * s for s in scales]
+        # Equalise each band's mean square to exactly its scale squared.
+        bands = [b / np.sqrt((b ** 2).mean()) * s for b, s in zip(bands, scales, strict=True)]
+        img = np.stack([pywt.idwt2((bands[0][c], (bands[1][c], bands[2][c], bands[3][c])), "haar")
+                        for c in range(3)])
+        return torch.tensor(img, dtype=torch.float64)[None].float()
+
+    t = torch.tensor([300])
+    equal = residual([1.0, 1.0, 1.0, 1.0])
+    zero = torch.zeros_like(equal)
+    assert torch.allclose(awwl(equal, zero, timesteps=t), step(equal, zero, timesteps=t), rtol=1e-4)
+
+    lowpass = residual([1.0, 1e-3, 1e-3, 1e-3])
+    assert not torch.allclose(awwl(lowpass, zero, timesteps=t), step(lowpass, zero, timesteps=t), rtol=1e-2)

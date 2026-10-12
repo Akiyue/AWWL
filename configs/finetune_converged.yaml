@@ -1,0 +1,92 @@
+# The same CIFAR-10 recipe, trained to convergence.
+#
+# Why this config exists
+# ----------------------
+# Every number in the replication comes from 200 epochs (78 200 steps) without
+# EMA, which lands at FID 18.5 under DDIM-100 and 16.5 under DDPM-1000. Ho
+# et al. report 3.17 on this dataset from 800 000 steps with EMA. The gap is
+# roughly a 10x training budget, and it hands a reviewer a specific objection
+# that the manuscript's own related-work section supplies the ammunition for:
+#
+#   "A high-frequency deficit is therefore what an under-converged diffusion
+#    model should look like, which is a competing explanation any
+#    frequency-aware objective has to displace rather than assume."
+#                                    -- paper/sections/related.tex, on
+#                                       wang2025spectral's inverse-variance
+#                                       spectral law
+#
+# The replication's *internal* validity does not depend on convergence: the
+# recipe is identical across arms and under-training penalises all of them
+# equally. What does depend on it is the paper's premise. If the spectral
+# deficit being audited is largely an artefact of stopping early, then the
+# frequency-aware objective might pay for itself at convergence, where the
+# residual error is concentrated in exactly the bands it weights -- and the
+# claim that there is "no setting of this mechanism in which the correction
+# pays for itself" is not one an under-converged regime can support.
+#
+# What this changes
+# -----------------
+#   num_epochs   200 -> 800    (78 200 -> 312 800 steps)
+#   use_ema      false -> true (standard DDPM practice; the paper reports EMA
+#                               as its own configuration, and at this budget
+#                               the shadow copy is no longer averaging a
+#                               still-moving iterate as it was at 200 epochs)
+#
+# Architecture, optimiser, batch size and data are inherited unchanged. The LR
+# schedule is inherited too but is *not* therefore identical: it is a cosine
+# over the whole run, so lengthening the run stretches it. Two things follow
+# and both belong in the write-up.
+#
+#   1. This is a budget comparison confounded with an annealing comparison,
+#      because at a fixed budget the two cannot be separated -- a longer run
+#      that keeps the old schedule is a run that trains at LR 0 for three
+#      quarters of its length. The confound is inherent, not an oversight.
+#   2. Two arms trained here are still identical to each other in every
+#      respect but the objective, which is what the comparison of interest
+#      needs. What weakens is only the cross-reference to the 200-epoch
+#      table, and that is a comparison of MSE-to-MSE, checkable directly.
+#
+# Cost: ~11 h per run (measured: 166 min at 200 epochs). The manifest at
+# configs/pipeline/converged.yaml runs MSE and the audited objective at three
+# seeds -- 6 runs, ~66 GPU-hours. Three seeds rather than five is deliberate:
+# this arm exists to answer whether the null survives a converged baseline,
+# which a large reversal would show at three, and it is not the arm any
+# headline number comes from.
+_base_: finetune.yaml
+
+train:
+  num_epochs: 800
+
+  # At 200 the shadow copy averaged roughly the last 10 000 steps of a slow
+  # iterate and moved nothing (18.46 -> 18.46). At 800 it averages the last
+  # 10 000 of 312 800, which is the regime EMA is actually for.
+  use_ema: true
+  ema_decay: 0.9999
+
+  # 100 gives epochs 99/199/.../799, for the convergence curve.
+  #
+  # Epoch 199 here is NOT comparable to phase0's epoch 199, and it would be
+  # easy to read it as though it were. The LR schedule is a cosine over the
+  # whole run (trainer: num_training_steps = len(dataloader) * num_epochs),
+  # so at step 78 200 a 200-epoch run is fully annealed -- LR at 0.0000 of
+  # peak -- while an 800-epoch run is at 0.8549 of peak with three quarters
+  # of its training left. They are the same step of two different schedules.
+  #
+  # The comparison that means something is end-against-end: epoch 799 here
+  # against phase0's epoch 199, both at the bottom of their own cosine.
+  save_model_epochs: 100
+
+  # An 7-hour run is worth snapshotting less often than a 3-hour one; 10
+  # epochs bounds the loss from a crash at ~5 minutes.
+  save_state_epochs: 10
+
+  # Both arms here are new, so both compile and the comparison stays clean.
+  # This is the only sweep where that holds: every other arm in the study
+  # shares a table with a baseline trained uncompiled.
+  #
+  # 1.48x measured at this recipe -> ~7.2 h a run instead of ~10.7 h, and
+  # 64 GPU-hours for the sweep instead of 43.
+  compile: true
+
+output:
+  dir: ./runs/converged

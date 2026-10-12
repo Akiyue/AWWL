@@ -68,3 +68,27 @@ def test_hf_image_to_pil_handles_array():
     img = _to_pil(arr)
     assert img.size == (8, 8)
     assert img.mode == "RGB"
+
+
+def test_radial_gain_plants_the_requested_spectral_change():
+    """RadialGain shifts the luminance radial profile by exactly its gain.
+
+    It is the data-side twin of the pricing transplant: the planted-mechanism
+    arm trains MSE on images carrying AWWL's measured spectral change, and the
+    comparison is only meaningful if the change planted is the change asked for.
+    """
+    import numpy as np
+    import torch
+
+    from awwl.data.cifar10 import RadialGain
+    from awwl.evaluation.price_fid import radial_profile
+
+    rng = np.random.default_rng(0)
+    imgs = rng.uniform(0.2, 0.8, size=(64, 3, 32, 32)).astype(np.float32)  # far from the clip range
+    x = torch.from_numpy(imgs)
+    assert torch.allclose(RadialGain(np.zeros(23))(x[0]), x[0], atol=1e-6)
+
+    gain = np.linspace(0.0, 0.5, 23)
+    y = torch.stack([RadialGain(gain)(im) for im in x]).numpy()
+    shift = radial_profile(y.transpose(0, 2, 3, 1) * 255.0) - radial_profile(imgs.transpose(0, 2, 3, 1) * 255.0)
+    assert np.max(np.abs(shift - gain)) < 1e-6

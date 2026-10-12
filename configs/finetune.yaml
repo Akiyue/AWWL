@@ -48,6 +48,24 @@ train:
   save_state_epochs: 5
   keep_last_states: 2
 
+  # torch.compile the UNet. Measured on an RTX 5000 Ada at this recipe:
+  # 123.1 -> 83.4 ms/step with the wavelet objective (1.48x), at about half
+  # the peak memory. A 200-epoch run goes from ~2.7 h to ~1.8 h.
+  #
+  # OFF here, and it must stay off for anything joining the phase0 tables.
+  # Compilation changes kernel selection and fusion, so a compiled arm is not
+  # bit-comparable with an uncompiled one; adding a compiled row to a table
+  # whose baseline was trained uncompiled confounds the objective with the
+  # execution path. Turn it on only for a sweep where *every* arm is new --
+  # configs/pipeline/converged.yaml does exactly that.
+  #
+  # Two things were checked before exposing this, see
+  # `_maybe_compile` in methods/finetune/trainer.py: the checkpoint keys stay
+  # unprefixed, and GradNorm refuses the flag rather than risking its second
+  # backward through a compiled graph.
+  compile: false
+  compile_mode: default    # default | reduce-overhead | max-autotune
+
   # Exponential moving average of the weights. OFF by default because the
   # paper's numbers were produced without it — but standard DDPM training
   # samples from the EMA copy, and enabling it moves every metric, so runs

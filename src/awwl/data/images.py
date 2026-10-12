@@ -80,6 +80,7 @@ def build_image_dataloader(
     image_column: str = "image",
     source: str = "auto",
     root: str = "./data",
+    spectral_gain_db=None,
 ):
     """Return a ``DataLoader`` yielding ``{"images": tensor}`` batches.
 
@@ -103,9 +104,12 @@ def build_image_dataloader(
             seed=seed,
             source=source,
             root=root,
+            spectral_gain_db=spectral_gain_db,
         )
 
     hf = load_hf_image_dataset(dataset_name, split=split)
+    if spectral_gain_db is not None:
+        raise ValueError("spectral_gain_db is implemented for CIFAR-10 only")
     transform = build_transform(image_size, horizontal_flip=horizontal_flip and split == "train")
     dataset = _ImagesOnly(
         HuggingFaceImageDataset(hf, transform=transform, image_column=_pick_column(hf, image_column))

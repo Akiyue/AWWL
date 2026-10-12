@@ -68,16 +68,54 @@ def snr_weighted_loss(
     alphas_cumprod: torch.Tensor,
     timesteps: torch.Tensor,
 ) -> torch.Tensor:
-    """Signal-to-noise-ratio weighted MSE: ``(α_t / (1 - α_t)) * MSE``.
+    """Raw signal-to-noise-ratio weighted MSE: ``(α_t / (1 - α_t)) * MSE``.
 
-    Matches the schedule used in the AWWL/AWWL-Diff baselines. Note this is
-    raw SNR, not the Min-SNR variant — kept for reproducibility of the
-    publication numbers.
+    This is the schedule the AWWL/AWWL-Diff baselines used, kept so the
+    published numbers can be reproduced. It is **not** Min-SNR-γ
+    :func:`min_snr_loss` and must not be reported as such: the weight is
+    unbounded as ``t -> 0`` (SNR exceeds 1e3 at the low-noise end of a linear
+    schedule), so the gradient is dominated by near-clean timesteps and
+    from-scratch training diverges. That divergence is a property of the
+    weighting, not a bug — Min-SNR exists precisely to clamp it.
     """
     alphas_cumprod = alphas_cumprod.to(pred.device)
     snr = alphas_cumprod[timesteps] / (1 - alphas_cumprod[timesteps])
     snr = snr.view(-1, 1, 1, 1)
     return (snr * (pred - target).pow(2)).mean()
+
+
+def min_snr_loss(
+    pred: torch.Tensor,
+    target: torch.Tensor,
+    *,
+    alphas_cumprod: torch.Tensor,
+    timesteps: torch.Tensor,
+    gamma: float = 5.0,
+) -> torch.Tensor:
+    """Min-SNR-γ weighted MSE (Hang et al., 2023), ε-prediction form.
+
+    The weight is ``min(SNR_t, γ) / SNR_t``: unity wherever the SNR is below
+    the clamp (the high-noise end) and decaying as ``γ / SNR_t`` above it, so
+    low-noise timesteps stop dominating the gradient. For ε-prediction the
+    division by ``SNR_t`` is part of the definition; the x0- and v-prediction
+    forms differ and neither trainer here uses them.
+
+    Contrast :func:`snr_weighted_loss`, which applies the *unclamped* SNR and
+    is a different objective entirely.
+
+    Args:
+        pred: ``(N, C, H, W)`` predicted noise.
+        target: The noise that was added, same shape as ``pred``.
+        alphas_cumprod: 1-D tensor from the diffusion scheduler.
+        timesteps: ``(N,)`` integer timesteps indexing ``alphas_cumprod``.
+        gamma: The clamp. 5.0 is the value Hang et al. recommend and use.
+    """
+    from awwl.losses.weighting import min_snr_weight
+
+    alpha_t = alphas_cumprod.to(pred.device)[timesteps]
+    sigma = (1.0 - alpha_t).clamp_min(0.0).sqrt()
+    weight = min_snr_weight(sigma, gamma).view(-1, 1, 1, 1)
+    return (weight * (pred - target).pow(2)).mean()
 
 
 # Thin wrappers exposed via the factory so every loss has the same calling

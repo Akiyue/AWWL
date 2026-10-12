@@ -10,7 +10,7 @@ model:
   model_weights_path: null
 
 data:
-  instance_data_dir: ../AWWL/dataset
+  instance_data_dir: /home/dmst_ai/sonthh/dreambooth-data/dataset/robot_toy
   instance_prompt: "a photo of sks robot toy"
   resolution: 512
 

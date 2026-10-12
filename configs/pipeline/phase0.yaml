@@ -167,6 +167,118 @@ experiments:
     overrides:
       loss.name: snr_weighted
 
+  # Min-SNR-gamma (Hang et al. 2023), which `snr_weighted` above is NOT.
+  #
+  # `snr_weighted` applies the raw ratio a_t/(1-a_t). On this schedule that
+  # peaks at 9997 and spans 2.5e8, putting 95% of the gradient mass in the
+  # lowest 5% of timesteps -- which is why that arm ends at FID 325 rather
+  # than training. Min-SNR clamps the ratio at gamma, so the weight is
+  # bounded by 1. The two are different objectives and the paper must not
+  # cite Hang et al. for the raw one.
+  #
+  # This arm exists so the timestep axis is represented by a method that
+  # actually trains. 5 runs, ~14 GPU-hours.
+  - group: min_snr
+    tier: 3
+    overrides:
+      loss.name: min_snr
+      loss.snr_gamma: 5.0
+
+  # The stronger form of the confound control.
+  #
+  # `awwl_norm_matched` holds the summed band weight at 0.5, which is what the
+  # loss scales with. The optimiser sees the gradient, and for
+  # L = sum_b w_b ||r_b||^2 that scales with sum_b w_b^2 -- the weights enter
+  # squared. Measured over the schedule, pinning the sum leaves sum w^2 varying
+  # 4x (scripts/verify_loss_math.py, check 6), so that arm separates shape from
+  # *summed* magnitude and not from the size of the update.
+  #
+  # This arm pins sum w^2 instead, at 0.2454, the published weighting's own
+  # mean. The two are complementary rather than nested: each flattens what the
+  # other leaves varying, and an effect that survives both belongs to the
+  # weighting's shape.
+  #
+  # 5 runs, ~14 GPU-hours. Uncompiled: it joins the phase0 table.
+  - group: awwl_grad_matched
+    tier: 2
+    overrides:
+      loss.name: wavelet_subband
+      loss.alpha: 0.2
+      loss.power: 1.0
+      loss.wavelet_type: db1
+      loss.normalize_weights: true
+      loss.normalize_scale: 0.2454
+      loss.normalize_order: 2.0
+
+  # The gradient-scale control above is built on wavelet_subband, which gives
+  # each of the three detail bands the full w_det (share_detail_budget unset)
+  # and sums them: the conference Eq.(7) shape, 3x the published detail/LL
+  # ratio at every sigma, which costs +2.63 FID on its own (awwl_eq7). It
+  # therefore changed two things at once -- the pinned norm and the band shape
+  # -- and cannot isolate either. This arm is the control as intended: the
+  # published mean-form shape (share_detail_budget: true reproduces
+  # adaptive_wavelet's detail_reduction=mean exactly; HH/LL checked equal at
+  # every sigma), with sum_b w_b^2 pinned at the published weighting's own
+  # mean over the training schedule, E_t[w_LL^2 + w_det^2/3] = 0.0530.
+  # Uncompiled, like every other phase0 arm. 5 runs, ~15 GPU-hours.
+  # AWWL's timestep component alone. By Proposition 2 the published loss is
+  # S(sigma) * MSE plus a zero-sum shape term, S = w_LL + w_det. This arm keeps
+  # S * MSE and drops the shape term, so AWWL minus this arm is the effect of
+  # the frequency shape at AWWL's own effective timestep total, and this arm
+  # minus MSE is the effect of AWWL's timestep schedule. Uncompiled like every
+  # other phase0 arm. 5 runs, ~15 GPU-hours.
+  # Planted-mechanism control for the pricing test's identifying assumption.
+  # MSE trained on CIFAR-10 images that carry AWWL's measured spectral change
+  # (the seed-mean of profile(awwl) - profile(mse) at epoch 199, per integer
+  # radius, applied per channel in floating point by awwl.data.cifar10.RadialGain;
+  # configs/data_awwl_planted_gain_db.json). Its only difference from MSE is a
+  # spectral change delivered through training, so pricing it asks whether a
+  # filter-made change is valued like the same change made by training: if so,
+  # its MRG is zero. Uncompiled like every phase0 arm. 5 runs, ~15 GPU-hours.
+  - group: mse_planted
+    tier: 2
+    overrides:
+      loss.name: mse
+      data.spectral_gain_db: [0.04552, -0.03745, 0.00255, 0.02217, 0.05806, 0.09262, 0.12273, 0.14463, 0.16982, 0.18922, 0.21367, 0.23066, 0.25445, 0.27209, 0.28493, 0.2903, 0.31157, 0.34417, 0.37046, 0.41363, 0.41109, 0.39079, 0.40144]
+
+  - group: awwl_timestep
+    tier: 2
+    overrides:
+      loss.name: awwl_timestep
+      loss.alpha: 0.2
+      loss.power: 1.0
+
+  - group: awwl_grad_matched_mean
+    tier: 2
+    overrides:
+      loss.name: wavelet_subband
+      loss.alpha: 0.2
+      loss.power: 1.0
+      loss.wavelet_type: db1
+      loss.share_detail_budget: true
+      loss.normalize_weights: true
+      loss.normalize_scale: 0.0530
+      loss.normalize_order: 2.0
+
+  # A second published member of the frequency-aware family. Everything else
+  # in this manifest is the audited objective or a variant of it, so the
+  # paper's family-level claims rest on one instance; this is the cheapest
+  # second one.
+  #
+  # It differs from the audited objective on both axes that matter: Fourier
+  # basis rather than wavelet, and weights keyed on the current error rather
+  # than on sigma. Its unweighted limit (ffl_alpha=0) is exactly the pixel
+  # MSE by Parseval, which is the only control it admits -- there is no
+  # parameter separating its weighting's shape from its total, so the
+  # budget-held-fixed protocol has nothing to hold.
+  #
+  # 5 runs, ~14 GPU-hours.
+  - group: focal_frequency
+    tier: 3
+    overrides:
+      loss.name: focal_frequency
+      loss.ffl_alpha: 1.0        # the value Jiang et al. use
+
   # Dropped, and the reasons are worth keeping written down.
   #
   # Cost: at resize=True it upsamples a 32x32 batch 49-fold and pushes it

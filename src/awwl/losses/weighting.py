@@ -94,7 +94,12 @@ class BandWeighting(nn.Module):
     """
 
     def __init__(
-        self, *, levels: int = 1, normalize: bool = False, normalize_scale: float = 1.0
+        self,
+        *,
+        levels: int = 1,
+        normalize: bool = False,
+        normalize_scale: float = 1.0,
+        normalize_order: float = 1.0,
     ) -> None:
         super().__init__()
         if levels < 1:
@@ -106,6 +111,22 @@ class BandWeighting(nn.Module):
         # effective learning-rate change into what is meant to be a pure
         # shape ablation. Pass 0.5 to hold the average fixed.
         self.normalize_scale = float(normalize_scale)
+        # Which norm of the band-weight vector is held fixed.
+        #
+        # 1.0 pins `sum_b w_b`, which is what the loss scales with, and is the
+        # protocol the manuscript's confound section uses.
+        #
+        # 2.0 pins `sum_b w_b^2`, which is what the *gradient* scales with:
+        # dL/dr_b = 2 w_b r_b, so ||grad||^2 = 4 sum_b w_b^2 ||r_b||^2. Pinning
+        # the sum leaves that varying by 4x across the schedule (see
+        # `scripts/verify_loss_math.py`, check 6), so the two are different
+        # controls and only the second isolates the shape from the size of the
+        # update the optimiser receives.
+        self.normalize_order = float(normalize_order)
+        if self.normalize_order not in (1.0, 2.0):
+            raise ValueError(
+                f"normalize_order must be 1.0 or 2.0, got {self.normalize_order}"
+            )
         self.keys = band_keys(levels)
 
     def raw_weights(
@@ -129,8 +150,15 @@ class BandWeighting(nn.Module):
         # Sum over bands, averaging away any spatial extent first so that a
         # spatially-varying strategy is normalised in the mean rather than
         # flattened back to a constant.
-        total = sum(w.mean(dim=tuple(range(1, w.dim())), keepdim=True) for w in weights.values())
-        total = total + 1e-8
+        flat = [w.mean(dim=tuple(range(1, w.dim())), keepdim=True) for w in weights.values()]
+        if self.normalize_order == 1.0:
+            total = sum(flat) + 1e-8
+        else:
+            # ``normalize_scale`` names the target value of sum_b w_b^2, so the
+            # divisor is its square root: dividing every weight by
+            # sqrt(sum w^2 / scale) leaves sum w^2 at exactly `scale`.
+            total = (sum(w.pow(2) for w in flat) / self.normalize_scale).sqrt() + 1e-8
+            return {k: w / total for k, w in weights.items()}
         return {k: self.normalize_scale * w / total for k, w in weights.items()}
 
     def penalty(self) -> torch.Tensor:
@@ -195,8 +223,12 @@ class RationalWeighting(BandWeighting):
         share_detail_budget: bool = False,
         normalize: bool = False,
         normalize_scale: float = 1.0,
+        normalize_order: float = 1.0,
     ) -> None:
-        super().__init__(levels=levels, normalize=normalize, normalize_scale=normalize_scale)
+        super().__init__(
+            levels=levels, normalize=normalize,
+            normalize_scale=normalize_scale, normalize_order=normalize_order,
+        )
         if not 0.0 <= alpha <= 1.0:
             raise ValueError(f"alpha must be in [0, 1], got {alpha}")
         self.alpha = alpha
@@ -270,9 +302,11 @@ class SpatialWeighting(BandWeighting):
         apply_to_ll: bool = False,
         normalize: bool = False,
         normalize_scale: float = 1.0,
+        normalize_order: float = 1.0,
     ) -> None:
         super().__init__(
-            levels=base.levels, normalize=normalize, normalize_scale=normalize_scale
+            levels=base.levels, normalize=normalize,
+            normalize_scale=normalize_scale, normalize_order=normalize_order,
         )
         if strength < 0:
             raise ValueError(f"strength must be >= 0, got {strength}")
@@ -350,8 +384,12 @@ class UncertaintyWeighting(BandWeighting):
         init_log_var: float = 0.0,
         normalize: bool = False,
         normalize_scale: float = 1.0,
+        normalize_order: float = 1.0,
     ) -> None:
-        super().__init__(levels=levels, normalize=normalize, normalize_scale=normalize_scale)
+        super().__init__(
+            levels=levels, normalize=normalize,
+            normalize_scale=normalize_scale, normalize_order=normalize_order,
+        )
         self.conditioned = conditioned
         n_bands = len(self.keys)
         if conditioned:

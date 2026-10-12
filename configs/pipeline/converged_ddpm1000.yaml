@@ -1,0 +1,67 @@
+# Does the ancestral-sampler result hold at the larger training budget?
+#
+# The abstract says the objective is 0.98 FID behind MSE under ancestral
+# sampling. That number comes from the 200-epoch runs
+# (`configs/pipeline/ddpm1000.yaml`), and it is the paper's sharpest claim
+# against the objective. A reader who has just read that the null survives a
+# fourfold budget increase will ask whether the *significant* result survives
+# it too, and at present we cannot say -- the converged arms were only ever
+# sampled with DDIM-100.
+#
+# Three outcomes, all reportable, which is why this is worth the half day:
+#
+#   * the gap persists under DDPM-1000 at 800 epochs  -> the sharpest claim
+#     generalises across budget, and the abstract can say so;
+#   * it shrinks the way the DDIM gap did             -> both samplers agree
+#     that more training moves the arms together, and the abstract's 0.98
+#     must be scoped to the 200-epoch recipe;
+#   * it grows                                        -> the sampler and the
+#     budget interact, which is a finding in its own right and a warning to
+#     anyone comparing objectives at one operating point.
+#
+# Creates no training jobs. Samples land in `samples_ddpm1000/` beside the
+# DDIM originals, which are not touched.
+#
+# Cost: 6 sample jobs at roughly ten times the DDIM-100 cost (~80 min each on
+# one RTX 5000 Ada) plus FID passes. About 6 GPU-hours.
+#
+# Run (repeatable -- resumes):
+#   awwl pipeline run -m configs/pipeline/converged_ddpm1000.yaml --gpus 1
+#
+# Then, and note this compares against the *200-epoch* ancestral ledger:
+#   awwl stats -l runs/converged_ddpm1000/results.jsonl --metric fid --epoch 799 --baseline mse
+#   awwl stats -l runs/phase0_ddpm1000/results.jsonl    --metric fid --epoch 199 --baseline mse
+
+name: converged_ddpm1000
+base_config: configs/finetune_converged.yaml
+reuse_runs: true
+
+output_root: ./runs/converged_ddpm1000
+run_root: ./runs/converged
+ledger: ./runs/converged_ddpm1000/results.jsonl
+real_images: ./data/cifar10_train_png
+
+defaults:
+  seeds: [1, 2, 3]
+
+  # The end of the schedule only. The mid-training points are a DDIM curve
+  # (`converged_curve.yaml`); re-sampling them ancestrally as well would cost
+  # ten times as much to answer a question nobody asked.
+  eval_epochs: [799]
+
+  sample:
+    num_samples: 10000     # identical to phase0_ddpm1000, so the two compare
+    sampler: ddpm          # the operating point the original work reports
+    steps: 1000
+    batch_size: 256
+    seed: 12345            # same sampling seed as every other CIFAR-10 sweep
+    out_name: samples_ddpm1000
+
+experiments:
+  - group: mse
+    tier: 1
+    overrides: {loss.name: mse}
+
+  - group: awwl
+    tier: 1
+    overrides: {loss.name: adaptive_wavelet, loss.alpha: 0.2, loss.power: 1.0, loss.wavelet_type: db1}

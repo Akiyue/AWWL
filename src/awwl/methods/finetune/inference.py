@@ -154,7 +154,14 @@ def rebuild_checkpoint_from_state(run_dir: str | Path, target: str | Path | None
     meta = json.loads((snap / "meta.json").read_text(encoding="utf-8"))
 
     unet = UNet2DModel.from_pretrained(snap / "unet")
-    scheduler = DDPMScheduler(num_train_timesteps=int(cfg["scheduler"]["num_train_timesteps"]))
+    # Restoration runs carry no `scheduler` block -- they denoise in one step
+    # and never sample -- but their snapshots hold the same UNet and their
+    # evaluation loads the same folder layout. Defaulting here keeps one
+    # rebuild path for both methods; the scheduler is only the pipeline
+    # wrapper's, and nothing that reads a rebuilt restoration checkpoint
+    # touches it.
+    steps = int(cfg.get("scheduler", {}).get("num_train_timesteps", 1000))
+    scheduler = DDPMScheduler(num_train_timesteps=steps)
     epoch = int(meta.get("epoch", -1))
     if epoch < 0:
         raise ValueError(f"{snap}/meta.json carries no epoch; cannot name the checkpoint")

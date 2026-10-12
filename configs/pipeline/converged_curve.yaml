@@ -1,0 +1,60 @@
+# The converged arms at every checkpoint, not just the two the sweep scored.
+#
+# `converged.yaml` queued evaluation at epochs 199 and 799 only, which answers
+# the under-training objection with two points. Two points cannot show whether
+# the gap between the arms narrows steadily or jumps, and "narrows steadily
+# toward zero without crossing" is a much harder claim to wave away than a
+# pair of numbers four hundred epochs apart.
+#
+# `train.save_model_epochs: 100` already kept checkpoints at 99, 199, ..., 799,
+# so the weights are on disk and this creates no training jobs. Five new
+# epochs times two arms times three seeds, at DDIM-100 to match the points
+# already scored -- mixing samplers within one curve would make its shape an
+# artefact of the sampler.
+#
+# Writes to `converged.yaml`'s own ledger, so `awwl stats --curve` sees one
+# continuous series rather than two.
+#
+# Cost: 30 sample jobs at ~6 min plus FID passes, roughly 3 GPU-hours.
+#
+# Run (repeatable -- resumes):
+#   awwl pipeline run -m configs/pipeline/converged_curve.yaml --gpus 1
+#
+# Then:
+#   awwl stats -l runs/converged/results.jsonl --metric fid --curve
+
+name: converged_curve
+base_config: configs/finetune_converged.yaml
+reuse_runs: true
+
+# Its own store so these jobs cannot collide with converged.yaml's in a
+# shared state.db -- the failure that once left a re-scoring sweep silently
+# producing no eval rows at all.
+output_root: ./runs/converged_curve
+run_root: ./runs/converged
+ledger: ./runs/converged/results.jsonl
+real_images: ./data/cifar10_train_png
+
+defaults:
+  seeds: [1, 2, 3]
+
+  # 99 is deliberately absent: at that point the cosine has barely decayed and
+  # both arms are still far from where either settles, so the point carries
+  # noise rather than shape. 199 and 799 are already in the ledger.
+  eval_epochs: [299, 399, 499, 599, 699]
+
+  sample:
+    num_samples: 10000     # identical to every other CIFAR-10 row
+    sampler: ddim
+    steps: 100
+    batch_size: 256
+    seed: 12345
+
+experiments:
+  - group: mse
+    tier: 1
+    overrides: {loss.name: mse}
+
+  - group: awwl
+    tier: 1
+    overrides: {loss.name: adaptive_wavelet, loss.alpha: 0.2, loss.power: 1.0, loss.wavelet_type: db1}

@@ -6,6 +6,6 @@ eval: advanced
 advanced:
   batch_size: 64
   max_images: 10000
-  real_folder: ../AWWL-Diff/cifar10_train_ref
+  real_folder: ./data/cifar10_train_png   # see the note in fid_is.yaml
   fake_folder: ./runs/eval/fid_is/generated
   log_file: ./runs/eval/advanced/results.txt

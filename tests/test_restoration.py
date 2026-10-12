@@ -18,16 +18,15 @@ import torch
 
 from awwl.data.degradation import add_noise, sample_sigmas, sigma_to_timesteps
 from awwl.evaluation.restoration import (
+    _luminance,
+    _nss_features,
+    _psnr_strata,
     fit_niqe_pristine,
     lpips_score,
     niqe_score,
     psnr,
     ssim,
-    _luminance,
-    _nss_features,
-    _psnr_strata,
 )
-
 
 # ------------------------------------------------------------------ degradation
 
@@ -247,3 +246,41 @@ def test_train_restoration_smoke(tmp_path, patched_loader):
     config_json = json.loads((run_dir / "config.json").read_text(encoding="utf-8"))
     assert config_json["method"] == "restoration"
     assert config_json["degradation"]["sigma_max"] == 0.3
+
+
+# --------------------------------------------------------------- LPIPS plumbing
+#
+# `test_lpips_worse_with_noise` above passed throughout the sweep that recorded
+# `lpips: 0.0` for all 18 runs, because it asks for device="cpu" -- the one
+# device on which the network's own placement cannot disagree with the inputs'.
+# These pin the two things that actually broke.
+
+
+@pytest.mark.parametrize("device", ["cpu"] + (["cuda"] if torch.cuda.is_available() else []))
+def test_lpips_net_follows_the_requested_device(device):
+    """The cached network must move to where the inputs are.
+
+    It is cached in a module global, so the first caller's device used to win
+    for the rest of the process; a CUDA caller then hit "Expected all tensors
+    to be on the same device".
+    """
+    from awwl.evaluation.restoration import _lpips_net
+
+    net = _lpips_net(device)
+    assert all(p.device.type == device for p in net.parameters())
+
+
+def test_lpips_failure_is_not_reported_as_a_perfect_score(monkeypatch):
+    """A broken LPIPS must raise, never return 0.0.
+
+    Zero is the best attainable LPIPS, so a sentinel of 0.0 does not read as a
+    missing measurement in a results table -- it reads as the winning row.
+    """
+    import awwl.evaluation.restoration as R
+
+    def _boom(_device="cpu"):
+        raise RuntimeError("no weights")
+
+    monkeypatch.setattr(R, "_lpips_net", _boom)
+    with pytest.raises(RuntimeError):
+        R.lpips_score(torch.zeros(1, 3, 8, 8), torch.zeros(1, 3, 8, 8), device="cpu")

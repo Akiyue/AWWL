@@ -36,8 +36,8 @@ from tqdm.auto import tqdm
 from awwl.analysis.results import append_result, result_row
 from awwl.data.degradation import add_noise, sample_sigmas, sigma_to_timesteps
 from awwl.data.images import build_image_dataloader
-from awwl.losses.adaptive_wavelet import AdaptiveWaveletLoss
 from awwl.losses import analytic
+from awwl.losses.adaptive_wavelet import AdaptiveWaveletLoss
 from awwl.models.ddpm_unet import load_or_build_ddpm_unet
 from awwl.training.accelerator import build_accelerator
 from awwl.training.checkpointing import CheckpointManager

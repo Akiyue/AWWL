@@ -43,7 +43,19 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
-LOWER_IS_BETTER = ("fid", "kid", "spec_dist", "loss")
+# Metrics where a smaller number is the better result. Matched by prefix, so
+# "kid_tf" and "fid_50k" inherit their base metric's direction. Anything not
+# listed is treated as higher-is-better, which is why every distance-valued
+# metric has to appear: LPIPS and NIQE are distances, and a missing entry
+# silently prints the wrong arrow and ranks the table upside down.
+LOWER_IS_BETTER = (
+    "fid",
+    "kid",
+    "spec_dist",
+    "loss",
+    "lpips",     # perceptual distance
+    "niqe",      # no-reference quality distance
+)
 
 
 @dataclass

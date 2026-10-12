@@ -15,6 +15,7 @@ from awwl.losses.factory import (
     loss_module,
     trainable_loss_parameters,
 )
+from awwl.losses.focal_frequency import FocalFrequencyLoss
 from awwl.losses.generalized_wavelet import GeneralizedWaveletLoss
 from awwl.losses.gradnorm import GradNormBalancer
 from awwl.losses.lifting import LiftingWavelet
@@ -30,6 +31,7 @@ from awwl.losses.weighting import (
 __all__ = [
     "AdaptiveWaveletLoss",
     "BandWeighting",
+    "FocalFrequencyLoss",
     "GeneralizedWaveletLoss",
     "GradNormBalancer",
     "LiftingWavelet",

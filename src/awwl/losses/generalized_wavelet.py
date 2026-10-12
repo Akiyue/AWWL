@@ -102,6 +102,7 @@ class GeneralizedWaveletLoss(nn.Module):
         spatial: bool = False,
         normalize_weights: bool = True,
         normalize_scale: float = 1.0,
+        normalize_order: float = 1.0,
         gradnorm: bool = False,
         gradnorm_asymmetry: float = 1.5,
         snr_gamma: float | None = None,
@@ -143,6 +144,7 @@ class GeneralizedWaveletLoss(nn.Module):
                 levels=levels,
                 normalize=normalize_weights,
                 normalize_scale=normalize_scale,
+                normalize_order=normalize_order,
                 **kwargs,
             )
             if spatial and weighting_strategy != "rational":
@@ -152,6 +154,7 @@ class GeneralizedWaveletLoss(nn.Module):
                     self.weighting,
                     strength=float(kwargs.get("strength", 1.0)),
                     normalize=normalize_weights,
+                    normalize_order=normalize_order,
                 )
 
         self.keys = self.weighting.keys

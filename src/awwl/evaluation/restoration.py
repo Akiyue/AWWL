@@ -93,21 +93,39 @@ def ssim(restored: torch.Tensor, clean: torch.Tensor) -> float:
 _LPIPS_MODEL = None
 
 
-def _lpips_net() -> Any:
+def _lpips_net(device: str = "cpu") -> Any:
+    """The AlexNet LPIPS network, cached and resident on ``device``.
+
+    The device argument is not optional in practice: the inputs are moved to
+    ``device`` by the caller, so a network left on the CPU raises
+    ``Expected all tensors to be on the same device`` on the first call. That
+    exception was caught and logged as a warning, which recorded ``lpips: 0.0``
+    for every run of the restoration sweep -- a metric silently absent rather
+    than visibly broken. Hence also the assertion in ``lpips_score``.
+    """
     global _LPIPS_MODEL
     if _LPIPS_MODEL is None:
         import lpips
 
         _LPIPS_MODEL = lpips.LPIPS(net="alex", verbose=False)
         _LPIPS_MODEL.eval()
+    _LPIPS_MODEL.to(device)
     return _LPIPS_MODEL
 
 
 def lpips_score(restored: torch.Tensor, clean: torch.Tensor, device: str = "cuda") -> float:
-    """Mean LPIPS distance over the batch; lower is better."""
-    net = _lpips_net()
+    """Mean LPIPS distance over the batch; lower is better.
+
+    Raises rather than returning a sentinel: an unavailable perceptual metric
+    has to stop the run, because zero is a *better* LPIPS than any real value
+    and would read as a perfect score in the table.
+    """
+    net = _lpips_net(device)
     with torch.no_grad():
-        return float(net(restored.to(device), clean.to(device)).mean().item())
+        value = float(net(restored.to(device), clean.to(device)).mean().item())
+    if not math.isfinite(value):
+        raise RuntimeError(f"LPIPS returned {value}")
+    return value
 
 
 # --------------------------------------------------------------------------- #
@@ -366,11 +384,13 @@ def evaluate_restoration(
     per_image = 10.0 * torch.log10(4.0 / ((restored - clean_cpu) ** 2).mean(dim=(1, 2, 3)) + 1e-8)
     p = float(per_image.mean().item())
     s = ssim(restored, clean_cpu)
-    try:
-        lp = lpips_score(restored, clean_cpu, device=device)
-    except Exception as exc:  # pragma: no cover - network / weights issues
-        logger.warning("LPIPS failed (%s); reporting 0.0", exc)
-        lp = 0.0
+    # Deliberately not wrapped in try/except. LPIPS is the reason this task is
+    # in the paper at all -- it is the metric that reads high-frequency detail
+    # directly instead of inferring it through FID -- so a failure here must
+    # fail the job. The previous version logged a warning and recorded 0.0,
+    # and 0.0 is not a missing value in a table of LPIPS: it is a perfect
+    # score. The whole sweep was evaluated that way before anyone noticed.
+    lp = lpips_score(restored, clean_cpu, device=device)
 
     # Stratify PSNR by the *actual* degradation sigma, not by position: the
     # validation sigmas are a permutation of a linspace, so an index split
@@ -402,6 +422,11 @@ def evaluate_restoration(
         "psnr_high_sigma": round(psnr_high, 4),
         "eval_seed": seed,
         "n_val": clean.shape[0],
+        # Recorded because CPU and CUDA do not agree to the precision these
+        # metrics are compared at -- NIQE moves by more than the across-seed
+        # spread between the two. Arms are only comparable within one device,
+        # so the ledger has to say which produced each row.
+        "eval_device": "cuda" if str(device).startswith("cuda") else str(device),
     }
 
     from awwl.analysis.results import append_result, result_row

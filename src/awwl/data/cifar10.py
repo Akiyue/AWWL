@@ -39,12 +39,55 @@ _HF_IDS = ("uoft-cs/cifar10", "cifar10")
 DEFAULT_ROOT = "./data"
 
 
-def build_transform(image_size: int, *, horizontal_flip: bool) -> transforms.Compose:
-    """The AWWL-Diff preprocessing: resize, optional flip, scale to ``[-1, 1]``."""
+class RadialGain:
+    """Multiply every channel's centred spectrum by a fixed per-radius gain.
+
+    ``gain_db[r]`` is the change, in decibels of magnitude, applied at integer
+    radius ``r`` about the ``fftshift`` centre -- the same binning and the same
+    per-channel application as the pricing operators in
+    :mod:`awwl.evaluation.price_fid`. Applied to training images it plants a
+    known spectral change in the data, so a model trained on them acquires that
+    change through training rather than through a filter on its samples. The
+    output stays in floating point (no re-quantisation) and is clipped to
+    ``[0, 1]``. A radially symmetric gain commutes with the horizontal flip.
+    """
+
+    def __init__(self, gain_db) -> None:
+        import numpy as np
+
+        self.gain_db = np.asarray(gain_db, dtype=np.float64)
+        self._mask: torch.Tensor | None = None
+
+    def _mask_for(self, h: int, w: int) -> torch.Tensor:
+        import numpy as np
+
+        if self._mask is None or self._mask.shape != (h, w):
+            ys, xs = np.indices((h, w))
+            r = np.sqrt((xs - w // 2) ** 2 + (ys - h // 2) ** 2).astype(int)
+            r = np.clip(r, 0, len(self.gain_db) - 1)
+            gain = np.power(10.0, self.gain_db[r] / 20.0)
+            self._mask = torch.from_numpy(np.fft.ifftshift(gain)).to(torch.float64)
+        return self._mask
+
+    def __call__(self, x: torch.Tensor) -> torch.Tensor:
+        mask = self._mask_for(x.shape[-2], x.shape[-1])
+        spec = torch.fft.fft2(x.to(torch.float64)) * mask
+        return torch.fft.ifft2(spec).real.clamp(0.0, 1.0).to(x.dtype)
+
+
+def build_transform(image_size: int, *, horizontal_flip: bool, spectral_gain_db=None) -> transforms.Compose:
+    """The AWWL-Diff preprocessing: resize, optional flip, scale to ``[-1, 1]``.
+
+    ``spectral_gain_db``, when given, inserts :class:`RadialGain` after the
+    conversion to a tensor (images in ``[0, 1]``) and before normalisation.
+    """
     steps: list = [transforms.Resize((image_size, image_size))]
     if horizontal_flip:
         steps.append(transforms.RandomHorizontalFlip())
-    steps += [transforms.ToTensor(), transforms.Normalize([0.5], [0.5])]
+    steps.append(transforms.ToTensor())
+    if spectral_gain_db is not None:
+        steps.append(RadialGain(spectral_gain_db))
+    steps.append(transforms.Normalize([0.5], [0.5]))
     return transforms.Compose(steps)
 
 
@@ -98,6 +141,7 @@ def build_cifar10_dataloader(
     seed: int | None = None,
     source: Source = "auto",
     root: str | Path = DEFAULT_ROOT,
+    spectral_gain_db=None,
 ):
     """Return a ``DataLoader`` yielding ``{"images": tensor}`` batches.
 
@@ -114,7 +158,9 @@ def build_cifar10_dataloader(
             when a table must state exactly where its data came from.
         root: Where torchvision caches the archive.
     """
-    preprocess = build_transform(image_size, horizontal_flip=horizontal_flip and split == "train")
+    preprocess = build_transform(
+        image_size, horizontal_flip=horizontal_flip and split == "train", spectral_gain_db=spectral_gain_db
+    )
     train = split == "train"
 
     if source == "torchvision":

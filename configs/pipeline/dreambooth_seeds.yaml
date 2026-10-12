@@ -108,6 +108,14 @@ experiments:
     tier: 2
     overrides: {loss.name: snr_weighted}
 
+  # Min-SNR-gamma proper. The `snr_weighted` arm above is the *unclamped*
+  # ratio, and it is the row the DreamBooth table's only significant result
+  # sits on -- so the paper cannot attribute that result to Hang et al.
+  # without this arm to compare against. Minutes per run.
+  - group: min_snr
+    tier: 2
+    overrides: {loss.name: min_snr, loss.snr_gamma: 5.0}
+
   - group: huber
     tier: 2
     overrides: {loss.name: huber}
