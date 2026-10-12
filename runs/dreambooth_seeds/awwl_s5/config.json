@@ -1,0 +1,46 @@
+{
+  "seed": 5,
+  "deterministic": false,
+  "logging": {
+    "level": "INFO",
+    "fmt": "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
+  },
+  "precision": {
+    "mixed_precision": "fp16"
+  },
+  "paths": {
+    "project_root": null,
+    "output_root": "./runs"
+  },
+  "method": "dreambooth",
+  "model": {
+    "pretrained_model_name_or_path": "runwayml/stable-diffusion-v1-5",
+    "model_weights_path": null
+  },
+  "data": {
+    "instance_data_dir": "/home/dmst_ai/sonthh/dreambooth-data/dataset/robot_toy",
+    "instance_prompt": "a photo of sks robot toy",
+    "resolution": 512
+  },
+  "train": {
+    "batch_size": 1,
+    "gradient_accumulation_steps": 1,
+    "learning_rate": 5e-06,
+    "max_train_steps": 400,
+    "grad_clip_norm": 1.0
+  },
+  "loss": {
+    "name": "adaptive_wavelet",
+    "alpha": 0.8,
+    "power": 2.0,
+    "wavelet_type": "db1",
+    "levels": 1,
+    "weighting": "normalized"
+  },
+  "output": {
+    "dir": "runs/dreambooth_seeds",
+    "name": "awwl_s5",
+    "group": "awwl",
+    "ledger": "./runs/dreambooth_seeds/results.jsonl"
+  }
+}

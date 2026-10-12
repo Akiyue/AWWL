@@ -1,0 +1,84 @@
+{
+  "seed": 3,
+  "deterministic": false,
+  "logging": {
+    "level": "INFO",
+    "fmt": "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
+  },
+  "precision": {
+    "mixed_precision": "fp16"
+  },
+  "paths": {
+    "project_root": null,
+    "output_root": "./runs"
+  },
+  "method": "finetune",
+  "model": {
+    "image_size": 32,
+    "in_channels": 3,
+    "out_channels": 3,
+    "layers_per_block": 2,
+    "block_out_channels": [
+      128,
+      256,
+      256,
+      256
+    ],
+    "down_block_types": [
+      "DownBlock2D",
+      "DownBlock2D",
+      "DownBlock2D",
+      "DownBlock2D"
+    ],
+    "up_block_types": [
+      "UpBlock2D",
+      "UpBlock2D",
+      "UpBlock2D",
+      "UpBlock2D"
+    ],
+    "model_weights_path": null
+  },
+  "data": {
+    "dataset_name": "cifar10",
+    "split": "train",
+    "image_size": 32,
+    "batch_size": 128,
+    "num_workers": 4,
+    "source": "auto",
+    "root": "./data"
+  },
+  "train": {
+    "num_epochs": 200,
+    "learning_rate": 0.0002,
+    "lr_warmup_steps": 500,
+    "save_model_epochs": 40,
+    "grad_clip_norm": 1.0,
+    "resume": true,
+    "save_state_epochs": 5,
+    "keep_last_states": 2,
+    "use_ema": false,
+    "ema_decay": 0.9999,
+    "loss_learning_rate": 0.025
+  },
+  "scheduler": {
+    "num_train_timesteps": 1000
+  },
+  "loss": {
+    "name": "wavelet_gradnorm",
+    "alpha": 0.2,
+    "power": 1.0,
+    "wavelet_type": "db1",
+    "levels": 1,
+    "weighting": "normalized",
+    "normalize_weights": false,
+    "detail_reduction": "mean",
+    "level_reduction": "sum",
+    "gradnorm_asymmetry": 1.5
+  },
+  "output": {
+    "dir": "runs/phase0",
+    "name": "awwl_gradnorm_s3",
+    "group": "awwl_gradnorm",
+    "ledger": "./runs/phase0/results.jsonl"
+  }
+}

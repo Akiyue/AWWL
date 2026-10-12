@@ -11,9 +11,27 @@ dist/
 venv/
 env/
 
-# Run artifacts (regeneratable)
+# Jupyter's autosave copies. Six of these were sitting untracked in the tree,
+# one of them a stale copy of a test file -- close enough to the real thing to
+# be opened by mistake.
+.ipynb_checkpoints/
+
+# Run artifacts (regeneratable) -- except the ledgers that every number in the
+# paper is computed from, and each run's resolved configuration. Samples,
+# checkpoints and caches stay out (git's rule: a file can only be re-included
+# if its parent directory is, hence runs/** rather than runs/).
 output/
-runs/
+runs/**
+!runs/*/
+!runs/*/results.jsonl
+!runs/*/pricing.jsonl
+!runs/*/*/
+!runs/*/*/config.json
+runs/smoke/**
+# 2 GB of downloaded and re-encoded datasets. Every one is rebuilt by
+# `awwl prepare-data`, and the 163 MB CIFAR tarball is not covered by the
+# *.png rule below, so it was one `git add -A` away from the history.
+/data/
 generated_images/
 results/
 *.png
@@ -23,6 +41,13 @@ results/
 
 # Allow figures intentionally checked in
 !assets/**/*.png
+
+# The manuscript's figures are generated on the box with the data and typeset
+# on the box with TeX, which are not the same machine -- so they have to travel
+# through the repo. `paper/build.sh` tells the reader to commit them; the
+# blanket *.png above meant `git add paper/figures` silently added nothing.
+!paper/figures/
+!paper/figures/*.png
 
 # Editor
 .vscode/
@@ -58,3 +83,7 @@ paper/*.out
 paper/*.fls
 paper/*.fdb_latexmk
 paper/*.synctex.gz
+
+# Submission material (cover letter with suggested reviewers, packaged
+# source, forms) stays private; scripts/make_submission.py regenerates it.
+paper/submission/
