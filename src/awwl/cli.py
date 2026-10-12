@@ -651,6 +651,10 @@ def spectrum_cmd(
     claims to correct the high-frequency end, so a gain concentrated at low
     frequencies would mean the effect is real but not the advertised
     mechanism.
+
+    A quick diagnostic on ``--max-images`` per run. The paper's figure (all
+    samples and all reference images, with the seed spread) is built by
+    ``awwl figures --only spectrum``.
     """
     setup_logging("INFO")
     from awwl.evaluation.spectrum import format_band_table, profiles_by_config, radial_profile
@@ -694,112 +698,122 @@ def compare_samples_cmd(
         Path("runs/phase0"), "--root", exists=True, help="Sweep output directory."
     ),
     configs: str = typer.Option(
-        "mse,awwl", "--configs", help="Comma-separated config names, one row each."
+        "mse,static_wavelet,awwl", "--configs",
+        help="Comma-separated config names, one row each.",
     ),
     seed: int = typer.Option(1, "--seed", help="Which training seed's samples to show."),
     epoch: int = typer.Option(199, "--epoch"),
-    count: int = typer.Option(12, "--count", help="Columns, i.e. matched samples shown."),
+    count: int = typer.Option(8, "--count", help="Columns, i.e. matched samples shown."),
     start: int = typer.Option(0, "--start", help="First sample index."),
-    scale: int = typer.Option(3, "--scale", help="Integer upscale; 32px is unreadable in print."),
-    out: Path | None = typer.Option(
-        None, "--out", help="Figure path (default <root>/compare.png)."
+    difference: str | None = typer.Option(
+        "awwl,mse", "--difference",
+        help="Two configs whose amplified |difference| forms an extra row ('' for none).",
+    ),
+    gain: float = typer.Option(8.0, "--gain", help="Amplification of the difference row."),
+    out: Path = typer.Option(
+        Path("paper/figures/compare.png"), "--out", help="Figure path."
     ),
 ) -> None:
     """Side-by-side samples from the same initial noise, one row per loss.
 
     The sweep seeds every configuration's sampler identically, so column *i*
     starts from the same latent in every row and any visible difference is
-    attributable to the objective. This is the perceptual check on a spectral
-    result: if closing the frequency gap is not visible here, the shift is
-    real but sub-perceptual.
+    attributable to the objective. Drawn at print width in the paper's style;
+    ``awwl figures --only compare`` produces the paper's version.
     """
     setup_logging("INFO")
-    from awwl.plotting.paired_grid import paired_sample_grid
+    from awwl.plotting.paired_grid import plot_paired_samples
 
     names = [c.strip() for c in configs.split(",") if c.strip()]
     folders = {n: root / f"{n}_s{seed}" / "samples" / f"ep{epoch}" for n in names}
-    figure = paired_sample_grid(
-        folders,
-        output_path=out or root / "compare.png",
-        count=count,
-        start=start,
-        scale=scale,
+    pair = tuple(c.strip() for c in difference.split(",")) if difference else None
+    if pair is not None and len(pair) != 2:
+        typer.echo("--difference needs exactly two config names", err=True)
+        raise typer.Exit(2)
+    figure = plot_paired_samples(
+        folders, out_path=out, count=count, start=start, difference=pair, gain=gain,
     )
     typer.echo(f"wrote {figure}")
 
 
 @app.command("figures")
 def figures_cmd(
+    out: Path = typer.Option(Path("paper/figures"), "--out", help="Where the PNGs go."),
+    only: str | None = typer.Option(
+        None, "--only", help="Comma-separated figure names (e.g. weights,spectrum)."
+    ),
     ledger: Path = typer.Option(Path("runs/phase0/results.jsonl"), "--ledger", "-l"),
-    out: Path = typer.Option(Path("runs/phase0"), "--out", help="Where the PNGs go."),
     epoch: int = typer.Option(199, "--epoch"),
     baseline: str = typer.Option("mse", "--baseline"),
-    boost_dir: Path = typer.Option(
-        Path("runs/boost"), "--boost", help="scripts/boost_test.sh output."
+    converged: Path = typer.Option(
+        Path("runs/converged/results.jsonl"), "--converged", help="800-epoch EMA ledger."
     ),
-    alpha: float = typer.Option(0.2, "--alpha", help="For the weighting-schedule figure."),
+    ddpm1000: Path = typer.Option(
+        Path("runs/phase0_ddpm1000/results.jsonl"), "--ddpm1000",
+        help="200-epoch ledger scored with the ancestral DDPM-1000 sampler.",
+    ),
+    converged_ddpm1000: Path = typer.Option(
+        Path("runs/converged_ddpm1000/results.jsonl"), "--converged-ddpm1000"
+    ),
+    dreambooth: Path = typer.Option(
+        Path("runs/dreambooth_seeds/results.jsonl"), "--dreambooth"
+    ),
+    restoration: Path = typer.Option(
+        Path("runs/restoration_cifar/results.jsonl"), "--restoration"
+    ),
+    boost_dir: Path = typer.Option(
+        Path("runs/boost"), "--boost",
+        help="Unused since the boost-only figure was retired; accepted for old scripts.",
+    ),
+    pricing: Path = typer.Option(
+        Path("runs/pricing/results.jsonl"), "--pricing",
+        help="Float-pipeline pricing ledger (teaser, price_curve, pricing_arms).",
+    ),
+    boost_dose: float | None = typer.Option(
+        None, "--boost-dose",
+        help="Unused since the boost-only figure was retired; accepted for old scripts.",
+    ),
+    real: Path = typer.Option(Path("data/cifar10_train_png"), "--real"),
+    profile_cache: Path = typer.Option(
+        Path("runs/pricing/cache"), "--profile-cache",
+        help="Read cached radial profiles from here (never written).",
+    ),
+    profile_cache_out: Path | None = typer.Option(
+        None, "--profile-cache-out", help="Save profiles computed from samples here."
+    ),
+    alpha: float = typer.Option(0.2, "--alpha", help="For the weighting figures."),
     power: float = typer.Option(1.0, "--power"),
+    pdf: bool = typer.Option(False, "--pdf", help="Also write a vector PDF per figure."),
 ) -> None:
-    """Generate the paper's argument figures from the ledger.
+    """Regenerate every paper figure from the ledgers (``paper/figures`` by default).
 
-    Each figure is skipped with a message if its inputs are absent, so this is
-    safe to run part-way through a sweep.
+    One command rebuilds the whole set; ``--only`` restricts it. Each figure is
+    skipped with a message if its inputs are absent, so this is safe to run
+    part-way through a sweep. The list of figures and their inputs lives in
+    :mod:`awwl.plotting.paper_build`.
     """
     setup_logging("INFO")
-    from awwl.analysis.results import load_results
-    from awwl.plotting.paper_figures import (
-        parse_boost_tables,
-        plot_convergence,
-        plot_correction_value,
-        plot_effect_sizes,
-        plot_weight_schedule,
+    from awwl.plotting import _style
+    from awwl.plotting.paper_build import Sources, build
+
+    if pdf:
+        _style.SAVE_PDF = True
+    src = Sources(
+        ledger=ledger, epoch=epoch, baseline=baseline, converged=converged,
+        ddpm1000=ddpm1000, converged_ddpm1000=converged_ddpm1000,
+        dreambooth=dreambooth, restoration=restoration, boost=boost_dir,
+        pricing=pricing, boost_dose=boost_dose, real=real,
+        profile_cache=profile_cache, profile_cache_out=profile_cache_out,
+        alpha=alpha, power=power,
     )
-
-    rows = load_results(ledger, kind="eval") if ledger.exists() else []
-    at_epoch = [r for r in rows if r.get("epoch") == epoch]
-    made: list[str] = []
-
-    def _try(name: str, fn):
-        try:
-            made.append(str(fn()))
-        except Exception as exc:
-            typer.echo(f"skipped {name}: {exc}")
-
-    if at_epoch:
-        _try(
-            "effect-sizes",
-            lambda: plot_effect_sizes(
-                at_epoch, metric="fid", baseline=baseline, out_path=out / "effect_sizes.png"
-            ),
-        )
-        _try(
-            "convergence",
-            lambda: plot_convergence(
-                rows, metric="fid", baseline=baseline, out_path=out / "convergence.png"
-            ),
-        )
-    else:
-        typer.echo(f"no eval rows at epoch {epoch}; skipping ledger-based figures")
-
-    _try(
-        "weight-schedule",
-        lambda: plot_weight_schedule(alpha=alpha, power=power, out_path=out / "weights.png"),
-    )
-
-    if boost_dir.is_dir():
-        arms = parse_boost_tables(boost_dir)
-        if arms:
-            _try(
-                "correction-value",
-                lambda: plot_correction_value(arms, out_path=out / "correction_value.png"),
-            )
-        else:
-            typer.echo(f"no parseable boost tables in {boost_dir}")
-    else:
-        typer.echo(f"no boost output at {boost_dir}; skipping the correction figure")
-
-    for path in made:
-        typer.echo(f"wrote {path}")
+    names = [n.strip() for n in only.split(",") if n.strip()] if only else None
+    try:
+        _written, skipped = build(out, src, only=names, echo=typer.echo)
+    except ValueError as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(2) from exc
+    if skipped:
+        typer.echo(f"{len(skipped)} figure(s) skipped; see messages above")
 
 
 @app.command("plot-curriculum")
